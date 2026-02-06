@@ -1,0 +1,85 @@
+name: ProwlerSecurityScan
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  prowler:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure folders
+        run: |
+          mkdir -p output reports scripts mcp/output
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Install Prowler + deps
+        run: |
+          pip install prowler pandas openpyxl boto3
+
+      - name: Run Prowler (CIS 1.4 / ap-northeast-2)
+        continue-on-error: true
+        run: |
+          prowler aws \
+            --region ap-northeast-2 \
+            --compliance cis_1.4_aws \
+            --severity medium \
+            --output-directory output \
+            --output-formats json-ocsf html csv
+
+      - name: Normalize + Score + AI Assist + Runbook + OCSF
+        run: |
+          python mcp/pipeline/normalize.py --input "output/*.csv" --output mcp/output/findings-normalized.csv
+          python mcp/pipeline/score.py --input mcp/output/findings-normalized.csv --output mcp/output/findings-scored.csv
+          python mcp/pipeline/ai_assist.py --input mcp/output/findings-scored.csv --output mcp/output/findings-scored-ai.csv
+          python mcp/pipeline/build_runbook.py --input mcp/output/findings-scored-ai.csv --template mcp/templates/runbook.md --output mcp/output/runbook.md
+          python mcp/pipeline/export_ocsf.py --input "output/*.ocsf.json" --output mcp/output/ocsf-findings.json
+
+      - name: Build Excel report (optional)
+        if: always()
+        run: |
+          if [ -f scripts/json_to_excel.py ]; then
+            python scripts/json_to_excel.py
+          else
+            echo "scripts/json_to_excel.py not found - skip"
+          fi
+
+      - name: Upload output (raw)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prowler-output
+          path: output/
+
+      - name: Upload MCP artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-output
+          path: mcp/output/
+
+      - name: Upload reports (human)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prowler-reports
+          path: reports/
