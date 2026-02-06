@@ -1,3 +1,18 @@
+# =============================================================================
+# generate_remediation.py - Terraform 해결 코드 AI 생성 스크립트
+# =============================================================================
+# 역할: 고우선순위(P0/P1/P2) finding에 대해 Claude Haiku가 Terraform 해결 코드 생성
+# 입력: mcp/output/findings-scored-ai.csv
+# 출력: remediation/fix-{check_id}.tf (개별 Terraform 파일)
+#       remediation/manifest.json (생성된 파일 목록)
+#
+# 코드 생성 전략:
+#   1차) AWS Bedrock Claude Haiku에 finding 정보를 전달하여 Terraform 코드 생성
+#   2차) Bedrock 실패 시 check_to_iac.yaml 매핑의 IaC 스니펫으로 폴백
+#
+# 생성된 .tf 파일은 워크플로우에서 자동으로 PR 생성에 사용됨
+# =============================================================================
+
 import argparse
 import json
 import os
@@ -6,12 +21,12 @@ import pandas as pd
 try:
     import boto3
 except Exception:
-    boto3 = None
+    boto3 = None  # boto3 미설치 시 폴백으로 동작
 
 try:
     import yaml
 except Exception:
-    yaml = None
+    yaml = None  # pyyaml 미설치 시 IaC 폴백 비활성화
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", required=True)
@@ -21,12 +36,13 @@ args = parser.parse_args()
 
 df = pd.read_csv(args.input)
 
+# --- Bedrock 설정 (환경변수로 오버라이드 가능) ---
 MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", "ap-northeast-2")
-MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "1024"))
+MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "1024"))  # Terraform 코드는 길어서 1024
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"
 
-# Load IaC snippet mapping for fallback
+# --- IaC 스니펫 매핑 로드 (Bedrock 실패 시 폴백용) ---
 iac_map = {}
 if yaml and os.path.exists(args.iac_mapping):
     with open(args.iac_mapping) as f:
@@ -35,6 +51,7 @@ if yaml and os.path.exists(args.iac_mapping):
 
 
 def call_bedrock(prompt):
+    """AWS Bedrock Claude 3 Haiku API 호출하여 Terraform 코드 생성"""
     if not USE_BEDROCK or boto3 is None:
         print("Bedrock disabled or boto3 unavailable")
         return None
@@ -43,7 +60,7 @@ def call_bedrock(prompt):
         body = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": MAX_TOKENS,
-            "temperature": 0.1,
+            "temperature": 0.1,  # 낮은 temperature로 일관된 코드 생성
             "messages": [{"role": "user", "content": prompt}],
         }
         resp = client.invoke_model(
@@ -63,16 +80,16 @@ def call_bedrock(prompt):
 
 
 def fallback_from_iac_snippet(check_id):
-    """IaC snippet mapping에서 Terraform 코드를 가져오는 폴백"""
+    """Bedrock 실패 시 check_to_iac.yaml 매핑에서 미리 작성된 Terraform 스니펫 로드"""
     snippet_path = iac_map.get(check_id)
     if not snippet_path:
         return None
     if not snippet_path.endswith(".tf"):
-        return None
+        return None  # .tf 파일만 사용 (.md 등 제외)
     if os.path.exists(snippet_path):
         with open(snippet_path) as f:
             return f.read().strip()
-    # repo/ prefix도 시도
+    # repo/ 접두사가 없는 경우 추가하여 재시도
     alt = os.path.join("repo", snippet_path) if not snippet_path.startswith("repo/") else snippet_path
     if os.path.exists(alt):
         with open(alt) as f:
@@ -81,6 +98,7 @@ def fallback_from_iac_snippet(check_id):
 
 
 def make_remediation_prompt(row):
+    """finding 데이터를 기반으로 Terraform 코드 생성 프롬프트 구성"""
     return f"""Generate Terraform code to fix this AWS security finding.
 
 Check ID: {row.get('check_id', '')}
@@ -102,7 +120,7 @@ Output the Terraform code:"""
 
 os.makedirs(args.output_dir, exist_ok=True)
 
-# P0, P1, P2 priority only for auto remediation
+# P0/P1/P2 우선순위만 자동 Remediation 대상 (P3은 수동 대응)
 high_priority = df[df['priority'].isin(['P0', 'P1', 'P2'])]
 print(f"Found {len(high_priority)} high-priority findings (P0/P1/P2) out of {len(df)} total")
 
@@ -110,12 +128,13 @@ generated = []
 bedrock_failures = 0
 
 for _, row in high_priority.iterrows():
+    # check_id에서 파일명에 사용할 수 없는 문자 치환
     check_id = str(row.get('check_id', 'unknown')).replace('/', '-').replace(':', '-')
 
-    # 1차: Bedrock AI 생성 시도
+    # 1차: Bedrock AI로 Terraform 코드 생성 시도
     tf_code = call_bedrock(make_remediation_prompt(row))
 
-    # 2차: Bedrock 실패 시 IaC snippet 폴백
+    # 2차: Bedrock 실패 시 IaC 스니펫 매핑에서 폴백
     if not tf_code:
         bedrock_failures += 1
         tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')))
@@ -123,9 +142,10 @@ for _, row in high_priority.iterrows():
             print(f"Fallback IaC snippet used for: {check_id}")
 
     if tf_code:
-        # Remove markdown code fences if present
+        # AI 응답에 마크다운 코드 펜스가 포함된 경우 제거
         tf_code = tf_code.replace('```hcl', '').replace('```terraform', '').replace('```', '').strip()
 
+        # 개별 .tf 파일로 저장
         filename = f"fix-{check_id}.tf"
         filepath = os.path.join(args.output_dir, filename)
         with open(filepath, 'w') as f:
@@ -141,7 +161,7 @@ for _, row in high_priority.iterrows():
     else:
         print(f"SKIP (no Bedrock response and no IaC snippet): {check_id}")
 
-# Save manifest
+# 생성된 파일 목록을 manifest.json으로 저장
 with open(os.path.join(args.output_dir, 'manifest.json'), 'w') as f:
     json.dump(generated, f, indent=2)
 
