@@ -29,4 +29,4 @@ The Terraform code above does the following:
    - Enforces password expiration within 90 days
    - Prevents password reuse for the last 24 passwords
 
-This should address the security finding by ensuring that IAM account passwords are rotated at least every 90 days and cannot be reused.
+This should address the security finding and ensure that the IAM account password policy enforces password expiration within 90 days or less, as recommended.
