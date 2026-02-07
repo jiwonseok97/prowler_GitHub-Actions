@@ -21,7 +21,7 @@ resource "aws_organizations_organizational_unit" "example_ou" {
 # Apply a Service Control Policy (SCP) to the OU for least privilege
 resource "aws_organizations_policy" "example_scp" {
   name = "Example SCP"
-  description = "Enforce least privilege access"
+  description = "Enforces least privilege access"
   content = <<POLICY
 {
   "Version": "2012-10-17",
