@@ -3,13 +3,31 @@ provider "aws" {
   region = "ap-northeast-2"
 }
 
-# Create a new KMS customer managed key in the ap-northeast-2 region
+# Data source to reference the existing KMS key
+data "aws_kms_key" "existing_key" {
+  key_id = "acf8da0a-9167-44bc-9373-b769fda7443b"
+}
+
+# Create a new multi-region KMS key
 resource "aws_kms_key" "multi_region_key" {
   description             = "Multi-Region KMS Key"
-  key_usage               = "ENCRYPT_DECRYPT"
-  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  deletion_window_in_days = 30
   multi_region            = true
 }
 
+# Replicate the existing KMS key to the new multi-region key
+resource "aws_kms_replica_key" "replicated_key" {
+  source_key_id     = data.aws_kms_key.existing_key.id
+  description       = "Replicated KMS Key"
+  deletion_window_in_days = 30
+}
 
-The provided Terraform code creates a new KMS customer managed key in the `ap-northeast-2` region with the `multi_region` attribute set to `true`. This addresses the security finding by creating a multi-Region KMS key, which is the recommended approach for the given scenario.
+
+The provided Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Uses a `data` source to reference the existing KMS key with the specified resource UID.
+3. Creates a new multi-region KMS key with a 30-day deletion window.
+4. Replicates the existing KMS key to the new multi-region key, creating a replicated key.
+
+This should address the security finding by creating a multi-region KMS key and replicating the existing single-region key to it.
