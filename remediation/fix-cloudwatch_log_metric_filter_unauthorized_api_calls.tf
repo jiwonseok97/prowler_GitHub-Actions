@@ -16,7 +16,7 @@ resource "aws_cloudwatch_log_metric_filter" "unauthorized_api_calls" {
 
   metric_transformation {
     name      = "UnauthorizedAPICalls"
-    namespace = "MyApp/SecurityMetrics"
+    namespace = "MyApp/SecurityLogs"
     value     = "1"
   }
 }
@@ -38,7 +38,7 @@ resource "aws_cloudwatch_metric_alarm" "unauthorized_api_calls" {
 
 This Terraform code does the following:
 
-1. Configures the AWS provider for the `ap-northeast-2` region.
+1. Configures the AWS provider for the ap-northeast-2 region.
 2. Retrieves the existing CloudWatch Logs log group using the `data` source.
 3. Creates a CloudWatch Logs metric filter for unauthorized API calls, using the pattern `{ ($.errorCode = *UnauthorizedOperation) || ($.errorCode = AccessDenied*) }`.
-4. Creates a CloudWatch alarm for the unauthorized API calls metric, which will trigger an alarm when the metric value is greater than or equal to 1. The alarm action is set to an SNS topic for security notifications.
+4. Creates a CloudWatch alarm for the unauthorized API calls metric, with a threshold of 1 and an alarm action that triggers an SNS topic.
