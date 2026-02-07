@@ -2,7 +2,7 @@ name: Apply Remediation
 
 on:
   pull_request:
-    types: [closed]
+    types: [opened, synchronize, closed]
     paths:
       - 'remediation/*.tf'
 
@@ -10,8 +10,126 @@ permissions:
   contents: read
   id-token: write
   actions: write
+  pull-requests: write
 
 jobs:
+  # -------------------------------------------------------
+  # Plan: PR 열릴 때 실행 → plan 결과를 PR 코멘트로 게시
+  # -------------------------------------------------------
+  plan:
+    if: github.event.pull_request.merged != true && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Create Terraform backend config
+        working-directory: remediation
+        run: |
+          cat > backend.tf << 'EOF'
+          terraform {
+            backend "local" {
+              path = "terraform.tfstate"
+            }
+          }
+
+          provider "aws" {
+            region = "ap-northeast-2"
+          }
+          EOF
+
+      - name: Terraform Init
+        working-directory: remediation
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: remediation
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: remediation
+        continue-on-error: true
+        run: |
+          terraform plan -no-color 2>&1 | tee /tmp/tfplan.txt
+          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Post Plan to PR comment
+        uses: actions/github-script@v7
+        env:
+          PLAN_OUTPUT: ${{ steps.plan.outputs.exitcode }}
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = fs.readFileSync('/tmp/tfplan.txt', 'utf8');
+
+            // 65535자 제한 대비 truncate
+            if (plan.length > 60000) {
+              plan = plan.substring(0, 60000) + '\n\n... (truncated)';
+            }
+
+            const exitcode = process.env.PLAN_OUTPUT;
+            const status = exitcode === '0' ? '✅ Plan Succeeded' : '❌ Plan Failed';
+
+            const body = `### Terraform Plan Result - ${status}
+
+            <details>
+            <summary>Plan 상세 보기 (클릭)</summary>
+
+            \`\`\`
+            ${plan}
+            \`\`\`
+
+            </details>
+
+            > 💡 이 PR을 머지하면 위 리소스가 AWS에 자동 적용됩니다.
+            > ⚠️ 비용 발생 리소스가 있는지 반드시 확인하세요.`;
+
+            // 기존 bot 코멘트 찾아서 업데이트 (중복 방지)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Terraform Plan Result')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body,
+              });
+            }
+
+      - name: Fail if plan failed
+        if: steps.plan.outputs.exitcode != '0'
+        run: exit 1
+
+  # -------------------------------------------------------
+  # Apply: PR 머지 후 실행 → 실제 AWS 적용
+  # -------------------------------------------------------
   apply:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
