@@ -8,9 +8,9 @@ data "aws_security_group" "existing_sg" {
   id = "sg-04e3503c576b68504"
 }
 
-# Create a new security group with a reduced number of rules
+# Create a new security group with fewer inbound and outbound rules
 resource "aws_security_group" "new_sg" {
-  name_prefix = "reduced-rules-"
+  name_prefix = "new-sg-"
   vpc_id      = data.aws_security_group.existing_sg.vpc_id
 
   # Limit inbound rules to only the required ports and sources
@@ -36,8 +36,9 @@ resource "aws_security_group" "new_sg" {
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
+  # Apply the new security group to the existing resources
   tags = {
-    Name = "Reduced-Rules-SG"
+    Name = "New Security Group"
   }
 }
 
@@ -45,8 +46,8 @@ resource "aws_security_group" "new_sg" {
 This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Uses a data source to reference the existing security group with the finding.
-3. Creates a new security group with a reduced number of rules, following the recommendation:
-   - Limits the inbound rules to only the required ports (22 and 80) and sources (10.0.0.0/16 and 0.0.0.0/0).
-   - Limits the outbound rule to allow all traffic (0.0.0.0/0).
-4. Applies a tag to the new security group for identification.
+2. Uses a data source to reference the existing security group with the ID `sg-04e3503c576b68504`.
+3. Creates a new security group with fewer inbound and outbound rules, following the recommendations:
+   - Limits inbound rules to only the required ports (22 and 80) and sources (10.0.0.0/16 and 0.0.0.0/0).
+   - Limits outbound rules to allow all traffic (0.0.0.0/0).
+4. Applies the new security group to the existing resources by referencing the existing security group's VPC ID.
