@@ -52,4 +52,4 @@ The provided Terraform code does the following:
 2. Creates an AWS Organizations Service Control Policy (SCP) named "AI Services Opt-Out" that denies access to all AI-related services.
 3. Attaches the "AI Services Opt-Out" policy to the root of the AWS Organization, ensuring that the policy is applied to all child accounts and cannot be overridden.
 
-This configuration aligns with the recommendation to establish an organization-wide AI services opt-out policy, set the default to `optOut`, and prohibit child policy overrides.
+This configuration aligns with the recommendation to establish an organization-wide AI services opt-out policy, set the default to `optOut`, and prohibit child policy overrides (`@@none`). This helps to prevent unintended content sharing with managed AI services and adheres to the principles of least privilege and data minimization.
