@@ -27,7 +27,7 @@ resource "aws_s3_bucket_versioning" "cloudtrail_bucket" {
   }
 }
 
-# Grant the CloudTrail service account the necessary permissions to write logs to the S3 bucket
+# Grant the CloudTrail service account the necessary permissions to write logs to the bucket
 resource "aws_s3_bucket_policy" "cloudtrail_bucket" {
   bucket = data.aws_s3_bucket.cloudtrail_bucket.id
   policy = <<POLICY
@@ -66,5 +66,5 @@ This Terraform code does the following:
 1. Configures the AWS provider for the `ap-northeast-2` region.
 2. Retrieves the existing CloudTrail trail using the `aws_cloudtrail_service_account` data source.
 3. Retrieves the existing S3 bucket for the CloudTrail trail using the `aws_s3_bucket` data source.
-4. Enables MFA delete on the CloudTrail log bucket by creating an `aws_s3_bucket_ownership_controls` resource and an `aws_s3_bucket_versioning` resource.
-5. Grants the CloudTrail service account the necessary permissions to write logs to the S3 bucket by creating an `aws_s3_bucket_policy` resource.
+4. Enables MFA delete on the CloudTrail log bucket using the `aws_s3_bucket_ownership_controls` and `aws_s3_bucket_versioning` resources.
+5. Grants the CloudTrail service account the necessary permissions to write logs to the bucket using the `aws_s3_bucket_policy` resource.
