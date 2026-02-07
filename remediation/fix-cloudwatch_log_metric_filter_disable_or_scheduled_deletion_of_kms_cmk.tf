@@ -1,6 +1,9 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
-# Create a CloudWatch log metric filter for the "DisableKey" event
+# Create a CloudWatch log metric filter for the 'DisableKey' event
 resource "aws_cloudwatch_log_metric_filter" "disable_kms_key" {
   name           = "DisableKMSKey"
   pattern        = "{$.eventName = DisableKey}"
@@ -13,7 +16,7 @@ resource "aws_cloudwatch_log_metric_filter" "disable_kms_key" {
   }
 }
 
-# Create a CloudWatch alarm for the "DisableKey" metric filter
+# Create a CloudWatch alarm for the 'DisableKey' metric filter
 resource "aws_cloudwatch_metric_alarm" "disable_kms_key_alarm" {
   alarm_name          = "DisableKMSKeyAlarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -27,7 +30,7 @@ resource "aws_cloudwatch_metric_alarm" "disable_kms_key_alarm" {
   alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:your-sns-topic-arn"]
 }
 
-# Create a CloudWatch log metric filter for the "ScheduleKeyDeletion" event
+# Create a CloudWatch log metric filter for the 'ScheduleKeyDeletion' event
 resource "aws_cloudwatch_log_metric_filter" "schedule_kms_key_deletion" {
   name           = "ScheduleKMSKeyDeletion"
   pattern        = "{$.eventName = ScheduleKeyDeletion}"
@@ -40,7 +43,7 @@ resource "aws_cloudwatch_log_metric_filter" "schedule_kms_key_deletion" {
   }
 }
 
-# Create a CloudWatch alarm for the "ScheduleKeyDeletion" metric filter
+# Create a CloudWatch alarm for the 'ScheduleKeyDeletion' metric filter
 resource "aws_cloudwatch_metric_alarm" "schedule_kms_key_deletion_alarm" {
   alarm_name          = "ScheduleKMSKeyDeletionAlarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"

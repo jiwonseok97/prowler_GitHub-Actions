@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Get the existing CloudWatch Logs log group
 data "aws_cloudwatch_log_group" "unauthorized_api_calls" {
@@ -33,9 +36,21 @@ resource "aws_cloudwatch_metric_alarm" "unauthorized_api_calls" {
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Retrieves the existing CloudWatch Logs log group using the `data` source.
-# 3. Creates a CloudWatch Logs metric filter for unauthorized API calls, using the pattern `{ ($.errorCode = *UnauthorizedOperation) || ($.errorCode = AccessDenied*) }`.
-# 4. Creates a CloudWatch alarm for the unauthorized API calls metric, which will trigger an alarm when the metric value is greater than or equal to 1. The alarm action is set to an SNS topic for security notifications.
+This Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Retrieves the existing CloudWatch Logs log group using the `data` source.
+3. Creates a CloudWatch Logs metric filter for unauthorized API calls, using the pattern `{ ($.errorCode = *UnauthorizedOperation) || ($.errorCode = AccessDenied*) }`.
+4. Creates a CloudWatch alarm for the unauthorized API calls metric, with the following configuration:
+   - Alarm name: `UnauthorizedAPICalls`
+   - Comparison operator: `GreaterThanOrEqualToThreshold`
+   - Evaluation periods: `1`
+   - Metric name: `UnauthorizedAPICalls`
+   - Namespace: `MyApp/SecurityMetrics`
+   - Period: `60` seconds
+   - Statistic: `Sum`
+   - Threshold: `1`
+   - Alarm description: `Alarm when there are unauthorized API calls`
+   - Alarm actions: `arn:aws:sns:ap-northeast-2:132410971304:my-security-topic`
+
+This code should address the security finding by enabling real-time alerting for unauthorized API calls, as recommended in the finding.

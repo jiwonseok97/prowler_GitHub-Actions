@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a CloudWatch Logs metric filter for AWS Config configuration changes
 resource "aws_cloudwatch_log_metric_filter" "config_changes" {
@@ -15,7 +18,7 @@ PATTERN
   }
 }
 
-# Create a CloudWatch alarm for the AWS Config configuration changes metric filter
+# Create a CloudWatch alarm for the metric filter
 resource "aws_cloudwatch_metric_alarm" "config_changes_alarm" {
   alarm_name          = "config-changes-alarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -30,4 +33,9 @@ resource "aws_cloudwatch_metric_alarm" "config_changes_alarm" {
 }
 
 
-# This Terraform code creates a CloudWatch Logs metric filter and a CloudWatch alarm to detect and alert on AWS Config configuration changes. The metric filter looks for specific AWS Config events (`StopConfigurationRecorder`, `DeleteDeliveryChannel`, `PutDeliveryChannel`, `PutConfigurationRecorder`) and the alarm is triggered when the metric value is greater than or equal to 1, indicating that a configuration change has occurred.
+The provided Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates a CloudWatch Logs metric filter for AWS Config configuration changes, including the following events: `StopConfigurationRecorder`, `DeleteDeliveryChannel`, `PutDeliveryChannel`, and `PutConfigurationRecorder`.
+3. Creates a CloudWatch alarm that triggers when the metric filter detects at least one configuration change event.
+4. The alarm action is set to an SNS topic, which can be used to notify responders about the configuration changes.

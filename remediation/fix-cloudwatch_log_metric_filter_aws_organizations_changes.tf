@@ -1,35 +1,45 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
+
+# Get the existing CloudWatch Logs log group
+data "aws_cloudwatch_log_group" "existing_log_group" {
+  name = "arn:aws:logs:ap-northeast-2:132410971304:log-group"
+}
 
 # Create a CloudWatch Logs metric filter for AWS Organizations changes
 resource "aws_cloudwatch_log_metric_filter" "organizations_changes" {
   name           = "organizations-changes"
   pattern        = "{$.eventSource = organizations.amazonaws.com}"
-  log_group_name = "arn:aws:logs:ap-northeast-2:132410971304:log-group"
+  log_group_name = data.aws_cloudwatch_log_group.existing_log_group.name
 
   metric_transformation {
     name      = "OrganizationsChanges"
-    namespace = "MyApp/Metrics"
+    namespace = "MyApp/Audit"
     value     = "1"
   }
 }
 
-# Create a CloudWatch alarm for the Organizations changes metric
+# Create a CloudWatch Alarm for the Organizations changes metric
 resource "aws_cloudwatch_metric_alarm" "organizations_changes_alarm" {
   alarm_name          = "organizations-changes-alarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
-  metric_name         = "OrganizationsChanges"
-  namespace           = "MyApp/Metrics"
+  metric_name         = aws_cloudwatch_log_metric_filter.organizations_changes.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.organizations_changes.metric_transformation[0].namespace
   period              = "60"
   statistic           = "Sum"
   threshold           = "1"
-  alarm_description   = "Alarm when there are changes to AWS Organizations"
+  alarm_description   = "Alarm when AWS Organizations changes are detected"
   alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:my-alert-topic"]
 }
 
 
-The provided Terraform code does the following:
+This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a CloudWatch Logs metric filter for AWS Organizations changes. The filter looks for events where the `eventSource` is `organizations.amazonaws.com`.
-3. Creates a CloudWatch alarm that triggers when the "OrganizationsChanges" metric is greater than or equal to 1. This alarm will send notifications to the specified SNS topic.
+2. Retrieves the existing CloudWatch Logs log group using the `data` source.
+3. Creates a CloudWatch Logs metric filter for AWS Organizations changes, using the log group retrieved in the previous step.
+4. Creates a CloudWatch Alarm for the Organizations changes metric, which will trigger an alarm when the metric value is greater than or equal to 1.
+5. The alarm action is set to an SNS topic, which can be used to notify responders.
