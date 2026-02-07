@@ -40,3 +40,5 @@ This Terraform code does the following:
    - The VPC endpoint is of type "Interface", which is the recommended type for the EC2 service.
    - The `private_dns_enabled` option is set to `true` to keep calls on the AWS network.
    - A restrictive endpoint policy is applied to the VPC endpoint, allowing only the necessary EC2 actions.
+
+This Terraform code addresses the security finding by creating an interface VPC endpoint for the EC2 service, enabling private DNS, and applying a restrictive endpoint policy, as recommended in the finding.

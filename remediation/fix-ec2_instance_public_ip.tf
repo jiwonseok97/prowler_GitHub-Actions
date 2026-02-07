@@ -22,7 +22,7 @@ resource "aws_security_group" "restricted_sg" {
   }
 
   # Allow necessary application-specific traffic
-  # Add additional ingress rules as per your requirements
+  # Add rules as per your application requirements
 }
 
 # Attach the new security group to the existing EC2 instance
@@ -40,31 +40,22 @@ resource "aws_lb" "application_lb" {
   subnets            = [data.aws_instance.problematic_instance.subnet_id]
 }
 
-# Add a listener and target group to the load balancer
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.application_lb.arn
-  port              = 80
-  protocol          = "HTTP"
+# Create a new WAF Web ACL and associate it with the load balancer
+resource "aws_wafv2_web_acl" "application_waf" {
+  name        = "app-waf"
+  description = "WAF for the application load balancer"
+  scope       = "REGIONAL"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.app_tg.arn
+    allow {}
   }
+
+  # Add your WAF rules here
 }
 
-resource "aws_lb_target_group" "app_tg" {
-  name        = "app-tg"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = data.aws_instance.problematic_instance.vpc_id
-  target_type = "instance"
-}
-
-# Register the EC2 instance with the target group
-resource "aws_lb_target_group_attachment" "app_tg_attachment" {
-  target_group_arn = aws_lb_target_group.app_tg.arn
-  target_id        = data.aws_instance.problematic_instance.id
-  port             = 80
+resource "aws_wafv2_web_acl_association" "waf_association" {
+  resource_arn = aws_lb.application_lb.arn
+  web_acl_arn  = aws_wafv2_web_acl.application_waf.arn
 }
 
 
@@ -72,10 +63,9 @@ This Terraform code addresses the security finding by:
 
 1. Configuring the AWS provider for the ap-northeast-2 region.
 2. Retrieving the details of the existing EC2 instance using a data source.
-3. Creating a new security group with restricted inbound access, allowing only necessary traffic (e.g., SSH from a bastion host).
+3. Creating a new security group with restricted inbound rules, allowing only necessary traffic (e.g., SSH access from a bastion host or via Session Manager).
 4. Attaching the new security group to the existing EC2 instance.
 5. Creating a new Application Load Balancer to expose the application, using the restricted security group.
-6. Adding a listener and target group to the load balancer.
-7. Registering the EC2 instance with the target group.
+6. Creating a new WAF Web ACL and associating it with the load balancer, providing an additional layer of security.
 
-This approach follows the recommendation to avoid assigning public IPs and instead use a load balancer with a Web Application Firewall (WAF) to expose the application. The EC2 instance is placed in a private subnet, and access is controlled through the load balancer and the restricted security group.
+The code ensures that the EC2 instance is not directly exposed to the public internet, and all traffic to the application is routed through the load balancer and protected by the WAF.

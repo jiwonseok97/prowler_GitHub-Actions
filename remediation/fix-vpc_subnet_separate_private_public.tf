@@ -75,16 +75,16 @@ resource "aws_route_table_association" "private_subnet_route_table_association" 
 }
 
 
-This Terraform code does the following:
+This Terraform code will:
 
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing VPC details using the `data.aws_vpc` data source.
-3. Creates a new public subnet within the existing VPC.
-4. Creates a new private subnet within the existing VPC.
-5. Creates a new internet gateway for the VPC.
-6. Creates a new route table for the public subnet, with a route to the internet gateway.
-7. Associates the public subnet with the public route table.
-8. Creates a new route table for the private subnet.
-9. Associates the private subnet with the private route table.
+1. Configure the AWS provider for the ap-northeast-2 region.
+2. Get the details of the existing VPC using the `data.aws_vpc` data source.
+3. Create a new public subnet within the existing VPC.
+4. Create a new private subnet within the existing VPC.
+5. Create a new internet gateway for the VPC.
+6. Create a new route table for the public subnet, with a route to the internet gateway.
+7. Associate the public subnet with the public route table.
+8. Create a new route table for the private subnet.
+9. Associate the private subnet with the private route table.
 
-This setup ensures that the VPC has both public and private subnets, with the public subnet having access to the internet through the internet gateway, and the private subnet being isolated from the internet.
+This should help address the security finding by separating the public and private subnets within the VPC, and restricting access to the private subnet.
