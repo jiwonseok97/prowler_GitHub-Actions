@@ -20,15 +20,11 @@ resource "aws_network_acl_rule" "deny_ssh_ingress" {
   to_port        = 22
 }
 
-# Add a comment to explain the purpose of the new Network ACL rule
-resource "aws_network_acl_rule" "comment_deny_ssh_ingress" {
-  network_acl_id = data.aws_network_acl.existing_nacl.id
-  rule_number    = 101
-  egress         = false
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = "0.0.0.0/0"
-  from_port      = 0
-  to_port        = 0
-  comments       = "Deny ingress TCP port 22 (SSH) from 0.0.0.0/0"
-}
+
+This Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Retrieves the existing Network ACL using the `data` source `aws_network_acl`.
+3. Creates a new Network ACL rule to deny ingress TCP port 22 (SSH) from `0.0.0.0/0` (the entire internet) using the `aws_network_acl_rule` resource.
+
+This should address the security finding by restricting SSH access to the network ACL.

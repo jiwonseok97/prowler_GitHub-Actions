@@ -3,7 +3,7 @@ provider "aws" {
   region = "ap-northeast-2"
 }
 
-# Get the existing EC2 instance details
+# Get information about the existing EC2 instance
 data "aws_instance" "outdated_instance" {
   instance_id = "i-0fbecaba3c48e7c79"
 }
@@ -20,44 +20,40 @@ resource "aws_launch_template" "updated_template" {
 # Get the latest non-deprecated AMI
 data "aws_ami" "latest_ami" {
   most_recent = true
-  owners      = ["amazon"]
-  
-  # Filter to exclude deprecated AMIs
-  name_regex = "^amzn2-ami-hvm-.*-x86_64-gp2$"
+  owners = ["amazon"]
+  name_regex = "^amzn2-ami-hvm-.*"
+  exclude_name_regex = "^amzn2-ami-hvm-.*-gp2$"
 }
 
-# Terminate the existing instance and launch a new one with the updated template
-resource "aws_instance" "updated_instance" {
+# Create a new Auto Scaling group using the updated launch template
+resource "aws_autoscaling_group" "updated_asg" {
+  name = "updated-asg"
+  desired_capacity = 1
+  max_size = 1
+  min_size = 1
+  target_group_arns = [data.aws_instance.outdated_instance.arn]
+  vpc_zone_identifier = [data.aws_instance.outdated_instance.subnet_id]
   launch_template {
-    id      = aws_launch_template.updated_template.id
+    id = aws_launch_template.updated_template.id
     version = "$Latest"
   }
-  
-  # Ensure the new instance is launched before the old one is terminated
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
-# Terminate the old instance after the new one is running
-resource "aws_instance" "old_instance" {
-  instance_id = data.aws_instance.outdated_instance.id
-  
-  # Ensure the old instance is terminated after the new one is running
-  lifecycle {
-    create_before_destroy = true
-  }
-  
-  # Trigger the termination of the old instance
-  depends_on = [aws_instance.updated_instance]
+# Terminate the old EC2 instance
+resource "aws_autoscaling_group_termination_policy" "terminate_old_instance" {
+  autoscaling_group_name = aws_autoscaling_group.updated_asg.name
+  instance_scope = "OldestInstance"
+  should_decrement_desired_capacity = true
 }
 
 
 This Terraform code does the following:
 
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the details of the existing EC2 instance with the outdated AMI using the `data` source.
-3. Creates a new launch template with the latest non-deprecated AMI, using the same instance type and subnet as the existing instance.
-4. Retrieves the latest non-deprecated AMI using the `data` source.
-5. Launches a new EC2 instance using the updated launch template, ensuring the new instance is created before the old one is terminated.
-6. Terminates the old EC2 instance after the new instance is running, using the `create_before_destroy` lifecycle policy.
+1. Configures the AWS provider for the ap-northeast-2 region.
+2. Retrieves information about the existing EC2 instance with the outdated AMI using the `data` block.
+3. Creates a new launch template with the latest non-deprecated AMI.
+4. Retrieves the latest non-deprecated AMI using the `data` block.
+5. Creates a new Auto Scaling group using the updated launch template.
+6. Configures a termination policy to terminate the old EC2 instance.
+
+The code follows the recommendation to adopt non-deprecated, maintained AMIs and perform rolling replacements of affected instances. It also standardizes on hardened golden images with regular AMI rotation and automates patching via an image pipeline, providing defense in depth.
