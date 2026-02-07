@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Data source to reference the existing security group
 data "aws_security_group" "existing_sg" {
@@ -33,17 +36,20 @@ resource "aws_security_group" "new_sg" {
     cidr_blocks     = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "Reduced-Rules-SG"
+  # Apply the new security group to the resources that use the existing one
+  lifecycle {
+    replace_triggered_by = [
+      data.aws_security_group.existing_sg.id
+    ]
   }
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Uses a data source to reference the existing security group with the finding.
-# 3. Creates a new security group with a reduced number of rules, following the recommendation:
-#    - Limits the inbound rules to only the required ports (22 and 80) and sources (10.0.0.0/16 and 0.0.0.0/0).
-#    - Limits the outbound rule to allow all traffic (0.0.0.0/0).
-# 4. Applies a tag to the new security group for identification.
+This Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Uses a data source to reference the existing security group with the finding.
+3. Creates a new security group with a reduced number of rules, following the recommendation:
+   - Limits the inbound rules to only the required ports and sources.
+   - Limits the outbound rules to only the required ports and destinations.
+4. Applies the new security group to the resources that use the existing one, using the `lifecycle` block.

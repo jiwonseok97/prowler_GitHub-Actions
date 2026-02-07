@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Get the existing VPC details
 data "aws_vpc" "existing_vpc" {
@@ -30,11 +33,11 @@ resource "aws_route_table_association" "new_subnet_2_association" {
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Retrieves the details of the existing VPC using the `data.aws_vpc` data source.
-# 3. Creates two new subnets, one in `ap-northeast-2a` and the other in `ap-northeast-2c`, within the existing VPC.
-# 4. Associates the new subnets with the main route table of the existing VPC.
-# 
-# This should address the security finding by ensuring that the VPC has subnets in multiple Availability Zones, which is recommended for high availability.
+This Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Retrieves the details of the existing VPC using the `data.aws_vpc` data source.
+3. Creates two new subnets, one in `ap-northeast-2a` and the other in `ap-northeast-2c`, to distribute the subnets across multiple Availability Zones.
+4. Associates the new subnets with the existing VPC's main route table.
+
+By adding these new subnets in different Availability Zones, the VPC will now have subnets in multiple AZs, which is the recommended configuration for high availability.
