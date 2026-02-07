@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a CloudWatch Logs metric filter for IAM policy changes
 resource "aws_cloudwatch_log_metric_filter" "iam_policy_changes" {
@@ -28,8 +31,8 @@ resource "aws_cloudwatch_metric_alarm" "iam_policy_changes_alarm" {
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Creates a CloudWatch Logs metric filter for IAM policy create, delete, update, attach, and detach events.
-# 3. Creates a CloudWatch alarm that triggers when there is at least one IAM policy change event, and sends an alert to the `security-alerts` SNS topic.
+The provided Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates a CloudWatch Logs metric filter for IAM policy changes, including events for creating, deleting, updating, attaching, and detaching policies.
+3. Creates a CloudWatch alarm that triggers when there is at least one IAM policy change event, and sends an alert to the `security-alerts` SNS topic.
