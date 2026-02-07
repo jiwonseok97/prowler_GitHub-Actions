@@ -5,7 +5,7 @@ provider "aws" {
 
 # Create a CloudWatch Logs metric filter for CloudTrail configuration changes
 resource "aws_cloudwatch_log_metric_filter" "cloudtrail_configuration_changes" {
-  name           = "cloudtrail-configuration-changes"
+  name           = "CloudTrailConfigurationChanges"
   pattern        = "{$.eventName = CreateTrail} || {$.eventName = UpdateTrail} || {$.eventName = DeleteTrail} || {$.eventName = StartLogging} || {$.eventName = StopLogging}"
   log_group_name = "arn:aws:logs:ap-northeast-2:132410971304:log-group"
 
@@ -18,7 +18,7 @@ resource "aws_cloudwatch_log_metric_filter" "cloudtrail_configuration_changes" {
 
 # Create a CloudWatch alarm for the CloudTrail configuration changes metric filter
 resource "aws_cloudwatch_metric_alarm" "cloudtrail_configuration_changes_alarm" {
-  alarm_name          = "cloudtrail-configuration-changes-alarm"
+  alarm_name          = "CloudTrailConfigurationChangesAlarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_total_periods = 1
   metric_name         = "CloudTrailConfigurationChanges"

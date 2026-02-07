@@ -18,7 +18,7 @@ PATTERN
   }
 }
 
-# Create a CloudWatch alarm for the AWS Config configuration changes metric filter
+# Create a CloudWatch alarm for the metric filter
 resource "aws_cloudwatch_metric_alarm" "config_changes_alarm" {
   alarm_name          = "config-changes-alarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -33,4 +33,4 @@ resource "aws_cloudwatch_metric_alarm" "config_changes_alarm" {
 }
 
 
-This Terraform code creates a CloudWatch Logs metric filter and a CloudWatch alarm to detect and alert on AWS Config configuration changes. The metric filter looks for specific AWS Config events (`StopConfigurationRecorder`, `DeleteDeliveryChannel`, `PutDeliveryChannel`, `PutConfigurationRecorder`) and the alarm is triggered when the metric value is greater than or equal to 1, indicating that a configuration change has occurred.
+This Terraform code creates a CloudWatch Logs metric filter and a CloudWatch alarm to detect and alert on AWS Config configuration changes. The metric filter looks for specific AWS Config events (`StopConfigurationRecorder`, `DeleteDeliveryChannel`, `PutDeliveryChannel`, `PutConfigurationRecorder`) in the CloudTrail logs. The alarm is triggered when the metric filter detects at least one event within a 60-second period, and it sends a notification to the specified SNS topic.

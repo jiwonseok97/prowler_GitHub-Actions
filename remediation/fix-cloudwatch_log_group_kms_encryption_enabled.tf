@@ -47,5 +47,5 @@ This Terraform code does the following:
 1. Configures the AWS provider for the `ap-northeast-2` region.
 2. Creates a new KMS key for encrypting the CloudWatch log group `/aws/eks/0202_test/cluster`.
 3. Enables key rotation and sets a 30-day deletion window for the KMS key.
-4. Creates a new CloudWatch log group `/aws/eks/0202_test/cluster` and associates it with the KMS key.
-5. Grants the required IAM permissions to the KMS key, allowing the `logs.ap-northeast-2.amazonaws.com` service to perform the necessary actions on the key.
+4. Creates a new CloudWatch log group and associates it with the KMS key.
+5. Grants the required IAM permissions to the KMS key, allowing the `logs.ap-northeast-2.amazonaws.com` service to use the key for encryption and decryption.

@@ -16,7 +16,7 @@ resource "aws_cloudwatch_log_metric_filter" "nacl_changes" {
   }
 }
 
-# Create a CloudWatch alarm for the NACL change metric
+# Create a CloudWatch alarm for the NACL changes metric filter
 resource "aws_cloudwatch_metric_alarm" "nacl_changes_alarm" {
   alarm_name          = "NACLChangesAlarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -31,8 +31,11 @@ resource "aws_cloudwatch_metric_alarm" "nacl_changes_alarm" {
 }
 
 
-This Terraform code does the following:
+The provided Terraform code does the following:
 
-1. Configures the AWS provider for the ap-northeast-2 region.
-2. Creates a CloudWatch Logs metric filter for NACL change events, including events such as CreateNetworkAcl, CreateNetworkAclEntry, DeleteNetworkAcl, DeleteNetworkAclEntry, ReplaceNetworkAclEntry, and ReplaceNetworkAcl.
-3. Creates a CloudWatch alarm for the NACL change metric, which will trigger an alarm when the number of NACL changes is greater than or equal to 1. The alarm action is set to an SNS topic, which you should replace with the ARN of your own SNS topic.
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates a CloudWatch Logs metric filter named `NACLChanges` that captures various NACL-related events from CloudTrail logs.
+3. Creates a CloudWatch alarm named `NACLChangesAlarm` that triggers when the `NACLChanges` metric has a value greater than or equal to 1, indicating that a NACL change event has occurred.
+4. The alarm is configured to send notifications to an SNR topic with the ARN `arn:aws:sns:ap-northeast-2:132410971304:your-sns-topic-arn`.
+
+This code addresses the security finding by implementing a CloudWatch Logs metric filter and alarm for NACL change events, as recommended in the finding. It also includes the necessary provider configuration and references to existing resources.

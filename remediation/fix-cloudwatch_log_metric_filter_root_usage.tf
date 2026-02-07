@@ -34,7 +34,5 @@ resource "aws_cloudwatch_metric_alarm" "root_account_usage_alarm" {
 The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a CloudWatch Logs metric filter named `RootAccountUsage` that captures any root account activity, excluding AWS service events.
-3. Creates a CloudWatch alarm named `RootAccountUsageAlarm` that triggers when the `RootUsage` metric (from the metric filter) is greater than or equal to 1, indicating root account usage. The alarm is set to send notifications to the `my-alert-topic` SNS topic.
-
-This code addresses the security finding by enabling real-time alerts for root account usage, which is a recommended best practice for AWS security.
+2. Creates a CloudWatch Logs metric filter for root account usage. The filter pattern looks for log events where the user identity type is "Root", the invoked by field does not exist, and the event type is not an "AwsServiceEvent".
+3. Creates a CloudWatch alarm for the root account usage metric filter. The alarm is triggered when the sum of the "RootUsage" metric is greater than or equal to 1 within a 1-minute period. When the alarm is triggered, it sends a notification to the "arn:aws:sns:ap-northeast-2:132410971304:my-alert-topic" SNR topic.
