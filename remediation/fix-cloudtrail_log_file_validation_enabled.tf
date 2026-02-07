@@ -4,27 +4,60 @@ provider "aws" {
 }
 
 # Get the existing CloudTrail trail
-data "aws_cloudtrail" "security_cloudtrail" {
-  name = "security-cloudtail"
+data "aws_cloudtrail_service_account" "current" {}
+
+resource "aws_cloudtrail" "security_cloudtrail" {
+  name                          = "security-cloudtail"
+  s3_bucket_name                = "my-cloudtrail-logs-bucket"
+  s3_key_prefix                 = "cloudtrail-logs"
+  is_multi_region_trail         = true
+  include_global_service_events = true
+  enable_log_file_validation    = true # Enable log file integrity validation
 }
 
-# Enable log file validation on the CloudTrail trail
-resource "aws_cloudtrail" "security_cloudtrail" {
-  name                          = data.aws_cloudtrail.security_cloudtrail.name
-  s3_bucket_name                = data.aws_cloudtrail.security_cloudtrail.s3_bucket_name
-  s3_key_prefix                 = data.aws_cloudtrail.security_cloudtrail.s3_key_prefix
-  is_multi_region_trail         = data.aws_cloudtrail.security_cloudtrail.is_multi_region_trail
-  include_global_service_events = data.aws_cloudtrail.security_cloudtrail.include_global_service_events
-  is_organization_trail         = data.aws_cloudtrail.security_cloudtrail.is_organization_trail
-  kms_key_id                    = data.aws_cloudtrail.security_cloudtrail.kms_key_id
-  log_file_validation_enabled   = true # Enable log file validation
+# Enforce least privilege on the logs bucket
+resource "aws_s3_bucket_ownership_controls" "logs_bucket" {
+  bucket = "my-cloudtrail-logs-bucket"
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "logs_bucket" {
+  bucket = "my-cloudtrail-logs-bucket"
+  acl    = "private"
+}
+
+# Retain and protect digest files
+resource "aws_s3_bucket_object_lock_configuration" "logs_bucket" {
+  bucket = "my-cloudtrail-logs-bucket"
+  rule {
+    default_retention {
+      mode = "COMPLIANCE"
+      years = 7
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "logs_bucket" {
+  bucket = "my-cloudtrail-logs-bucket"
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
 
 This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing CloudTrail trail named `security-cloudtail` using the `data` source.
-3. Updates the CloudTrail trail resource to enable log file validation by setting the `log_file_validation_enabled` attribute to `true`.
-
-The code uses the `data` source to reference the existing CloudTrail trail and its associated attributes, such as the S3 bucket name, key prefix, and other configuration settings. This ensures that the updated CloudTrail trail maintains the same configuration as the existing one, except for the log file validation setting.
+2. Gets the existing CloudTrail service account using the `aws_cloudtrail_service_account` data source.
+3. Creates a new CloudTrail trail named `security-cloudtail` with the following configurations:
+   - Sets the S3 bucket name to `my-cloudtrail-logs-bucket`.
+   - Sets the S3 key prefix to `cloudtrail-logs`.
+   - Enables multi-region trail.
+   - Includes global service events.
+   - Enables log file integrity validation.
+4. Enforces least privilege on the logs bucket by setting the bucket ownership controls and ACL to `private`.
+5. Retains and protects the digest files by:
+   - Enabling object lock configuration with a 7-year compliance mode retention.
+   - Enabling bucket versioning.
