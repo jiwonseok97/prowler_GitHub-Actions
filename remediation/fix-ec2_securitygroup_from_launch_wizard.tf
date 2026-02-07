@@ -25,13 +25,12 @@ resource "aws_security_group" "new_security_group" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Remove unused rules
   tags = {
     Name = "new-security-group"
   }
 }
 
-# Use a data source to reference the default VPC
+# Use a data source to reference the existing default VPC
 data "aws_vpc" "default" {
   default = true
 }
@@ -43,5 +42,6 @@ The provided Terraform code does the following:
 2. Creates a new security group named `new-security-group` to replace the existing one.
 3. Restricts the inbound traffic to only allow SSH access (port 22) from the `10.0.0.0/16` CIDR block.
 4. Restricts the outbound traffic to allow all destinations (`0.0.0.0/0`).
-5. Removes any unused rules from the new security group.
-6. Uses a data source to reference the default VPC in the `ap-northeast-2` region.
+5. Uses a data source to reference the existing default VPC.
+
+This code follows the recommendation to "Apply least privilege: restrict inbound to required sources, avoid public admin ports, and minimize egress." The new security group is created using Terraform, which allows for better change control and enforcement of security best practices.

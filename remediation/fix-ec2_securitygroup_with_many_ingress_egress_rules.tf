@@ -37,16 +37,17 @@ resource "aws_security_group" "new_sg" {
   }
 
   tags = {
-    Name = "Reduced-Rules-SG"
+    Name = "Reduced-rules-security-group"
   }
 }
 
 
-This Terraform code does the following:
+The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Uses a data source to reference the existing security group with the finding.
-3. Creates a new security group with a reduced number of rules, following the recommendation:
+2. Uses a data source to reference the existing security group with the ID `sg-04e3503c576b68504`.
+3. Creates a new security group with a reduced number of rules, based on the recommendation:
    - Limits the inbound rules to only the required ports (22 and 80) and sources (10.0.0.0/16 and 0.0.0.0/0).
    - Limits the outbound rule to allow all traffic (0.0.0.0/0).
-4. Applies a tag to the new security group for identification.
+4. Applies a name prefix of `reduced-rules-` to the new security group.
+5. Tags the new security group with the name `Reduced-rules-security-group`.
