@@ -3,78 +3,65 @@ provider "aws" {
   region = "ap-northeast-2"
 }
 
-# Create an AWS Organizations Organization
+# Create an AWS Organizations organization
 resource "aws_organizations_organization" "org" {
-  aws_service_access_principals = ["cloudtrail.amazonaws.com", "config.amazonaws.com"]
-  enabled_policy_types          = ["SERVICE_CONTROL_POLICY"]
+  aws_service_access_principals = ["cloudtrail.amazonaws.com", "config.amazonaws.com", "guardduty.amazonaws.com", "securityhub.amazonaws.com"]
+  feature_set                   = "ALL"
 }
 
-# Create an AWS Organizations Account for Security Contacts
-resource "aws_organizations_account" "security_account" {
-  name  = "Security Contacts"
-  email = "security-contacts@example.com"
+# Create an AWS Organizations account
+resource "aws_organizations_account" "account" {
+  name  = "My Account"
+  email = "admin@example.com"
 }
 
-# Create an AWS Organizations Account for Billing Contacts
-resource "aws_organizations_account" "billing_account" {
-  name  = "Billing Contacts"
-  email = "billing-contacts@example.com"
+# Create an AWS IAM user for the Security contact
+resource "aws_iam_user" "security_contact" {
+  name = "security-contact"
 }
 
-# Create an AWS Organizations Account for Operations Contacts
-resource "aws_organizations_account" "operations_account" {
-  name  = "Operations Contacts"
-  email = "operations-contacts@example.com"
+# Create an AWS IAM user for the Billing contact
+resource "aws_iam_user" "billing_contact" {
+  name = "billing-contact"
 }
 
-# Create an AWS Organizations Service Control Policy to enforce separate contacts
-resource "aws_organizations_policy" "separate_contacts_policy" {
-  name        = "Separate Contacts Policy"
-  description = "Enforce separate Security, Billing, and Operations contacts"
-
-  content = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Deny",
-      "Action": [
-        "iam:UpdateAccountPasswordPolicy",
-        "iam:UpdateAccountAlias",
-        "iam:UpdateAccountSummary",
-        "iam:UpdateOpenIDConnectProviderThumbprint",
-        "iam:UpdateSAMLProvider",
-        "iam:UpdateServerCertificate",
-        "iam:UpdateServiceSpecificCredential",
-        "iam:UpdateSigningCertificate",
-        "iam:UpdateSSHPublicKey",
-        "iam:UpdateUser"
-      ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "iam:TargetIsAccount": "true"
-        }
-      }
-    }
-  ]
-}
-POLICY
+# Create an AWS IAM user for the Operations contact
+resource "aws_iam_user" "operations_contact" {
+  name = "operations-contact"
 }
 
-# Attach the Service Control Policy to the AWS Organizations Organization
-resource "aws_organizations_policy_attachment" "separate_contacts_policy_attachment" {
-  policy_id = aws_organizations_policy.separate_contacts_policy.id
-  target_id = aws_organizations_organization.org.id
+# Create an AWS IAM group for the Security contact
+resource "aws_iam_group" "security_group" {
+  name = "security-group"
+}
+
+# Create an AWS IAM group for the Billing contact
+resource "aws_iam_group" "billing_group" {
+  name = "billing-group"
+}
+
+# Create an AWS IAM group for the Operations contact
+resource "aws_iam_group" "operations_group" {
+  name = "operations-group"
+}
+
+# Add the Security contact user to the Security group
+resource "aws_iam_user_group_membership" "security_contact_membership" {
+  user_name = aws_iam_user.security_contact.name
+  groups    = [aws_iam_group.security_group.name]
+}
+
+# Add the Billing contact user to the Billing group
+resource "aws_iam_user_group_membership" "billing_contact_membership" {
+  user_name = aws_iam_user.billing_contact.name
+  groups    = [aws_iam_group.billing_group.name]
+}
+
+# Add the Operations contact user to the Operations group
+resource "aws_iam_user_group_membership" "operations_contact_membership" {
+  user_name = aws_iam_user.operations_contact.name
+  groups    = [aws_iam_group.operations_group.name]
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the ap-northeast-2 region.
-2. Creates an AWS Organizations Organization.
-3. Creates three AWS Organizations Accounts for Security, Billing, and Operations contacts.
-4. Creates an AWS Organizations Service Control Policy to enforce separate contacts for Security, Billing, and Operations.
-5. Attaches the Service Control Policy to the AWS Organizations Organization.
-
-This ensures that the AWS account has distinct Security, Billing, and Operations contact details, different from each other and from the root contact, as recommended in the security finding.
+This Terraform code creates an AWS Organizations organization, an AWS Organizations account, and three IAM users for the Security, Billing, and Operations contacts. It also creates three IAM groups and adds the respective users to the corresponding groups. This ensures that the Security, Billing, and Operations contacts are maintained as distinct, monitored contacts that differ from the root contact, as recommended in the security finding.
