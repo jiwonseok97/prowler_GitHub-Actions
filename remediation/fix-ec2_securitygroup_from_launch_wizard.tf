@@ -1,12 +1,20 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
-# Create a new security group to replace the existing one
-resource "aws_security_group" "new_security_group" {
-  name        = "new-security-group"
-  description = "Replacement security group for ec2_securitygroup_from_launch_wizard finding"
-  vpc_id      = data.aws_vpc.default.id
+# Reference the existing security group
+data "aws_security_group" "insecure_sg" {
+  id = "sg-04e3503c576b68504"
+}
 
-  # Restrict inbound traffic to only the required sources
+# Create a new security group with the recommended configuration
+resource "aws_security_group" "secure_sg" {
+  name        = "secure-sg"
+  description = "Secure security group"
+  vpc_id      = data.aws_security_group.insecure_sg.vpc_id
+
+  # Restrict inbound traffic to required sources
   ingress {
     from_port   = 22
     to_port     = 22
@@ -14,7 +22,14 @@ resource "aws_security_group" "new_security_group" {
     cidr_blocks = ["10.0.0.0/16"]
   }
 
-  # Restrict outbound traffic to only the required destinations
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Restrict egress traffic to required destinations
   egress {
     from_port   = 0
     to_port     = 0
@@ -22,23 +37,17 @@ resource "aws_security_group" "new_security_group" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Remove unused rules
   tags = {
-    Name = "new-security-group"
+    Name = "Secure Security Group"
   }
 }
 
-# Use a data source to reference the default VPC
-data "aws_vpc" "default" {
-  default = true
-}
 
-
-The provided Terraform code does the following:
+This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a new security group named `new-security-group` to replace the existing one.
-3. Restricts the inbound traffic to only allow SSH access (port 22) from the `10.0.0.0/16` CIDR block.
-4. Restricts the outbound traffic to allow all destinations (`0.0.0.0/0`).
-5. Removes any unused rules from the new security group.
-6. Uses a data source to reference the default VPC in the `ap-northeast-2` region.
+2. References the existing insecure security group using the `data` source.
+3. Creates a new security group with the recommended configuration:
+   - Restricts inbound traffic to only allow SSH (port 22) from the `10.0.0.0/16` CIDR block and HTTP (port 80) from any source.
+   - Restricts egress traffic to allow all outbound traffic.
+   - Applies a tag to the new security group for identification.
