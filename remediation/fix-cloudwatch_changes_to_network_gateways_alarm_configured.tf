@@ -33,6 +33,12 @@ resource "aws_cloudwatch_metric_alarm" "network_gateway_changes_alarm" {
 
 This Terraform code does the following:
 
-1. Configures the AWS provider for the ap-northeast-2 region.
-2. Creates a CloudWatch Logs metric filter that captures various events related to changes in network gateways, such as creating, deleting, attaching, and detaching network interfaces.
-3. Creates a CloudWatch alarm that triggers when the "NetworkGatewayChanges" metric filter detects any changes to network gateways. The alarm is configured to send notifications to an SNS topic (replace `"arn:aws:sns:ap-northeast-2:132410971304:your-sns-topic-arn"` with the actual ARN of your SNS topic).
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates a CloudWatch Logs metric filter for the following network gateway events:
+   - `CreateNetworkInterface`
+   - `DeleteNetworkInterface`
+   - `AttachNetworkInterface`
+   - `DetachNetworkInterface`
+   - `CreateNetworkInterfacePermission`
+   - `DeleteNetworkInterfacePermission`
+3. Creates a CloudWatch alarm that triggers when the network gateway changes metric filter detects any events. The alarm is configured to send notifications to an SNS topic (replace `your-sns-topic-arn` with the appropriate ARN).
