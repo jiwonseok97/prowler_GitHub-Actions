@@ -24,16 +24,16 @@ data "aws_iam_policy_document" "aws_learner_dynamodb_policy_document" {
 # Create a new IAM policy with the updated permissions
 resource "aws_iam_policy" "aws_learner_dynamodb_policy" {
   name        = "aws_learner_dynamodb_policy"
-  description = "Updated IAM policy with limited CloudTrail permissions"
+  description = "Updated IAM policy with least privilege CloudTrail permissions"
   policy      = data.aws_iam_policy_document.aws_learner_dynamodb_policy_document.json
 }
 
 
-This Terraform code does the following:
+The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing IAM policy using the `data` source.
-3. Creates a new IAM policy document with the required permissions for CloudTrail, including `GetTrailStatus`, `DescribeTrails`, and `LookupEvents`.
-4. Creates a new IAM policy with the updated permissions, using the policy document from the previous step.
+2. Uses a `data` source to reference the existing IAM policy named `aws_learner_dynamodb_policy`.
+3. Creates a new IAM policy document with the required permissions for CloudTrail, including `cloudtrail:GetTrailStatus`, `cloudtrail:DescribeTrails`, and `cloudtrail:LookupEvents`.
+4. Creates a new IAM policy with the updated permissions, using the policy document created in the previous step.
 
-The updated policy grants the necessary permissions for CloudTrail management, while avoiding the `cloudtrail:*` privilege and following the principle of least privilege.
+This code addresses the security finding by applying the principle of least privilege and allowing only the necessary CloudTrail actions, instead of granting full `cloudtrail:*` access.
