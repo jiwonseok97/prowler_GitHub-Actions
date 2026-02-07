@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Get the existing S3 bucket resource
 data "aws_s3_bucket" "aws_cloudtrail_logs" {
@@ -26,4 +29,6 @@ The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
 2. Retrieves the existing S3 bucket resource using the `aws_s3_bucket` data source.
-3. Enables MFA Delete on the S3 bucket by creating the `aws_s3_bucket_ownership_controls` and `aws_s3_bucket_versioning` resources.
+3. Enables MFA Delete on the S3 bucket by creating an `aws_s3_bucket_ownership_controls` resource and an `aws_s3_bucket_versioning` resource.
+   - The `aws_s3_bucket_ownership_controls` resource sets the object ownership to "BucketOwnerPreferred".
+   - The `aws_s3_bucket_versioning` resource enables versioning and MFA Delete on the S3 bucket.
