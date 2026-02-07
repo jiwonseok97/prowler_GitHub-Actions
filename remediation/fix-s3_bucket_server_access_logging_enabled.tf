@@ -33,7 +33,7 @@ resource "aws_s3_bucket_logging" "log_bucket_logging" {
   target_prefix = "logs/"
 }
 
-# Enable CloudTrail data events for the existing S3 bucket
+# Enable CloudTrail data events on the existing S3 bucket
 resource "aws_cloudtrail" "cloudtrail" {
   name                          = "cloudtrail-logs"
   s3_bucket_name                = "aws-cloudtrail-logs-132410971304-0971c04b"
@@ -58,6 +58,5 @@ The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
 2. Creates a new S3 bucket named `aws-cloudtrail-logs-132410971304-0971c04b-logs` for storing the server access logs.
-3. Enables versioning and sets up a lifecycle rule to transition objects to Glacier after 30 days and delete them after 90 days.
-4. Enables server access logging on the existing S3 bucket `aws-cloudtrail-logs-132410971304-0971c04b` and sends the logs to the newly created log bucket.
-5. Enables CloudTrail data events for the existing S3 bucket `aws-cloudtrail-logs-132410971304-0971c04b`, including all read and write events, and management events.
+3. Enables server access logging on the existing S3 bucket `aws-cloudtrail-logs-132410971304-0971c04b`, and sends the logs to the newly created log bucket.
+4. Enables CloudTrail data events on the existing S3 bucket `aws-cloudtrail-logs-132410971304-0971c04b`, which provides object-level visibility for the bucket.
