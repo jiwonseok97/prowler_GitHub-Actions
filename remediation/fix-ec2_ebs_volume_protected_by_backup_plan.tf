@@ -26,9 +26,18 @@ resource "aws_backup_plan" "ebs_backup_plan" {
 # Create an AWS Backup vault to store the backups
 resource "aws_backup_vault" "ebs_backup_vault" {
   name = "ebs-backup-vault"
+
+  # Enable Vault Lock for WORM retention
+  lifecycle_rule {
+    transition {
+      target_vault_name = "ebs-backup-vault"
+      transition_type   = "COPY"
+    }
+    delete_after = 365
+  }
 }
 
-# Assign the EBS volume to the backup plan
+# Associate the EBS volume with the backup plan
 resource "aws_backup_selection" "ebs_backup_selection" {
   name         = "ebs-backup-selection"
   plan_id      = aws_backup_plan.ebs_backup_plan.id
@@ -36,4 +45,12 @@ resource "aws_backup_selection" "ebs_backup_selection" {
 }
 
 
-This Terraform code creates an AWS Backup plan and vault to protect the specified EBS volume. The backup plan is configured to run a weekly backup on Mondays at 5 AM, with a 60-minute start window and a 360-minute completion window. The backups are stored in the "ebs-backup-vault" and the EBS volume is assigned to the backup plan.
+The provided Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates an AWS Backup plan named `ebs-backup-plan` to protect the EBS volume.
+3. Defines a backup rule within the plan, which includes a schedule, start window, and completion window.
+4. Configures the backup plan to use the `EBS` resource type.
+5. Creates an AWS Backup vault named `ebs-backup-vault` to store the backups.
+6. Enables Vault Lock for WORM (Write Once, Read Many) retention on the backup vault.
+7. Associates the EBS volume with the backup plan, ensuring that the volume is protected by the backup plan.

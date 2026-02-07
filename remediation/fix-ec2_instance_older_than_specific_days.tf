@@ -19,3 +19,14 @@ resource "aws_instance_termination" "terminate_old_instance" {
   instance_id   = data.aws_instance.problematic_instance.id
   force_delete = true
 }
+
+# Create a new EC2 instance from a hardened, updated AMI
+resource "aws_instance" "new_instance" {
+  ami           = "ami-0b0af3577fe5e3532" # Replace with a secure, updated AMI
+  instance_type = "t2.micro"
+  subnet_id     = data.aws_instance.problematic_instance.subnet_id
+
+  tags = {
+    Name = "Replaced Instance"
+  }
+}

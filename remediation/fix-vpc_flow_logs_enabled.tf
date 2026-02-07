@@ -10,51 +10,43 @@ data "aws_vpc" "existing_vpc" {
 
 # Create a new flow log for the existing VPC
 resource "aws_flow_log" "vpc_flow_log" {
-  iam_role_arn         = aws_iam_role.flow_log_role.arn
-  log_destination      = aws_cloudwatch_log_group.flow_log_group.arn
-  traffic_type         = "ALL"
-  vpc_id               = data.aws_vpc.existing_vpc.id
-  log_destination_type = "cloudwatch_logs"
+  name                = "vpc-flow-log"
+  vpc_id             = data.aws_vpc.existing_vpc.id
+  traffic_type        = "ALL"
+  destination_type    = "s3"
+  destination_arn     = aws_s3_bucket.flow_log_bucket.arn
+  log_destination_type = "s3"
+  log_group_name      = "/aws/vpc-flow-logs"
+  tags = {
+    Name = "VPC Flow Log"
+  }
 }
 
-# Create an IAM role for the flow log
-resource "aws_iam_role" "flow_log_role" {
-  name = "vpc-flow-log-role"
-
-  assume_role_policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "",
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "vpc-flow-logs.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-EOF
+# Create an S3 bucket to store the VPC flow logs
+resource "aws_s3_bucket" "flow_log_bucket" {
+  bucket = "my-vpc-flow-log-bucket"
+  acl    = "private"
 }
 
-# Attach the required policy to the IAM role
-resource "aws_iam_role_policy_attachment" "flow_log_policy_attachment" {
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSVPCFlowLogsRole"
-  role       = aws_iam_role.flow_log_role.name
+# Apply least privilege access to the S3 bucket
+resource "aws_s3_bucket_ownership_controls" "flow_log_bucket" {
+  bucket = aws_s3_bucket.flow_log_bucket.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
 }
 
-# Create a CloudWatch log group for the flow logs
-resource "aws_cloudwatch_log_group" "flow_log_group" {
-  name = "vpc-flow-logs"
+resource "aws_s3_bucket_acl" "flow_log_bucket" {
+  depends_on = [aws_s3_bucket_ownership_controls.flow_log_bucket]
+  bucket = aws_s3_bucket.flow_log_bucket.id
+  acl    = "private"
 }
 
 
 This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing VPC resource using a data source.
-3. Creates a new VPC flow log for the existing VPC, sending the logs to a CloudWatch log group.
-4. Creates an IAM role with the necessary permissions for the VPC flow logs.
-5. Attaches the required policy to the IAM role.
-6. Creates a CloudWatch log group to store the VPC flow logs.
+2. Retrieves the existing VPC resource using the `data` source.
+3. Creates a new VPC flow log resource to capture all traffic (`traffic_type = "ALL"`) and sends the logs to an S3 bucket.
+4. Creates an S3 bucket to store the VPC flow logs.
+5. Applies least privilege access to the S3 bucket by setting the bucket ownership controls and ACL to `private`.
