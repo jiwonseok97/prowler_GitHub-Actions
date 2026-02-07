@@ -12,4 +12,4 @@ resource "aws_kms_key" "multi_region_key" {
 }
 
 
-The provided Terraform code creates a new KMS customer managed key in the `ap-northeast-2` region with the `multi_region` attribute set to `true`. This addresses the security finding by creating a multi-Region KMS key, which is the recommended approach as per the provided recommendation.
+The provided Terraform code creates a new KMS customer managed key in the ap-northeast-2 region with the `multi_region` attribute set to `true`. This addresses the security finding by creating a multi-Region KMS key, which is the recommended approach as per the provided recommendation.
