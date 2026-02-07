@@ -1,0 +1,32 @@
+# Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
+
+# Get the existing S3 bucket resource
+data "aws_s3_bucket" "aws_cloudtrail_logs" {
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+}
+
+# Enable MFA Delete on the S3 bucket
+resource "aws_s3_bucket_ownership_controls" "aws_cloudtrail_logs" {
+  bucket = data.aws_s3_bucket.aws_cloudtrail_logs.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "aws_cloudtrail_logs" {
+  bucket = data.aws_s3_bucket.aws_cloudtrail_logs.id
+  versioning_configuration {
+    status = "Enabled"
+    mfa_delete = "Enabled"
+  }
+}
+
+
+The provided Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Retrieves the existing S3 bucket resource using the `data` source `aws_s3_bucket`.
+3. Enables MFA Delete on the S3 bucket using the `aws_s3_bucket_ownership_controls` and `aws_s3_bucket_versioning` resources.
