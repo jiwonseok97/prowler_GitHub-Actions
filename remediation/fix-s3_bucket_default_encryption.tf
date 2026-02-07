@@ -37,6 +37,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "aws_cloudtrail_lo
 The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing S3 bucket resource using the `data` source.
-3. Enables default server-side encryption (SSE) on the S3 bucket using KMS.
-4. Configures the public access block settings for the S3 bucket to enforce strict access controls.
+2. Retrieves the existing S3 bucket resource using the `data.aws_s3_bucket` data source.
+3. Enables default server-side encryption (SSE) on the S3 bucket using KMS with the `aws_s3_bucket_server_side_encryption_configuration` resource.
+4. Configures the bucket ownership controls and public access block settings using the `aws_s3_bucket_ownership_controls` and `aws_s3_bucket_public_access_block` resources, respectively.
+
+This code addresses the security finding by enabling default encryption on the S3 bucket using KMS, which provides key control and auditing capabilities. It also applies the recommended "least privilege" and "defense in depth" principles by configuring the bucket ownership and public access settings.
