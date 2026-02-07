@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Get the existing S3 bucket resource
 data "aws_s3_bucket" "aws_cloudtrail_logs" {
@@ -30,7 +33,7 @@ resource "aws_kms_key" "aws_cloudtrail_logs_key" {
   enable_key_rotation     = true
 }
 
-# Attach a bucket policy to the S3 bucket to enforce KMS encryption
+# Attach a bucket policy to enforce KMS encryption
 resource "aws_s3_bucket_policy" "aws_cloudtrail_logs" {
   bucket = data.aws_s3_bucket.aws_cloudtrail_logs.id
   policy = <<POLICY
@@ -54,10 +57,10 @@ POLICY
 }
 
 
-The provided Terraform code does the following:
+This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
 2. Retrieves the existing S3 bucket resource using the `aws_s3_bucket` data source.
-3. Enables default server-side encryption with a customer-managed KMS key on the S3 bucket.
+3. Enables default server-side encryption with a customer-managed KMS key for the S3 bucket.
 4. Creates a customer-managed KMS key for the S3 bucket.
 5. Attaches a bucket policy to the S3 bucket to enforce KMS encryption for all objects uploaded to the bucket.
