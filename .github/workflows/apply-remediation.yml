@@ -1,0 +1,69 @@
+name: Apply Remediation
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - 'remediation/*.tf'
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Create Terraform backend config
+        working-directory: remediation
+        run: |
+          cat > backend.tf << 'EOF'
+          terraform {
+            backend "local" {
+              path = "terraform.tfstate"
+            }
+          }
+
+          provider "aws" {
+            region = "ap-northeast-2"
+          }
+          EOF
+
+      - name: Terraform Init
+        working-directory: remediation
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: remediation
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: remediation
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: remediation
+        run: terraform apply -auto-approve tfplan
+
+      - name: Trigger Prowler Re-scan
+        run: |
+          gh workflow run prowler-security-scan.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
