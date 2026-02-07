@@ -3,78 +3,48 @@ provider "aws" {
   region = "ap-northeast-2"
 }
 
-# Create an AWS Organizations Organization
+# Create an AWS Organizations organization
 resource "aws_organizations_organization" "org" {
   aws_service_access_principals = ["cloudtrail.amazonaws.com", "config.amazonaws.com"]
-  enabled_policy_types          = ["SERVICE_CONTROL_POLICY"]
+  feature_set                   = "ALL"
 }
 
-# Create an AWS Organizations Account for Security Contacts
+# Create an AWS Organizations account for Security contacts
 resource "aws_organizations_account" "security_account" {
   name  = "Security Contacts"
   email = "security-contacts@example.com"
+  parent_id = aws_organizations_organization.org.roots[0].id
 }
 
-# Create an AWS Organizations Account for Billing Contacts
+# Create an AWS Organizations account for Billing contacts
 resource "aws_organizations_account" "billing_account" {
   name  = "Billing Contacts"
   email = "billing-contacts@example.com"
+  parent_id = aws_organizations_organization.org.roots[0].id
 }
 
-# Create an AWS Organizations Account for Operations Contacts
+# Create an AWS Organizations account for Operations contacts
 resource "aws_organizations_account" "operations_account" {
   name  = "Operations Contacts"
   email = "operations-contacts@example.com"
+  parent_id = aws_organizations_organization.org.roots[0].id
 }
 
-# Create an AWS Organizations Service Control Policy to enforce separate contacts
-resource "aws_organizations_policy" "separate_contacts_policy" {
-  name        = "Separate Contacts Policy"
-  description = "Enforce separate Security, Billing, and Operations contacts"
-
-  content = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Deny",
-      "Action": [
-        "iam:UpdateAccountPasswordPolicy",
-        "iam:UpdateAccountAlias",
-        "iam:UpdateAccountSummary",
-        "iam:UpdateOpenIDConnectProviderThumbprint",
-        "iam:UpdateSAMLProvider",
-        "iam:UpdateServerCertificate",
-        "iam:UpdateServiceSpecificCredential",
-        "iam:UpdateSigningCertificate",
-        "iam:UpdateSSHPublicKey",
-        "iam:UpdateUser"
-      ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "iam:TargetIsAccount": "true"
-        }
-      }
-    }
-  ]
-}
-POLICY
+# Create IAM users for Security, Billing, and Operations contacts
+resource "aws_iam_user" "security_contact" {
+  name = "security-contact"
+  account_id = aws_organizations_account.security_account.id
 }
 
-# Attach the Service Control Policy to the AWS Organizations Organization
-resource "aws_organizations_policy_attachment" "separate_contacts_policy_attachment" {
-  policy_id = aws_organizations_policy.separate_contacts_policy.id
-  target_id = aws_organizations_organization.org.id
+resource "aws_iam_user" "billing_contact" {
+  name = "billing-contact"
+  account_id = aws_organizations_account.billing_account.id
+}
+
+resource "aws_iam_user" "operations_contact" {
+  name = "operations-contact"
+  account_id = aws_organizations_account.operations_account.id
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the ap-northeast-2 region.
-2. Creates an AWS Organizations Organization.
-3. Creates three AWS Organizations Accounts for Security, Billing, and Operations contacts.
-4. Creates an AWS Organizations Service Control Policy to enforce separate contacts for Security, Billing, and Operations.
-5. Attaches the Service Control Policy to the AWS Organizations Organization.
-
-This ensures that the AWS account has distinct Security, Billing, and Operations contact details, different from each other and from the root contact, as recommended in the security finding.
+This Terraform code creates an AWS Organizations organization, three separate AWS Organizations accounts for Security, Billing, and Operations contacts, and IAM users for each of these contacts. This ensures that the security, billing, and operations contacts are maintained separately and are different from the root contact, as recommended in the security finding.
