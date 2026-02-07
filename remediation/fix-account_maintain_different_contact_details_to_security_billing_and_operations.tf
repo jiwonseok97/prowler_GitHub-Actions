@@ -6,7 +6,7 @@ provider "aws" {
 # Create an AWS Organizations organization
 resource "aws_organizations_organization" "org" {
   aws_service_access_principals = ["cloudtrail.amazonaws.com", "config.amazonaws.com"]
-  feature_set                   = "ALL"
+  enabled_policy_types         = ["SERVICE_CONTROL_POLICY"]
 }
 
 # Create an AWS Organizations account for Security contacts
@@ -30,21 +30,30 @@ resource "aws_organizations_account" "operations_account" {
   parent_id = aws_organizations_organization.org.roots[0].id
 }
 
-# Create IAM users for Security, Billing, and Operations contacts
-resource "aws_iam_user" "security_contact" {
-  name = "security-contact"
+# Create an AWS IAM user for the Security contacts
+resource "aws_iam_user" "security_user" {
+  name = "security-contacts"
   account_id = aws_organizations_account.security_account.id
 }
 
-resource "aws_iam_user" "billing_contact" {
-  name = "billing-contact"
+# Create an AWS IAM user for the Billing contacts
+resource "aws_iam_user" "billing_user" {
+  name = "billing-contacts"
   account_id = aws_organizations_account.billing_account.id
 }
 
-resource "aws_iam_user" "operations_contact" {
-  name = "operations-contact"
+# Create an AWS IAM user for the Operations contacts
+resource "aws_iam_user" "operations_user" {
+  name = "operations-contacts"
   account_id = aws_organizations_account.operations_account.id
 }
 
 
-This Terraform code creates an AWS Organizations organization, three separate AWS Organizations accounts for Security, Billing, and Operations contacts, and IAM users for each of these contacts. This ensures that the security, billing, and operations contacts are maintained separately and are different from the root contact, as recommended in the security finding.
+The provided Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates an AWS Organizations organization with the necessary service access principals and enabled policy types.
+3. Creates three separate AWS Organizations accounts for Security, Billing, and Operations contacts, respectively.
+4. Creates three AWS IAM users, one for each of the Security, Billing, and Operations contacts, and associates them with the corresponding AWS Organizations accounts.
+
+This setup ensures that the Security, Billing, and Operations contact details are maintained separately, as recommended in the security finding.
