@@ -3,12 +3,12 @@ provider "aws" {
   region = "ap-northeast-2"
 }
 
-# Reference the existing CloudWatch log group
+# Data source to reference the existing CloudWatch log group
 data "aws_cloudwatch_log_group" "eks_cluster_log_group" {
   name = "/aws/eks/0202_test/cluster"
 }
 
-# Apply a data protection policy to the CloudWatch log group
+# Resource to apply a data protection policy to the CloudWatch log group
 resource "aws_cloudwatch_log_group_policy" "eks_cluster_log_group_policy" {
   log_group_name = data.aws_cloudwatch_log_group.eks_cluster_log_group.name
 
@@ -51,9 +51,7 @@ POLICY
 This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. References the existing CloudWatch log group using the `data` source `aws_cloudwatch_log_group`.
+2. Retrieves the existing CloudWatch log group using the `aws_cloudwatch_log_group` data source.
 3. Applies a data protection policy to the CloudWatch log group using the `aws_cloudwatch_log_group_policy` resource.
-   - The policy allows the following actions: `logs:Describe*`, `logs:Get*`, `logs:List*`, `logs:StartQuery`, `logs:StopQuery`, `logs:TestMetricFilter`, `logs:FilterLogEvents`.
-   - The policy denies the `logs:Unmask` action, which helps prevent the exposure of sensitive data in the log events.
-
-This Terraform code addresses the security finding by applying a data protection policy to the CloudWatch log group, which helps prevent the logging of sensitive data and restricts access to the log data.
+   - The policy allows certain actions (Describe, Get, List, StartQuery, StopQuery, TestMetricFilter, FilterLogEvents) for all principals.
+   - The policy denies the `logs:Unmask` action for all principals, which helps prevent the exposure of sensitive information in the log events.

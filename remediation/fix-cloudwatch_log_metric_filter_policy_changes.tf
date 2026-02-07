@@ -11,7 +11,7 @@ resource "aws_cloudwatch_log_metric_filter" "iam_policy_changes" {
 
   metric_transformation {
     name      = "IAMPolicyChanges"
-    namespace = "SecurityMetrics"
+    namespace = "MyApp/SecurityLogs"
     value     = "1"
   }
 }
@@ -22,17 +22,17 @@ resource "aws_cloudwatch_metric_alarm" "iam_policy_changes_alarm" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   metric_name         = "IAMPolicyChanges"
-  namespace           = "SecurityMetrics"
+  namespace           = "MyApp/SecurityLogs"
   period              = "60"
   statistic           = "Sum"
   threshold           = "1"
-  alarm_description   = "Alarm when there are IAM policy changes"
-  alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:security-alerts"]
+  alarm_description   = "Alarm when an IAM policy is created, updated, deleted, or a policy is attached/detached"
+  alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:my-security-topic"]
 }
 
 
 This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a CloudWatch Logs metric filter for IAM policy create, delete, update, attach, and detach events.
-3. Creates a CloudWatch alarm that triggers when there is at least one IAM policy change event, and sends an alert to the `security-alerts` SNS topic.
+2. Creates a CloudWatch Logs metric filter for IAM policy changes, including create, delete, update, attach, and detach events.
+3. Creates a CloudWatch alarm that triggers when the IAM policy changes metric filter detects any events, and sends an alert to the `my-security-topic` SNS topic.

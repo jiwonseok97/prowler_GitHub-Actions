@@ -33,7 +33,7 @@ resource "aws_cloudwatch_metric_alarm" "cloudtrail_configuration_changes_alarm" 
 
 This Terraform code does the following:
 
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a CloudWatch Logs metric filter for CloudTrail configuration changes, including events such as `CreateTrail`, `UpdateTrail`, `DeleteTrail`, `StartLogging`, and `StopLogging`.
-3. Creates a CloudWatch alarm that triggers when the CloudTrail configuration changes metric filter detects at least one event.
-4. The alarm action is set to an SNS topic, which you should replace with the ARN of your own SNS topic.
+1. Configures the AWS provider for the ap-northeast-2 region.
+2. Creates a CloudWatch Logs metric filter for CloudTrail configuration changes, including events such as CreateTrail, UpdateTrail, DeleteTrail, StartLogging, and StopLogging.
+3. Creates a CloudWatch alarm for the CloudTrail configuration changes metric filter, which will trigger an alarm when the metric value is greater than or equal to 1 (i.e., when a configuration change occurs).
+4. The alarm action is set to an SNS topic, which can be used to notify the appropriate response channels.
