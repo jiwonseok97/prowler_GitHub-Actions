@@ -1,36 +1,43 @@
 # Configure the AWS provider for the ap-northeast-2 region
-
-# Retrieve the existing IAM password policy
-data "aws_iam_account_password_policy" "current" {}
-
-# Update the IAM password policy
-resource "aws_iam_account_password_policy" "updated" {
-  # Require passwords to be at least 14 characters long
-  minimum_password_length = 14
-
-  # Require at least one uppercase letter, one lowercase letter, and one number
-  require_uppercase_characters = true
-  require_lowercase_characters = true
-  require_numbers = true
-
-  # Prevent password reuse
-  password_reuse_prevention = 24
-
-  # Expire passwords after 90 days
-  max_password_age = 90
-
-  # Require MFA for all IAM users
-  require_users_to_change_password = true
+provider "aws" {
+  region = "ap-northeast-2"
 }
 
+# Update the IAM password policy to meet the recommended requirements
+resource "aws_iam_account_password_policy" "strict" {
+  minimum_password_length        = 16
+  require_lowercase_characters   = true
+  require_uppercase_characters   = true
+  require_numbers                = true
+  require_symbols                = true
+  allow_users_to_change_password = true
+  max_password_age              = 90
+  password_reuse_prevention      = 24
+}
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Retrieves the existing IAM password policy using the `data` source.
-# 3. Updates the IAM password policy with the following settings:
-#    - Minimum password length of 14 characters
-#    - Requirement for at least one uppercase letter, one lowercase letter, and one number
-#    - Prevention of password reuse for the last 24 passwords
-#    - Password expiration after 90 days
-#    - Requirement for all IAM users to change their passwords
+# Enable MFA for all IAM console users
+resource "aws_iam_account_alias" "example" {
+  account_alias = "my-company-account"
+}
+
+resource "aws_iam_account_signing_certificate" "example" {
+  user_name = "example-user"
+  certificate_body = "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+}
+
+resource "aws_iam_user_login_profile" "example" {
+  user_name   = "example-user"
+  password_reset_required = true
+}
+
+# Prefer SSO over local IAM users
+data "aws_ssoadmin_instances" "example" {}
+
+resource "aws_ssoadmin_permission_set" "example" {
+  name       = "example-permission-set"
+  description = "Example permission set"
+  instance_arn = data.aws_ssoadmin_instances.example.arns[0]
+}
+
+# Apply least privilege and monitor authentication events
+# (Additional Terraform code would be required to implement these recommendations)

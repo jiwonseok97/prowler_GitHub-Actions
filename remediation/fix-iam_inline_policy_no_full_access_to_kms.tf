@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Get the existing IAM user
 data "aws_iam_user" "github_actions_prowler" {
@@ -39,9 +42,9 @@ resource "aws_iam_user_policy_attachment" "github_actions_prowler_kms_least_priv
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Retrieves the existing IAM user named `github-actions-prowler` using a data source.
-# 3. Creates a new IAM policy named `kms-least-privilege` with the recommended least-privilege permissions for KMS operations.
-# 4. Attaches the new IAM policy to the existing IAM user `github-actions-prowler`.
+This Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Retrieves the existing IAM user `github-actions-prowler` using a data source.
+3. Creates a new IAM policy named `kms-least-privilege` with the recommended least-privilege permissions for KMS, including `kms:Encrypt`, `kms:Decrypt`, `kms:ReEncrypt*`, `kms:GenerateDataKey*`, and `kms:DescribeKey` actions, limited to the specific KMS key ARN.
+4. Attaches the new IAM policy to the existing IAM user `github-actions-prowler`.
