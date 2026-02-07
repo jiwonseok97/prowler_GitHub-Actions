@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a CloudWatch Logs metric filter for AWS Organizations changes
 resource "aws_cloudwatch_log_metric_filter" "organizations_changes" {
@@ -8,7 +11,7 @@ resource "aws_cloudwatch_log_metric_filter" "organizations_changes" {
 
   metric_transformation {
     name      = "OrganizationsChanges"
-    namespace = "MyApp/Metrics"
+    namespace = "MyApp/Audit"
     value     = "1"
   }
 }
@@ -19,7 +22,7 @@ resource "aws_cloudwatch_metric_alarm" "organizations_changes_alarm" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   metric_name         = "OrganizationsChanges"
-  namespace           = "MyApp/Metrics"
+  namespace           = "MyApp/Audit"
   period              = "60"
   statistic           = "Sum"
   threshold           = "1"
@@ -32,4 +35,4 @@ The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
 2. Creates a CloudWatch Logs metric filter for AWS Organizations changes. The filter looks for events where the `eventSource` is `organizations.amazonaws.com`.
-3. Creates a CloudWatch alarm that triggers when the "OrganizationsChanges" metric is greater than or equal to 1. This alarm will send notifications to the specified SNS topic.
+3. Creates a CloudWatch alarm that triggers when the `OrganizationsChanges` metric is greater than or equal to 1. This alarm will send notifications to the `my-alert-topic` SNS topic.

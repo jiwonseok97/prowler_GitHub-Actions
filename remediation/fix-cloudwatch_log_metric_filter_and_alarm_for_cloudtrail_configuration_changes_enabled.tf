@@ -1,8 +1,11 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a CloudWatch Logs metric filter for CloudTrail configuration changes
 resource "aws_cloudwatch_log_metric_filter" "cloudtrail_configuration_changes" {
-  name           = "cloudtrail-configuration-changes"
+  name           = "CloudTrailConfigurationChanges"
   pattern        = "{$.eventName = CreateTrail} || {$.eventName = UpdateTrail} || {$.eventName = DeleteTrail} || {$.eventName = StartLogging} || {$.eventName = StopLogging}"
   log_group_name = "arn:aws:logs:ap-northeast-2:132410971304:log-group"
 
@@ -15,7 +18,7 @@ resource "aws_cloudwatch_log_metric_filter" "cloudtrail_configuration_changes" {
 
 # Create a CloudWatch alarm for the CloudTrail configuration changes metric filter
 resource "aws_cloudwatch_metric_alarm" "cloudtrail_configuration_changes_alarm" {
-  alarm_name          = "cloudtrail-configuration-changes-alarm"
+  alarm_name          = "CloudTrailConfigurationChangesAlarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_total_periods = 1
   metric_name         = "CloudTrailConfigurationChanges"
@@ -28,9 +31,4 @@ resource "aws_cloudwatch_metric_alarm" "cloudtrail_configuration_changes_alarm" 
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Creates a CloudWatch Logs metric filter for CloudTrail configuration changes, including events such as `CreateTrail`, `UpdateTrail`, `DeleteTrail`, `StartLogging`, and `StopLogging`.
-# 3. Creates a CloudWatch alarm that triggers when the CloudTrail configuration changes metric filter detects at least one event.
-# 4. The alarm action is set to an SNS topic, which you should replace with the ARN of your own SNS topic.
+This Terraform code creates a CloudWatch Logs metric filter and a CloudWatch alarm to monitor for CloudTrail configuration changes. The metric filter looks for specific event names in the CloudTrail logs, and the alarm is triggered when the metric value is greater than or equal to 1, indicating that a CloudTrail configuration change has occurred. The alarm action is set to an SNS topic, which can be used to notify the appropriate response channels.
