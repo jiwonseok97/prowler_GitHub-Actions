@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create an AWS Backup plan to protect the EBS volume
 resource "aws_backup_plan" "ebs_backup_plan" {
@@ -23,6 +26,10 @@ resource "aws_backup_plan" "ebs_backup_plan" {
 # Create an AWS Backup vault to store the backups
 resource "aws_backup_vault" "ebs_backup_vault" {
   name = "ebs-backup-vault"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Assign the EBS volume to the backup plan
@@ -33,4 +40,4 @@ resource "aws_backup_selection" "ebs_backup_selection" {
 }
 
 
-# This Terraform code creates an AWS Backup plan and vault to protect the specified EBS volume. The backup plan is configured to run a weekly backup on Mondays at 5 AM, with a 60-minute start window and a 360-minute completion window. The backups are stored in the "ebs-backup-vault" and the EBS volume is assigned to the backup plan.
+This Terraform code creates an AWS Backup plan and vault to protect the specified EBS volume. The backup plan is configured to run a weekly backup on Mondays at 5 AM, with a 60-minute start window and a 360-minute completion window. The backups are stored in the `ebs-backup-vault`, which is set to prevent accidental deletion. Finally, the EBS volume is assigned to the backup plan.
