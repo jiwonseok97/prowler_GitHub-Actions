@@ -1,6 +1,9 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
-# Data source to reference the existing network ACL
+# Get the existing network ACL
 data "aws_network_acl" "existing_nacl" {
   network_acl_id = "acl-0d23e762ebdfb131c"
 }
@@ -18,10 +21,10 @@ resource "aws_network_acl_rule" "deny_rdp_ingress" {
 }
 
 
-The provided Terraform code does the following:
+This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Uses a `data` source to reference the existing network ACL with the ID `acl-0d23e762ebdfb131c`.
-3. Creates a new network ACL rule to deny ingress TCP traffic on port 3389 (RDP) from the `0.0.0.0/0` CIDR block (the entire internet).
+2. Retrieves the existing network ACL using the `data` source `aws_network_acl`.
+3. Creates a new network ACL rule using the `aws_network_acl_rule` resource to deny ingress TCP traffic on port 3389 (RDP) from the `0.0.0.0/0` CIDR block.
 
-This should address the security finding by restricting access to TCP port 3389 (RDP) from the internet, as recommended in the finding.
+This will enforce the recommendation to not allow `TCP 3389` from `0.0.0.0/0` in the network ACL, restricting RDP access to the specified resource.
