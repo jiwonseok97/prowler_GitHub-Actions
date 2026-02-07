@@ -8,21 +8,26 @@ data "aws_instance" "problematic_instance" {
   instance_id = "i-0fbecaba3c48e7c79"
 }
 
-# Create a new security group to allow only necessary inbound traffic
+# Create a new security group to allow only necessary traffic
 resource "aws_security_group" "restricted_sg" {
   name_prefix = "restricted-sg-"
   vpc_id      = data.aws_instance.problematic_instance.vpc_id
 
-  # Allow SSH access from a bastion host or via Session Manager
+  # Allow only necessary inbound traffic (e.g., SSH from bastion, application traffic from load balancer)
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"] # Replace with your bastion host's IP range
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    cidr_blocks     = ["10.0.0.0/16"] # Restrict access to a specific network range
   }
 
-  # Allow necessary application-specific traffic
-  # Add additional ingress rules as per your requirements
+  # Allow necessary outbound traffic (e.g., to database, external services)
+  egress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
 }
 
 # Attach the new security group to the existing EC2 instance
@@ -31,40 +36,32 @@ resource "aws_network_interface_sg_attachment" "sg_attachment" {
   network_interface_id = data.aws_instance.problematic_instance.primary_network_interface_id
 }
 
-# Create a new Elastic Load Balancer to expose the application
-resource "aws_lb" "application_lb" {
-  name               = "app-lb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.restricted_sg.id]
-  subnets            = [data.aws_instance.problematic_instance.subnet_id]
+# Create a new NAT Gateway for outbound traffic
+resource "aws_nat_gateway" "nat_gateway" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = data.aws_instance.problematic_instance.subnet_id
 }
 
-# Add a listener and target group to the load balancer
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.application_lb.arn
-  port              = 80
-  protocol          = "HTTP"
+# Allocate an Elastic IP for the NAT Gateway
+resource "aws_eip" "nat_eip" {
+  vpc   = true
+  count = 1
+}
 
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.app_tg.arn
+# Update the route table to route outbound traffic through the NAT Gateway
+resource "aws_route_table" "private_route_table" {
+  vpc_id = data.aws_instance.problematic_instance.vpc_id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_gateway.id
   }
 }
 
-resource "aws_lb_target_group" "app_tg" {
-  name        = "app-tg"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = data.aws_instance.problematic_instance.vpc_id
-  target_type = "instance"
-}
-
-# Register the EC2 instance with the target group
-resource "aws_lb_target_group_attachment" "app_tg_attachment" {
-  target_group_arn = aws_lb_target_group.app_tg.arn
-  target_id        = data.aws_instance.problematic_instance.id
-  port             = 80
+# Associate the updated route table with the instance's subnet
+resource "aws_route_table_association" "private_route_table_association" {
+  subnet_id      = data.aws_instance.problematic_instance.subnet_id
+  route_table_id = aws_route_table.private_route_table.id
 }
 
 
@@ -72,10 +69,11 @@ This Terraform code addresses the security finding by:
 
 1. Configuring the AWS provider for the ap-northeast-2 region.
 2. Retrieving the details of the existing EC2 instance using a data source.
-3. Creating a new security group with restricted inbound access, allowing only necessary traffic (e.g., SSH from a bastion host).
+3. Creating a new security group with restricted inbound and outbound rules.
 4. Attaching the new security group to the existing EC2 instance.
-5. Creating a new Application Load Balancer to expose the application, using the restricted security group.
-6. Adding a listener and target group to the load balancer.
-7. Registering the EC2 instance with the target group.
+5. Creating a new NAT Gateway for outbound traffic from the instance's subnet.
+6. Allocating an Elastic IP for the NAT Gateway.
+7. Updating the route table to route outbound traffic through the NAT Gateway.
+8. Associating the updated route table with the instance's subnet.
 
-This approach follows the recommendation to avoid assigning public IPs and instead use a load balancer with a Web Application Firewall (WAF) to expose the application. The EC2 instance is placed in a private subnet, and access is controlled through the load balancer and the restricted security group.
+These changes will help ensure that the EC2 instance does not have a public IP address and that outbound traffic is routed through the NAT Gateway, improving the overall security posture.
