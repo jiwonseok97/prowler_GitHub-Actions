@@ -35,4 +35,4 @@ This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
 2. Uses a `data` source to get a list of all IAM users, groups, and roles that have the `AWSCloudShellFullAccess` policy attached.
-3. Creates three `aws_iam_policy_attachment` resources to detach the `AWSCloudShellFullAccess` policy from the identified IAM users, groups, and roles, respectively.
+3. Creates three `aws_iam_policy_attachment` resources to detach the `AWSCloudShellFullAccess` policy from the identified IAM identities (users, groups, and roles).
