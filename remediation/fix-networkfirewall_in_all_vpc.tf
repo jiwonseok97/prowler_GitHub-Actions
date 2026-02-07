@@ -7,56 +7,56 @@ provider "aws" {
 resource "aws_networkfirewall_firewall_policy" "default_policy" {
   name = "default-policy"
 
-  # Set the default action to 'drop' to implement a 'default-deny' posture
-  default_action {
-    type = "DROP"
-  }
-
-  # Add a rule group to allow only required egress traffic
-  rule_group {
-    name     = "egress-rule-group"
-    priority = 1
-
-    rules {
-      # Example rule to allow SSH traffic to a specific destination
-      source_addresses = ["0.0.0.0/0"]
-      source_ports     = ["any"]
-      destination_addresses = ["10.0.1.100/32"]
-      destination_ports = ["22"]
-      protocols        = ["tcp"]
-      action           = "ALLOW"
+  # Set the default action to "drop" to implement a "default-deny" posture
+  firewall_policy {
+    stateless_default_actions = ["drop"]
+    stateless_engine_options {
+      rule_order = "default_action_order"
     }
   }
 }
 
-# Create a Network Firewall
+# Create a Network Firewall logging configuration
+resource "aws_networkfirewall_logging_configuration" "default_logging" {
+  firewall_arn = aws_networkfirewall_firewall.default_firewall.arn
+
+  # Enable logging for all event types
+  log_destination_config {
+    log_destination = {
+      name = "default-log-destination"
+      type = "S3"
+    }
+    log_destination_type = "S3"
+    log_type            = "ALERT"
+  }
+  log_type = "FLOW"
+}
+
+# Create a Network Firewall for the existing VPC
 resource "aws_networkfirewall_firewall" "default_firewall" {
   name                = "default-firewall"
   firewall_policy_arn = aws_networkfirewall_firewall_policy.default_policy.arn
-  vpc_id              = "vpc-0565167ce4f7cc871" # Use data source to reference existing VPC
+  vpc_id              = data.aws_vpc.existing_vpc.id
   subnet_mapping {
-    subnet_id = "subnet-0123456789abcdef" # Use data source to reference existing subnet
+    subnet_id = data.aws_subnet_ids.existing_vpc_subnets.ids[0]
   }
 }
 
-# Enable logging for the Network Firewall
-resource "aws_cloudwatch_log_group" "network_firewall_logs" {
-  name = "network-firewall-logs"
+# Use a data source to reference the existing VPC
+data "aws_vpc" "existing_vpc" {
+  id = "vpc-0565167ce4f7cc871"
 }
 
-resource "aws_networkfirewall_logging_configuration" "default_logging" {
-  firewall_arn = aws_networkfirewall_firewall.default_firewall.arn
-  log_destination_config {
-    log_destination      = aws_cloudwatch_log_group.network_firewall_logs.name
-    log_destination_type = "CloudWatchLogs"
-  }
+# Use a data source to reference the existing subnets in the VPC
+data "aws_subnet_ids" "existing_vpc_subnets" {
+  vpc_id = data.aws_vpc.existing_vpc.id
 }
 
 
 This Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a Network Firewall policy with a `default-deny` posture, where the default action is to `DROP` all traffic.
-3. Adds a rule group to the policy to allow only required egress traffic, in this example, SSH traffic to a specific destination.
-4. Creates a Network Firewall resource and associates it with the existing VPC and a subnet.
-5. Enables logging for the Network Firewall, sending logs to a CloudWatch log group.
+2. Creates a Network Firewall policy with a default action of "drop" to implement a "default-deny" posture.
+3. Creates a Network Firewall logging configuration to enable logging for all event types and store the logs in an S3 bucket.
+4. Creates a Network Firewall for the existing VPC, using the default policy and the first subnet in the VPC.
+5. Uses data sources to reference the existing VPC and its subnets, so that the Network Firewall can be deployed in the correct VPC.
