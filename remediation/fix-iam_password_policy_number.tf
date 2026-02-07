@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Use the aws_iam_account_password_policy data source to get the current password policy
 data "aws_iam_account_password_policy" "current" {}
