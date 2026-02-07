@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a CloudWatch log metric filter for console logins without MFA
 resource "aws_cloudwatch_log_metric_filter" "console_login_without_mfa" {
@@ -28,9 +31,9 @@ resource "aws_cloudwatch_metric_alarm" "console_login_without_mfa_alarm" {
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the ap-northeast-2 region.
-# 2. Creates a CloudWatch log metric filter that captures console logins where the `MFAUsed` field is not "Yes".
-# 3. Creates a CloudWatch alarm that triggers when the "ConsoleLoginsWithoutMFA" metric is greater than or equal to 1, indicating a console login without MFA.
-# 4. The alarm is configured to send notifications to the "arn:aws:sns:ap-northeast-2:132410971304:my-security-alerts" SNS topic.
+This Terraform code does the following:
+
+1. Configures the AWS provider for the ap-northeast-2 region.
+2. Creates a CloudWatch log metric filter that captures console logins where the `MFAUsed` field is not "Yes".
+3. Creates a CloudWatch alarm that triggers when the "ConsoleLoginsWithoutMFA" metric is greater than or equal to 1, indicating a console login without MFA.
+4. The alarm is configured to send notifications to the "arn:aws:sns:ap-northeast-2:132410971304:my-security-alerts" SNS topic.

@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a CloudWatch Logs metric filter for changes to network gateways
 resource "aws_cloudwatch_log_metric_filter" "network_gateway_changes" {
@@ -28,8 +31,8 @@ resource "aws_cloudwatch_metric_alarm" "network_gateway_changes_alarm" {
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the ap-northeast-2 region.
-# 2. Creates a CloudWatch Logs metric filter that captures various events related to changes in network gateways, such as creating, deleting, attaching, and detaching network interfaces.
-# 3. Creates a CloudWatch alarm that triggers when the "NetworkGatewayChanges" metric filter detects any changes to network gateways. The alarm is configured to send notifications to an SNS topic (replace `"arn:aws:sns:ap-northeast-2:132410971304:your-sns-topic-arn"` with the actual ARN of your SNS topic).
+This Terraform code does the following:
+
+1. Configures the AWS provider for the ap-northeast-2 region.
+2. Creates a CloudWatch Logs metric filter that captures various events related to network gateway changes, such as creating, deleting, attaching, and detaching network interfaces.
+3. Creates a CloudWatch alarm that triggers when the "NetworkGatewayChanges" metric has a value greater than or equal to 1, indicating that a network gateway change has occurred. The alarm is configured to send notifications to an SNS topic (replace `"arn:aws:sns:ap-northeast-2:132410971304:your-sns-topic-arn"` with the actual ARN of your SNS topic).

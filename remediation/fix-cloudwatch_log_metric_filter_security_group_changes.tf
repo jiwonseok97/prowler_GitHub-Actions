@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a CloudWatch Logs metric filter for security group changes
 resource "aws_cloudwatch_log_metric_filter" "security_group_changes" {
@@ -8,7 +11,7 @@ resource "aws_cloudwatch_log_metric_filter" "security_group_changes" {
 
   metric_transformation {
     name      = "SecurityGroupChanges"
-    namespace = "MyApplication"
+    namespace = "SecurityChanges"
     value     = "1"
   }
 }
@@ -19,19 +22,19 @@ resource "aws_cloudwatch_metric_alarm" "security_group_changes_alarm" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   metric_name         = "SecurityGroupChanges"
-  namespace           = "MyApplication"
+  namespace           = "SecurityChanges"
   period              = "60"
   statistic           = "Sum"
   threshold           = "1"
   alarm_description   = "Alarm when there are changes to security groups"
-  alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:your-sns-topic-arn"]
+  alarm_actions       = ["arn:aws:sns:ap-northeast-2:YOUR_ACCOUNT_ID:YOUR_SNS_TOPIC_NAME"]
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Creates a CloudWatch Logs metric filter for security group changes, using the provided pattern to match relevant events from CloudTrail logs.
-# 3. Creates a CloudWatch alarm that triggers when the "SecurityGroupChanges" metric, as defined in the metric filter, is greater than or equal to 1. This will send an alert to the specified SNR topic.
-# 
-# Note: You will need to replace `YOUR_CLOUDTRAIL_LOG_GROUP_NAME` with the name of your CloudTrail log group, and `your-sns-topic-arn` with the ARN of the SNS topic you want to use for notifications.
+This Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates a CloudWatch Logs metric filter for security group changes, which monitors the CloudTrail logs for specific security group-related events.
+3. Creates a CloudWatch alarm that triggers when the security group changes metric filter detects any changes, and sends an alert to the specified SNS topic.
+
+Note: You will need to replace `YOUR_CLOUDTRAIL_LOG_GROUP_NAME` with the name of your CloudTrail log group, and `YOUR_ACCOUNT_ID` and `YOUR_SNS_TOPIC_NAME` with the appropriate values for your AWS environment.
