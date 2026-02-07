@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create an IAM password policy to enforce password expiration within 90 days
 resource "aws_iam_account_password_policy" "strict" {
@@ -16,14 +19,11 @@ resource "aws_iam_account_password_policy" "strict" {
 The Terraform code above does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates an `aws_iam_account_password_policy` resource to enforce the following password policy:
+2. Creates an `aws_iam_account_password_policy` resource to enforce a strict password policy:
    - Minimum password length of 14 characters
-   - Requires at least one lowercase character
-   - Requires at least one number
-   - Requires at least one uppercase character
-   - Requires at least one symbol
+   - Requires at least one lowercase character, one uppercase character, one number, and one symbol
    - Allows users to change their own passwords
    - Enforces password expiration within 90 days
    - Prevents password reuse for the last 24 passwords
 
-This should address the security finding by ensuring that IAM account passwords are rotated at least every 90 days and cannot be reused.
+This should address the security finding by ensuring that IAM account passwords are rotated at least every 90 days and cannot be reused, helping to reduce the risk of unauthorized access.
