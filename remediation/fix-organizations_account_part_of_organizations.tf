@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Retrieve the existing AWS Organization
 data "aws_organizations_organization" "org" {}
@@ -17,9 +20,9 @@ resource "aws_organizations_organizational_unit" "example_ou" {
 
 # Apply a Service Control Policy (SCP) to the OU for least privilege
 resource "aws_organizations_policy" "example_scp" {
-  name = "Example SCP"
-  description = "Enforce least privilege access"
-  content = <<POLICY
+  name        = "Example SCP"
+  description = "Enforces least privilege access"
+  content     = <<POLICY
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -39,11 +42,11 @@ resource "aws_organizations_policy_attachment" "example_scp_attachment" {
 }
 
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Retrieves the existing AWS Organization using the `aws_organizations_organization` data source.
-# 3. Ensures the AWS account is a member of the AWS Organization using the `aws_organizations_account` resource.
-# 4. Creates an Organizational Unit (OU) named "Example OU" under the root of the AWS Organization.
-# 5. Creates a Service Control Policy (SCP) named "Example SCP" that denies all actions on all resources.
-# 6. Attaches the "Example SCP" to the "Example OU" using the `aws_organizations_policy_attachment` resource.
+This Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Retrieves the existing AWS Organization using the `aws_organizations_organization` data source.
+3. Ensures the AWS account is a member of the AWS Organization using the `aws_organizations_account` resource.
+4. Creates an Organizational Unit (OU) named "Example OU" under the root of the AWS Organization.
+5. Creates a Service Control Policy (SCP) that denies all actions on all resources, enforcing least privilege access.
+6. Attaches the SCP to the "Example OU" using the `aws_organizations_policy_attachment` resource.
