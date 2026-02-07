@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Use a data source to get the existing IAM user
 data "aws_iam_user" "prowler" {

@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing CloudTrail trail
 data "aws_cloudtrail" "security_cloudtrail" {
@@ -21,10 +18,10 @@ resource "aws_cloudtrail" "security_cloudtrail" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing CloudTrail trail named `security-cloudtail` using the `data` source.
-3. Updates the CloudTrail trail resource to enable log file validation by setting the `log_file_validation_enabled` attribute to `true`.
-
-The code uses the `data` source to reference the existing CloudTrail trail and its associated attributes, such as the S3 bucket name, key prefix, and other configuration settings. This ensures that the updated CloudTrail trail maintains the same configuration as the existing one, except for the log file validation setting.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Retrieves the existing CloudTrail trail named `security-cloudtail` using the `data` source.
+# 3. Updates the CloudTrail trail resource to enable log file validation by setting the `log_file_validation_enabled` attribute to `true`.
+# 
+# The code uses the `data` source to reference the existing CloudTrail trail and its associated attributes, such as the S3 bucket name, key prefix, and other configuration settings. This ensures that the updated CloudTrail trail maintains the same configuration as the existing one, except for the log file validation setting.

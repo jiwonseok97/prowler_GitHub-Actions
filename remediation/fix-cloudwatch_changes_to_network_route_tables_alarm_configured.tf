@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create a CloudWatch Logs metric filter to monitor VPC route table changes
 resource "aws_cloudwatch_log_metric_filter" "vpc_route_table_changes" {
@@ -31,9 +28,9 @@ resource "aws_cloudwatch_metric_alarm" "vpc_route_table_changes_alarm" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the ap-northeast-2 region.
-2. Creates a CloudWatch Logs metric filter to monitor VPC route table changes, including events such as CreateRoute, CreateRouteTable, ReplaceRoute, etc.
-3. Creates a CloudWatch alarm that triggers when the "VPCRouteTableChanges" metric exceeds the threshold of 1, indicating that a VPC route table change has occurred.
-4. The alarm action is set to an SNS topic, which can be used to notify responders of the event.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the ap-northeast-2 region.
+# 2. Creates a CloudWatch Logs metric filter to monitor VPC route table changes, including events such as CreateRoute, CreateRouteTable, ReplaceRoute, etc.
+# 3. Creates a CloudWatch alarm that triggers when the "VPCRouteTableChanges" metric exceeds the threshold of 1, indicating that a VPC route table change has occurred.
+# 4. The alarm action is set to an SNS topic, which can be used to notify responders of the event.

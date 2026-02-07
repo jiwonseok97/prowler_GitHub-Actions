@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create a new security group to replace the existing one
 resource "aws_security_group" "new_security_group" {

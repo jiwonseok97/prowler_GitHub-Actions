@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create an AWS Organizations organization
 resource "aws_organizations_organization" "org" {
@@ -47,4 +44,4 @@ resource "aws_iam_user" "operations_contact" {
 }
 
 
-This Terraform code creates an AWS Organizations organization, three separate AWS Organizations accounts for Security, Billing, and Operations contacts, and IAM users for each of these contacts. This ensures that the security, billing, and operations contacts are maintained separately and are different from the root contact, as recommended in the security finding.
+# This Terraform code creates an AWS Organizations organization, three separate AWS Organizations accounts for Security, Billing, and Operations contacts, and IAM users for each of these contacts. This ensures that the security, billing, and operations contacts are maintained separately and are different from the root contact, as recommended in the security finding.

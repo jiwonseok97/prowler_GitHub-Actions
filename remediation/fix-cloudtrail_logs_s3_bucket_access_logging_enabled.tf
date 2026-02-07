@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing CloudTrail trail
 data "aws_cloudtrail_service_account" "current" {}
@@ -55,4 +52,4 @@ The provided Terraform code does the following:
    - Setting the bucket ACL to `private`.
    - Configuring the bucket logging to write the access logs to the `cloudtrail-logs-access-logging` bucket.
 
-This Terraform code should address the security finding by enabling S3 server access logging on the CloudTrail logs bucket and writing the logs to a separate, tightly controlled bucket.
+# This Terraform code should address the security finding by enabling S3 server access logging on the CloudTrail logs bucket and writing the logs to a separate, tightly controlled bucket.

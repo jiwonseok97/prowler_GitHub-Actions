@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing CloudWatch log group
 data "aws_cloudwatch_log_group" "eks_log_group" {

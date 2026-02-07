@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get information about the existing EC2 instance
 data "aws_instance" "problematic_instance" {

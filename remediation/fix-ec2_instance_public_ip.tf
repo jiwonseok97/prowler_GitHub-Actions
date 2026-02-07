@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing EC2 instance details
 data "aws_instance" "problematic_instance" {
@@ -68,14 +65,14 @@ resource "aws_lb_target_group_attachment" "app_tg_attachment" {
 }
 
 
-This Terraform code addresses the security finding by:
-
-1. Configuring the AWS provider for the ap-northeast-2 region.
-2. Retrieving the details of the existing EC2 instance using a data source.
-3. Creating a new security group with restricted inbound access, allowing only necessary traffic (e.g., SSH from a bastion host).
-4. Attaching the new security group to the existing EC2 instance.
-5. Creating a new Application Load Balancer to expose the application, using the restricted security group.
-6. Adding a listener and target group to the load balancer.
-7. Registering the EC2 instance with the target group.
-
-This approach follows the recommendation to avoid assigning public IPs and instead use a load balancer with a Web Application Firewall (WAF) to expose the application. The EC2 instance is placed in a private subnet, and access is controlled through the load balancer and the restricted security group.
+# This Terraform code addresses the security finding by:
+# 
+# 1. Configuring the AWS provider for the ap-northeast-2 region.
+# 2. Retrieving the details of the existing EC2 instance using a data source.
+# 3. Creating a new security group with restricted inbound access, allowing only necessary traffic (e.g., SSH from a bastion host).
+# 4. Attaching the new security group to the existing EC2 instance.
+# 5. Creating a new Application Load Balancer to expose the application, using the restricted security group.
+# 6. Adding a listener and target group to the load balancer.
+# 7. Registering the EC2 instance with the target group.
+# 
+# This approach follows the recommendation to avoid assigning public IPs and instead use a load balancer with a Web Application Firewall (WAF) to expose the application. The EC2 instance is placed in a private subnet, and access is controlled through the load balancer and the restricted security group.

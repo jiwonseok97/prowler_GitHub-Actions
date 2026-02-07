@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create a CloudWatch log metric filter for S3 bucket policy changes
 resource "aws_cloudwatch_log_metric_filter" "s3_bucket_policy_changes" {
@@ -31,4 +28,4 @@ resource "aws_cloudwatch_metric_alarm" "s3_bucket_policy_changes_alarm" {
 }
 
 
-This Terraform code creates a CloudWatch log metric filter and an alarm for S3 bucket policy changes. The metric filter monitors the CloudWatch log group for the `PutBucketPolicy` event and creates a custom metric called `S3BucketPolicyChanges`. The alarm is then set to trigger when the `S3BucketPolicyChanges` metric is greater than or equal to 1, indicating that a bucket policy change has occurred. The alarm action is set to an SNS topic, which can be used to notify the appropriate security team.
+# This Terraform code creates a CloudWatch log metric filter and an alarm for S3 bucket policy changes. The metric filter monitors the CloudWatch log group for the `PutBucketPolicy` event and creates a custom metric called `S3BucketPolicyChanges`. The alarm is then set to trigger when the `S3BucketPolicyChanges` metric is greater than or equal to 1, indicating that a bucket policy change has occurred. The alarm action is set to an SNS topic, which can be used to notify the appropriate security team.

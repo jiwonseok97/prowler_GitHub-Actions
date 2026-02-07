@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Enforce MFA for the root user
 resource "aws_iam_account_password_policy" "root_password_policy" {

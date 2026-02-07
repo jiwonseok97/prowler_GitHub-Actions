@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Data source to reference the existing IAM policy
 data "aws_iam_policy" "aws_learner_dynamodb_policy" {

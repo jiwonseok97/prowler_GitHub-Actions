@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create an AWS Organizations Service Control Policy (SCP) to opt out of all AI services
 resource "aws_organizations_policy" "ai_services_opt_out" {

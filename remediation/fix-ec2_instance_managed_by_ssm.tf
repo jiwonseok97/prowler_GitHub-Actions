@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get information about the existing EC2 instance
 data "aws_instance" "instance" {
@@ -70,11 +67,11 @@ resource "aws_route_table_association" "ssm_route_table_association" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the ap-northeast-2 region.
-2. Retrieves information about the existing EC2 instance using the `data` source.
-3. Enrolls the EC2 instance as a Systems Manager managed node using the `aws_ssm_activation` resource.
-4. Creates a security group that restricts inbound admin ports and uses least privilege roles.
-5. Attaches the security group to the EC2 instance using the `aws_network_interface_sg_attachment` resource.
-6. Ensures connectivity to SSM endpoints and automates patching and inventory using the `aws_route_table` and `aws_route_table_association` resources.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the ap-northeast-2 region.
+# 2. Retrieves information about the existing EC2 instance using the `data` source.
+# 3. Enrolls the EC2 instance as a Systems Manager managed node using the `aws_ssm_activation` resource.
+# 4. Creates a security group that restricts inbound admin ports and uses least privilege roles.
+# 5. Attaches the security group to the EC2 instance using the `aws_network_interface_sg_attachment` resource.
+# 6. Ensures connectivity to SSM endpoints and automates patching and inventory using the `aws_route_table` and `aws_route_table_association` resources.

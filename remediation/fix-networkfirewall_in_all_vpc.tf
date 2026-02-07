@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create a Network Firewall policy
 resource "aws_networkfirewall_firewall_policy" "default_policy" {
@@ -53,10 +50,10 @@ resource "aws_networkfirewall_logging_configuration" "default_logging" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a Network Firewall policy with a `default-deny` posture, where the default action is to `DROP` all traffic.
-3. Adds a rule group to the policy to allow only required egress traffic, in this example, SSH traffic to a specific destination.
-4. Creates a Network Firewall resource and associates it with the existing VPC and a subnet.
-5. Enables logging for the Network Firewall, sending logs to a CloudWatch log group.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Creates a Network Firewall policy with a `default-deny` posture, where the default action is to `DROP` all traffic.
+# 3. Adds a rule group to the policy to allow only required egress traffic, in this example, SSH traffic to a specific destination.
+# 4. Creates a Network Firewall resource and associates it with the existing VPC and a subnet.
+# 5. Enables logging for the Network Firewall, sending logs to a CloudWatch log group.

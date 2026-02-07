@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create a CloudWatch log metric filter for the "DisableKey" event
 resource "aws_cloudwatch_log_metric_filter" "disable_kms_key" {

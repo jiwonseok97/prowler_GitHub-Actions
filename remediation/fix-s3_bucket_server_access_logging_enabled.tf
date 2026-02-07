@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create a new S3 bucket for server access logging
 resource "aws_s3_bucket" "log_bucket" {

@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing EC2 instance details
 data "aws_instance" "outdated_instance" {
@@ -53,11 +50,11 @@ resource "aws_instance" "old_instance" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the details of the existing EC2 instance with the outdated AMI using the `data` source.
-3. Creates a new launch template with the latest non-deprecated AMI, using the same instance type and subnet as the existing instance.
-4. Retrieves the latest non-deprecated AMI using the `data` source.
-5. Launches a new EC2 instance using the updated launch template, ensuring the new instance is created before the old one is terminated.
-6. Terminates the old EC2 instance after the new instance is running, using the `create_before_destroy` lifecycle policy.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Retrieves the details of the existing EC2 instance with the outdated AMI using the `data` source.
+# 3. Creates a new launch template with the latest non-deprecated AMI, using the same instance type and subnet as the existing instance.
+# 4. Retrieves the latest non-deprecated AMI using the `data` source.
+# 5. Launches a new EC2 instance using the updated launch template, ensuring the new instance is created before the old one is terminated.
+# 6. Terminates the old EC2 instance after the new instance is running, using the `create_before_destroy` lifecycle policy.

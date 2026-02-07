@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing AWS Config Recorder resource
 data "aws_config_configuration_recorder" "existing_recorder" {

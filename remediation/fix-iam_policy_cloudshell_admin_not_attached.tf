@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get a list of all IAM users, groups, and roles that have the AWSCloudShellFullAccess policy attached
 data "aws_iam_policy_attachment" "cloudshell_admin" {
@@ -31,8 +28,8 @@ resource "aws_iam_policy_attachment" "detach_cloudshell_admin_roles" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Uses a `data` source to get a list of all IAM users, groups, and roles that have the `AWSCloudShellFullAccess` policy attached.
-3. Creates three `aws_iam_policy_attachment` resources to detach the `AWSCloudShellFullAccess` policy from the identified IAM users, groups, and roles, respectively.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Uses a `data` source to get a list of all IAM users, groups, and roles that have the `AWSCloudShellFullAccess` policy attached.
+# 3. Creates three `aws_iam_policy_attachment` resources to detach the `AWSCloudShellFullAccess` policy from the identified IAM users, groups, and roles, respectively.

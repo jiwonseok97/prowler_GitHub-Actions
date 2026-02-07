@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create a CloudWatch Logs metric filter for root account usage
 resource "aws_cloudwatch_log_metric_filter" "root_account_usage" {

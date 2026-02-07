@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing CloudTrail trail
 data "aws_cloudtrail_service_account" "current" {}
@@ -61,10 +58,10 @@ POLICY
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing CloudTrail trail using the `aws_cloudtrail_service_account` data source.
-3. Retrieves the existing S3 bucket for the CloudTrail trail using the `aws_s3_bucket` data source.
-4. Enables MFA delete on the CloudTrail log bucket by creating an `aws_s3_bucket_ownership_controls` resource and an `aws_s3_bucket_versioning` resource.
-5. Grants the CloudTrail service account the necessary permissions to write logs to the S3 bucket by creating an `aws_s3_bucket_policy` resource.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Retrieves the existing CloudTrail trail using the `aws_cloudtrail_service_account` data source.
+# 3. Retrieves the existing S3 bucket for the CloudTrail trail using the `aws_s3_bucket` data source.
+# 4. Enables MFA delete on the CloudTrail log bucket by creating an `aws_s3_bucket_ownership_controls` resource and an `aws_s3_bucket_versioning` resource.
+# 5. Grants the CloudTrail service account the necessary permissions to write logs to the S3 bucket by creating an `aws_s3_bucket_policy` resource.

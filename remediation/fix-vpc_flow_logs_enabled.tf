@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing VPC resource
 data "aws_vpc" "existing_vpc" {
@@ -50,11 +47,11 @@ resource "aws_cloudwatch_log_group" "flow_log_group" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing VPC resource using a data source.
-3. Creates a new VPC flow log for the existing VPC, sending the logs to a CloudWatch log group.
-4. Creates an IAM role with the necessary permissions for the VPC flow logs.
-5. Attaches the required policy to the IAM role.
-6. Creates a CloudWatch log group to store the VPC flow logs.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Retrieves the existing VPC resource using a data source.
+# 3. Creates a new VPC flow log for the existing VPC, sending the logs to a CloudWatch log group.
+# 4. Creates an IAM role with the necessary permissions for the VPC flow logs.
+# 5. Attaches the required policy to the IAM role.
+# 6. Creates a CloudWatch log group to store the VPC flow logs.

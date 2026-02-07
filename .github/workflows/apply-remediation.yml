@@ -44,10 +44,6 @@ jobs:
               path = "terraform.tfstate"
             }
           }
-
-          provider "aws" {
-            region = "ap-northeast-2"
-          }
           EOF
 
       - name: Terraform Init
@@ -157,10 +153,6 @@ jobs:
             backend "local" {
               path = "terraform.tfstate"
             }
-          }
-
-          provider "aws" {
-            region = "ap-northeast-2"
           }
           EOF
 

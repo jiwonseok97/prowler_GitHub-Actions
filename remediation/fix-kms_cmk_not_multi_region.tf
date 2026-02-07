@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create a new KMS customer managed key in the ap-northeast-2 region
 resource "aws_kms_key" "multi_region_key" {

@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Data source to reference the existing IAM policy
 data "aws_iam_policy" "aws_learner_dynamodb_policy" {
@@ -29,11 +26,11 @@ resource "aws_iam_policy" "aws_learner_dynamodb_policy" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing IAM policy using the `data` source.
-3. Creates a new IAM policy document with the required permissions for CloudTrail, including `GetTrailStatus`, `DescribeTrails`, and `LookupEvents`.
-4. Creates a new IAM policy with the updated permissions, using the policy document from the previous step.
-
-The updated policy grants the necessary permissions for CloudTrail management, while avoiding the `cloudtrail:*` privilege and following the principle of least privilege.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Retrieves the existing IAM policy using the `data` source.
+# 3. Creates a new IAM policy document with the required permissions for CloudTrail, including `GetTrailStatus`, `DescribeTrails`, and `LookupEvents`.
+# 4. Creates a new IAM policy with the updated permissions, using the policy document from the previous step.
+# 
+# The updated policy grants the necessary permissions for CloudTrail management, while avoiding the `cloudtrail:*` privilege and following the principle of least privilege.

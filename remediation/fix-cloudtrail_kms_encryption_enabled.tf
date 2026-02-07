@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing CloudTrail trail resource
 data "aws_cloudtrail_service_account" "current" {}
@@ -35,12 +32,12 @@ resource "aws_cloudtrail" "security_cloudtrail" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing CloudTrail trail resource using the `aws_cloudtrail` data source.
-3. Creates a new KMS key for encrypting the CloudTrail logs using the `aws_kms_key` resource.
-4. Creates an alias for the KMS key using the `aws_kms_alias` resource.
-5. Updates the existing CloudTrail trail to use the new KMS key for encryption using the `aws_cloudtrail` resource.
-
-This should address the security finding by enabling SSE-KMS encryption on the CloudTrail trail using a customer-managed KMS key.
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Retrieves the existing CloudTrail trail resource using the `aws_cloudtrail` data source.
+# 3. Creates a new KMS key for encrypting the CloudTrail logs using the `aws_kms_key` resource.
+# 4. Creates an alias for the KMS key using the `aws_kms_alias` resource.
+# 5. Updates the existing CloudTrail trail to use the new KMS key for encryption using the `aws_cloudtrail` resource.
+# 
+# This should address the security finding by enabling SSE-KMS encryption on the CloudTrail trail using a customer-managed KMS key.

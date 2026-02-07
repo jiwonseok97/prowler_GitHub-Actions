@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Create an IAM account alias for the security contact
 resource "aws_iam_account_alias" "security_contact" {

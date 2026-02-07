@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Use the existing IAM password policy resource
 data "aws:iam_account_password_policy" "existing" {

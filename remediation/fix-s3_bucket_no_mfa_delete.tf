@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Get the existing S3 bucket resource
 data "aws_s3_bucket" "aws_cloudtrail_logs" {

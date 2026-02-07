@@ -1,7 +1,4 @@
 # Configure the AWS provider for the ap-northeast-2 region
-provider "aws" {
-  region = "ap-northeast-2"
-}
 
 # Retrieve the existing IAM password policy
 data "aws_iam_account_password_policy" "current" {}
@@ -27,13 +24,13 @@ resource "aws_iam_account_password_policy" "updated" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Retrieves the existing IAM password policy using the `data` source.
-3. Updates the IAM password policy with the following settings:
-   - Minimum password length of 14 characters
-   - Requirement for at least one uppercase letter, one lowercase letter, and one number
-   - Prevention of password reuse for the last 24 passwords
-   - Password expiration after 90 days
-   - Requirement for all IAM users to change their passwords
+# This Terraform code does the following:
+# 
+# 1. Configures the AWS provider for the `ap-northeast-2` region.
+# 2. Retrieves the existing IAM password policy using the `data` source.
+# 3. Updates the IAM password policy with the following settings:
+#    - Minimum password length of 14 characters
+#    - Requirement for at least one uppercase letter, one lowercase letter, and one number
+#    - Prevention of password reuse for the last 24 passwords
+#    - Password expiration after 90 days
+#    - Requirement for all IAM users to change their passwords
