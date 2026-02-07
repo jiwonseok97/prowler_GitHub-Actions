@@ -15,22 +15,38 @@ resource "aws_fms_policy" "example_fms_policy" {
     "StatefulRuleGroupReferences": [],
     "StatelessRuleGroupReferences": [
       {
-        "ResourceARN": "arn:aws:network-firewall:ap-northeast-2:132410971304:stateless-rulegroup/example-stateless-rulegroup"
+        "ResourceARN": "arn:aws:network-firewall:ap-northeast-2:132410971304:stateless-rulegroup/example-stateless-rule-group"
       }
     ],
     "StatelessDefaultActions": [
-      "aws:drop"
+      "aws-forwarding-action"
     ],
     "StatelessFragmentDefaultActions": [
-      "aws:drop"
+      "aws-forwarding-action"
+    ]
+  },
+  "FirewallPolicy": {
+    "StatefulRuleGroupReferences": [],
+    "StatelessRuleGroupReferences": [
+      {
+        "ResourceARN": "arn:aws:network-firewall:ap-northeast-2:132410971304:stateless-rulegroup/example-stateless-rule-group"
+      }
+    ],
+    "StatelessDefaultActions": [
+      "aws-forwarding-action"
+    ],
+    "StatelessFragmentDefaultActions": [
+      "aws-forwarding-action"
     ]
   }
 }
 POLICY
-  tags = {
-    Environment = "production"
+  include_map = {
+    "ACCOUNT" = [
+      "132410971304"
+    ]
   }
 }
 
 
-This Terraform code creates a new Firewall Manager (FMS) policy in the `ap-northeast-2` region. The policy is configured to use a Network Firewall policy, which includes a reference to a stateless rule group. The policy is set to be remediation-enabled, meaning that it will automatically remediate any non-compliant resources. The code also includes a tag for the "Environment" of the policy.
+This Terraform code creates a new Firewall Manager (FMS) policy in the `ap-northeast-2` region. The policy is configured to use a Network Firewall policy, which includes a reference to a stateless rule group. The policy is set to be automatically remediated, and it is applied to the specified AWS account.
