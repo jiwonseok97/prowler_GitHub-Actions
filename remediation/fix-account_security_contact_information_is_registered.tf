@@ -23,7 +23,7 @@ resource "aws_sns_topic" "security_notifications" {
   name = "security-notifications"
 }
 
-# Create an SNS topic subscription for the security contact
+# Create an SNS subscription for the security contact
 resource "aws_sns_topic_subscription" "security_contact" {
   topic_arn = aws_sns_topic.security_notifications.arn
   protocol  = "email"
