@@ -15,22 +15,25 @@ resource "aws_fms_policy" "example_fms_policy" {
     "StatefulRuleGroupReferences": [],
     "StatelessRuleGroupReferences": [
       {
-        "ResourceARN": "arn:aws:network-firewall:ap-northeast-2:132410971304:stateless-rulegroup/example-stateless-rulegroup"
+        "ResourceARN": "arn:aws:network-firewall:ap-northeast-2:132410971304:stateless-rulegroup/example-stateless-rule-group"
       }
     ],
     "StatelessDefaultActions": [
-      "aws:drop"
+      "aws-forwarding-action"
     ],
     "StatelessFragmentDefaultActions": [
-      "aws:drop"
+      "aws-forwarding-action"
     ]
+  },
+  "PolicyOption": {
+    "NetworkFirewallPolicy": true
   }
 }
 POLICY
   tags = {
-    Environment = "production"
+    Name = "example-fms-policy"
   }
 }
 
 
-This Terraform code creates a new Firewall Manager (FMS) policy in the `ap-northeast-2` region. The policy is configured to use a Network Firewall policy, which includes a reference to a stateless rule group. The policy is set to be remediation-enabled, meaning that it will automatically remediate any non-compliant resources. The code also includes a tag for the "Environment" of the policy.
+This Terraform code creates a new Firewall Manager (FMS) policy in the `ap-northeast-2` region. The policy is configured to use a Network Firewall policy, with a reference to a stateless rule group. The `remediation_enabled` option is set to `true`, which means that the policy will automatically remediate any non-compliant resources. The `resource_type` is set to `AWS::EC2::NetworkInterface`, which means that the policy will apply to all EC2 network interfaces.
