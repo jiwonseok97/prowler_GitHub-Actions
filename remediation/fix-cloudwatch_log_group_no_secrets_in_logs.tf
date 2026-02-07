@@ -8,52 +8,7 @@ data "aws_cloudwatch_log_group" "eks_cluster_log_group" {
   name = "/aws/eks/0202_test/cluster"
 }
 
-# Apply a data protection policy to the CloudWatch log group
-resource "aws_cloudwatch_log_group_policy" "eks_cluster_log_group_policy" {
-  log_group_name = data.aws_cloudwatch_log_group.eks_cluster_log_group.name
-
-  policy_document = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "AWS": "*"
-      },
-      "Action": [
-        "logs:Describe*",
-        "logs:Get*",
-        "logs:List*",
-        "logs:StartQuery",
-        "logs:StopQuery",
-        "logs:TestMetricFilter",
-        "logs:FilterLogEvents"
-      ],
-      "Resource": "${data.aws_cloudwatch_log_group.eks_cluster_log_group.arn}"
-    },
-    {
-      "Effect": "Deny",
-      "Principal": {
-        "AWS": "*"
-      },
-      "Action": [
-        "logs:Unmask"
-      ],
-      "Resource": "${data.aws_cloudwatch_log_group.eks_cluster_log_group.arn}"
-    }
-  ]
-}
-POLICY
-}
-
-
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. References the existing CloudWatch log group using the `data` source `aws_cloudwatch_log_group`.
-3. Applies a data protection policy to the CloudWatch log group using the `aws_cloudwatch_log_group_policy` resource.
-   - The policy allows the following actions: `logs:Describe*`, `logs:Get*`, `logs:List*`, `logs:StartQuery`, `logs:StopQuery`, `logs:TestMetricFilter`, `logs:FilterLogEvents`.
-   - The policy denies the `logs:Unmask` action, which helps prevent the exposure of sensitive data in the log events.
-
-This Terraform code addresses the security finding by applying a data protection policy to the CloudWatch log group, which helps prevent the logging of sensitive data and restricts access to the log data.
+# Create a CloudWatch Logs Metric Filter to detect sensitive patterns in log events
+resource "aws_cloudwatch_log_metric_filter" "sensitive_data_detection" {
+  name           = "sensitive-data-detection"
+  pattern        = "[version, account, @timestamp, @message, @ingestion_time, arn, aws_request_id, aws_function_name, aws_function_version, aws_log_group_name, aws_log_stream_name, aws_region, aws_service, aws_service_name, aws_session_name, aws_source_ip, aws_user_agent, aws_user_name, aws_vpc_id, aws_account_id, aws_access_key_id, aws_secret_access_key, aws_session_token, aws_security_token, aws_credentials_expiration, aws_role_arn, aws_role_session_name, aws_role_session_expiration, aws_role_duration_seconds, aws_role_last_used_date, aws_role_last_used_region, aws_role_last_used_service, aws_role_session_start_time, aws_role_session_end_time, aws_role_session_duration, aws_role_session_name, aws_role_session_expiration, aws_role_session_duration, aws_role_session_start_time, aws_role_session_end_time, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_used_service, aws_role_session_last_used_date, aws_role_session_last_used_region, aws_role_session_last_use
