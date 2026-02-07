@@ -1,9 +1,12 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a new security group to replace the existing one
 resource "aws_security_group" "new_security_group" {
   name        = "new-security-group"
-  description = "Replacement security group for ec2_securitygroup_from_launch_wizard finding"
+  description = "Replaces the security group created by the EC2 Launch Wizard"
   vpc_id      = data.aws_vpc.default.id
 
   # Restrict inbound traffic to only the required sources
@@ -14,6 +17,13 @@ resource "aws_security_group" "new_security_group" {
     cidr_blocks = ["10.0.0.0/16"]
   }
 
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # Restrict outbound traffic to only the required destinations
   egress {
     from_port   = 0
@@ -22,7 +32,6 @@ resource "aws_security_group" "new_security_group" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Remove unused rules
   tags = {
     Name = "new-security-group"
   }
@@ -34,11 +43,10 @@ data "aws_vpc" "default" {
 }
 
 
-The provided Terraform code does the following:
+This Terraform code creates a new security group that replaces the existing one created by the EC2 Launch Wizard. The new security group follows the recommended best practices:
 
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a new security group named `new-security-group` to replace the existing one.
-3. Restricts the inbound traffic to only allow SSH access (port 22) from the `10.0.0.0/16` CIDR block.
-4. Restricts the outbound traffic to allow all destinations (`0.0.0.0/0`).
-5. Removes any unused rules from the new security group.
-6. Uses a data source to reference the default VPC in the `ap-northeast-2` region.
+1. It restricts inbound traffic to only the required sources (SSH access from the 10.0.0.0/16 network and HTTP access from anywhere).
+2. It restricts outbound traffic to allow all destinations.
+3. It uses a data source to reference the default VPC, which ensures that the new security group is created in the correct VPC.
+
+The new security group should be applied to any resources that were using the old security group created by the EC2 Launch Wizard.
