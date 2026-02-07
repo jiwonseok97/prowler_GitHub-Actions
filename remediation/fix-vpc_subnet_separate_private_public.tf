@@ -77,7 +77,7 @@ resource "aws_route_table_association" "private_subnet_route_table_association" 
 
 This Terraform code does the following:
 
-1. Configures the AWS provider for the `ap-northeast-2` region.
+1. Configures the AWS provider for the ap-northeast-2 region.
 2. Retrieves the existing VPC details using the `data.aws_vpc` data source.
 3. Creates a new public subnet within the existing VPC.
 4. Creates a new private subnet within the existing VPC.
