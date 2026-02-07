@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Get the existing S3 bucket resource
 data "aws_s3_bucket" "aws_cloudtrail_logs" {
@@ -30,7 +33,7 @@ resource "aws_kms_key" "aws_cloudtrail_logs_key" {
   enable_key_rotation     = true
 }
 
-# Attach a bucket policy to the S3 bucket to enforce KMS encryption
+# Attach a bucket policy to enforce KMS encryption
 resource "aws_s3_bucket_policy" "aws_cloudtrail_logs" {
   bucket = data.aws_s3_bucket.aws_cloudtrail_logs.id
   policy = <<POLICY
