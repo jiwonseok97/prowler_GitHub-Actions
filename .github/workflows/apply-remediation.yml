@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -35,10 +37,60 @@ jobs:
         with:
           terraform_version: 1.6.0
 
-      - name: Create Terraform backend config
-        working-directory: remediation
+      - name: Collect changed remediation files
+        id: changed
         run: |
-          cat > backend.tf << 'EOF'
+          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | tr '\n' ' ')
+          echo "files=$files" >> $GITHUB_OUTPUT
+
+      - name: Terraform Plan (per file)
+        id: plan
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          : > /tmp/tfplan.txt
+          exitcode=0
+
+          if [ -z "${{ steps.changed.outputs.files }}" ]; then
+            echo "No remediation files changed." >> /tmp/tfplan.txt
+          else
+            for file in ${{ steps.changed.outputs.files }}; do
+              echo "### $file" >> /tmp/tfplan.txt
+              work=$(mktemp -d)
+              cp "$file" "$work/main.tf"
+
+              python3 - "$work/main.tf" <<'PY'
+          import re, sys, pathlib
+          path = pathlib.Path(sys.argv[1])
+          lines = path.read_text().splitlines()
+          out = []
+          in_provider = False
+          brace = 0
+          comment_tail = False
+
+          for line in lines:
+              if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
+                  comment_tail = True
+              if comment_tail or re.match(r'^\s*\d+\.\s', line):
+                  out.append('# ' + line)
+                  continue
+              if not in_provider and re.match(r'^\s*provider\s+"aws"\s*{', line):
+                  in_provider = True
+                  brace += line.count('{') - line.count('}')
+                  if brace <= 0:
+                      in_provider = False
+                  continue
+              if in_provider:
+                  brace += line.count('{') - line.count('}')
+                  if brace <= 0:
+                      in_provider = False
+                  continue
+              out.append(line)
+
+          path.write_text("\n".join(out) + "\n")
+          PY
+
+              cat > "$work/backend.tf" <<'EOF'
           terraform {
             backend "local" {
               path = "terraform.tfstate"
@@ -46,21 +98,20 @@ jobs:
           }
           EOF
 
-      - name: Terraform Init
-        working-directory: remediation
-        run: terraform init
+              cat > "$work/provider.tf" <<'EOF'
+          provider "aws" {
+            region = "ap-northeast-2"
+          }
+          EOF
 
-      - name: Terraform Validate
-        working-directory: remediation
-        run: terraform validate
+              terraform -chdir="$work" init -input=false
+              terraform -chdir="$work" validate
+              terraform -chdir="$work" plan -no-color | tee -a /tmp/tfplan.txt
+              if [ ${PIPESTATUS[0]} -ne 0 ]; then exitcode=1; fi
+            done
+          fi
 
-      - name: Terraform Plan
-        id: plan
-        working-directory: remediation
-        continue-on-error: true
-        run: |
-          terraform plan -no-color 2>&1 | tee /tmp/tfplan.txt
-          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
 
       - name: Post Plan to PR comment
         uses: actions/github-script@v7
@@ -133,6 +184,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -145,10 +198,56 @@ jobs:
         with:
           terraform_version: 1.6.0
 
-      - name: Create Terraform backend config
-        working-directory: remediation
+      - name: Collect changed remediation files
+        id: changed
         run: |
-          cat > backend.tf << 'EOF'
+          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | tr '\n' ' ')
+          echo "files=$files" >> $GITHUB_OUTPUT
+
+      - name: Terraform Apply (per file)
+        run: |
+          set -euo pipefail
+          if [ -z "${{ steps.changed.outputs.files }}" ]; then
+            echo "No remediation files changed."
+            exit 0
+          fi
+
+          for file in ${{ steps.changed.outputs.files }}; do
+            work=$(mktemp -d)
+            cp "$file" "$work/main.tf"
+
+            python3 - "$work/main.tf" <<'PY'
+          import re, sys, pathlib
+          path = pathlib.Path(sys.argv[1])
+          lines = path.read_text().splitlines()
+          out = []
+          in_provider = False
+          brace = 0
+          comment_tail = False
+
+          for line in lines:
+              if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
+                  comment_tail = True
+              if comment_tail or re.match(r'^\s*\d+\.\s', line):
+                  out.append('# ' + line)
+                  continue
+              if not in_provider and re.match(r'^\s*provider\s+"aws"\s*{', line):
+                  in_provider = True
+                  brace += line.count('{') - line.count('}')
+                  if brace <= 0:
+                      in_provider = False
+                  continue
+              if in_provider:
+                  brace += line.count('{') - line.count('}')
+                  if brace <= 0:
+                      in_provider = False
+                  continue
+              out.append(line)
+
+          path.write_text("\n".join(out) + "\n")
+          PY
+
+            cat > "$work/backend.tf" <<'EOF'
           terraform {
             backend "local" {
               path = "terraform.tfstate"
@@ -156,21 +255,17 @@ jobs:
           }
           EOF
 
-      - name: Terraform Init
-        working-directory: remediation
-        run: terraform init
+            cat > "$work/provider.tf" <<'EOF'
+          provider "aws" {
+            region = "ap-northeast-2"
+          }
+          EOF
 
-      - name: Terraform Validate
-        working-directory: remediation
-        run: terraform validate
-
-      - name: Terraform Plan
-        working-directory: remediation
-        run: terraform plan -out=tfplan
-
-      - name: Terraform Apply
-        working-directory: remediation
-        run: terraform apply -auto-approve tfplan
+            terraform -chdir="$work" init -input=false
+            terraform -chdir="$work" validate
+            terraform -chdir="$work" plan -out=tfplan
+            terraform -chdir="$work" apply -auto-approve tfplan
+          done
 
       - name: Trigger Prowler Re-scan
         run: |
