@@ -38,6 +38,6 @@ This Terraform code does the following:
 1. Configures the AWS provider for the `ap-northeast-2` region.
 2. Retrieves the details of the existing VPC using the `data.aws_vpc` data source.
 3. Creates two new subnets, one in `ap-northeast-2a` and the other in `ap-northeast-2c`, within the existing VPC.
-4. Associates the new subnets with the main route table of the existing VPC.
+4. Associates the new subnets with the existing VPC's main route table.
 
 This should address the security finding by ensuring that the VPC has subnets in multiple Availability Zones, which is recommended for high availability.
