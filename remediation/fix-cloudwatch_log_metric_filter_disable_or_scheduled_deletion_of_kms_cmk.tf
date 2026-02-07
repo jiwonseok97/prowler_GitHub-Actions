@@ -58,12 +58,11 @@ resource "aws_cloudwatch_metric_alarm" "schedule_kms_key_deletion_alarm" {
 }
 
 
-The provided Terraform code does the following:
+This Terraform code creates the following resources:
 
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a CloudWatch log metric filter for the `DisableKey` event, which tracks the number of disabled customer-managed KMS keys.
-3. Creates a CloudWatch alarm for the `DisableKey` metric filter, which triggers an alarm when a customer-managed KMS key is disabled.
-4. Creates a CloudWatch log metric filter for the `ScheduleKeyDeletion` event, which tracks the number of customer-managed KMS keys scheduled for deletion.
-5. Creates a CloudWatch alarm for the `ScheduleKeyDeletion` metric filter, which triggers an alarm when a customer-managed KMS key is scheduled for deletion.
+1. A CloudWatch log metric filter for the "DisableKey" event, which tracks when a customer-managed KMS key is disabled.
+2. A CloudWatch alarm that triggers when the "DisableKey" metric filter detects a disabled KMS key.
+3. A CloudWatch log metric filter for the "ScheduleKeyDeletion" event, which tracks when a customer-managed KMS key is scheduled for deletion.
+4. A CloudWatch alarm that triggers when the "ScheduleKeyDeletion" metric filter detects a scheduled KMS key deletion.
 
-The alarms are configured to send notifications to an SNS topic, which you will need to replace with the appropriate ARN for your own SNS topic.
+The alarms are configured to send notifications to an SNS topic, which you'll need to replace with the appropriate ARN for your own SNS topic.
