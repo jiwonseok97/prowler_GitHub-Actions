@@ -1,4 +1,7 @@
 # Configure the AWS provider for the ap-northeast-2 region
+provider "aws" {
+  region = "ap-northeast-2"
+}
 
 # Create a CloudWatch log metric filter for S3 bucket policy changes
 resource "aws_cloudwatch_log_metric_filter" "s3_bucket_policy_changes" {
@@ -8,24 +11,30 @@ resource "aws_cloudwatch_log_metric_filter" "s3_bucket_policy_changes" {
 
   metric_transformation {
     name      = "S3BucketPolicyChanges"
-    namespace = "MyApp/SecurityLogs"
+    namespace = "MyApplication"
     value     = "1"
   }
 }
 
-# Create a CloudWatch alarm for the S3 bucket policy changes metric filter
+# Create a CloudWatch alarm for the S3 bucket policy changes metric
 resource "aws_cloudwatch_metric_alarm" "s3_bucket_policy_changes_alarm" {
   alarm_name          = "S3BucketPolicyChangesAlarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   metric_name         = "S3BucketPolicyChanges"
-  namespace           = "MyApp/SecurityLogs"
+  namespace           = "MyApplication"
   period              = "60"
   statistic           = "Sum"
   threshold           = "1"
   alarm_description   = "Alarm when S3 bucket policy changes are detected"
-  alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:my-security-topic"]
+  alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:my-alarm-topic"]
 }
 
 
-# This Terraform code creates a CloudWatch log metric filter and an alarm for S3 bucket policy changes. The metric filter monitors the CloudWatch log group for the `PutBucketPolicy` event and creates a custom metric called `S3BucketPolicyChanges`. The alarm is then set to trigger when the `S3BucketPolicyChanges` metric is greater than or equal to 1, indicating that a bucket policy change has occurred. The alarm action is set to an SNS topic, which can be used to notify the appropriate security team.
+The provided Terraform code does the following:
+
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates a CloudWatch log metric filter for S3 bucket policy changes, using the provided log group name.
+3. Creates a CloudWatch alarm for the S3 bucket policy changes metric, with the alarm action set to an SNS topic (replace `arn:aws:sns:ap-northeast-2:132410971304:my-alarm-topic` with the appropriate ARN).
+
+This code addresses the security finding by establishing metric filters and alarms for S3 bucket policy changes, which can help detect and alert on any unauthorized changes to S3 bucket policies.
