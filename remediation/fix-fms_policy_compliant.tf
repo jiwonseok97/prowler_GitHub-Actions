@@ -27,10 +27,10 @@ resource "aws_fms_policy" "example_fms_policy" {
   }
 }
 POLICY
-  tags = {
-    Environment = "production"
+  include_map = {
+    "ACCOUNT" = ["132410971304"]
   }
 }
 
 
-This Terraform code creates a new Firewall Manager (FMS) policy in the `ap-northeast-2` region. The policy is configured to use a Network Firewall policy, which includes a reference to a stateless rule group. The policy is set to be remediation-enabled, meaning that it will automatically remediate any non-compliant resources. The code also includes a tag for the "Environment" of the policy.
+This Terraform code creates a new Firewall Manager policy in the `ap-northeast-2` region. The policy is configured to use a Network Firewall policy, which includes a reference to a stateless rule group. The policy is set to be automatically remediated, and it applies to the specified AWS account.
