@@ -11,7 +11,7 @@ resource "aws_cloudwatch_log_metric_filter" "vpc_changes" {
 
   metric_transformation {
     name      = "VPCChanges"
-    namespace = "MyApp/VPCChanges"
+    namespace = "MyApp/Audit"
     value     = "1"
   }
 }
@@ -22,7 +22,7 @@ resource "aws_cloudwatch_metric_alarm" "vpc_changes_alarm" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   metric_name         = "VPCChanges"
-  namespace           = "MyApp/VPCChanges"
+  namespace           = "MyApp/Audit"
   period              = "60"
   statistic           = "Sum"
   threshold           = "1"
@@ -34,5 +34,5 @@ resource "aws_cloudwatch_metric_alarm" "vpc_changes_alarm" {
 This Terraform code does the following:
 
 1. Configures the AWS provider for the ap-northeast-2 region.
-2. Creates a CloudWatch Logs metric filter that captures various VPC change events, such as creating, deleting, or modifying VPCs, VPC peering connections, and VPC classic link.
-3. Creates a CloudWatch alarm that triggers when the VPC changes metric filter detects any changes, and sends a notification to the "my-alarm-topic" SNS topic.
+2. Creates a CloudWatch Logs metric filter for various VPC change events, such as creating, deleting, or modifying VPCs, VPC peering connections, and VPC classic link.
+3. Creates a CloudWatch alarm that triggers when the VPC changes metric filter detects at least one event, and sends a notification to the "my-alarm-topic" SNS topic.

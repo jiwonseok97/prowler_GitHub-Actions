@@ -31,8 +31,4 @@ resource "aws_cloudwatch_metric_alarm" "iam_policy_changes_alarm" {
 }
 
 
-This Terraform code does the following:
-
-1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a CloudWatch Logs metric filter for IAM policy create, delete, update, attach, and detach events.
-3. Creates a CloudWatch alarm that triggers when there is at least one IAM policy change event, and sends an alert to the `security-alerts` SNS topic.
+This Terraform code creates a CloudWatch Logs metric filter for IAM policy changes and a CloudWatch alarm that triggers when there are any IAM policy changes. The metric filter monitors for various IAM policy-related events, such as creating, deleting, updating, attaching, and detaching policies. The alarm is set to trigger when the sum of the "IAMPolicyChanges" metric is greater than or equal to 1 within a 60-second period. The alarm action is set to an SNS topic for security alerts.

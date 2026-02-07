@@ -16,7 +16,7 @@ resource "aws_cloudwatch_log_metric_filter" "vpc_route_table_changes" {
   }
 }
 
-# Create a CloudWatch alarm to trigger when VPC route table changes occur
+# Create a CloudWatch alarm to trigger when VPC route table changes are detected
 resource "aws_cloudwatch_metric_alarm" "vpc_route_table_changes_alarm" {
   alarm_name          = "vpc-route-table-changes-alarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -27,13 +27,13 @@ resource "aws_cloudwatch_metric_alarm" "vpc_route_table_changes_alarm" {
   statistic           = "Sum"
   threshold           = "1"
   alarm_description   = "Alarm when VPC route table changes are detected"
-  alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:your-sns-topic-arn"]
+  alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:my-security-topic"]
 }
 
 
-This Terraform code does the following:
+The provided Terraform code does the following:
 
-1. Configures the AWS provider for the ap-northeast-2 region.
-2. Creates a CloudWatch Logs metric filter to monitor VPC route table changes, including events such as CreateRoute, CreateRouteTable, ReplaceRoute, etc.
-3. Creates a CloudWatch alarm that triggers when the "VPCRouteTableChanges" metric exceeds the threshold of 1, indicating that a VPC route table change has occurred.
-4. The alarm action is set to an SNS topic, which can be used to notify responders of the event.
+1. Configures the AWS provider for the `ap-northeast-2` region.
+2. Creates a CloudWatch Logs metric filter to monitor VPC route table changes. The filter looks for specific event names related to route table modifications.
+3. Creates a CloudWatch alarm that triggers when the "VPCRouteTableChanges" metric, captured by the metric filter, is greater than or equal to 1. This will alert the responders when VPC route table changes are detected.
+4. The alarm action is set to an SNS topic named "my-security-topic", which can be used to notify the appropriate personnel.

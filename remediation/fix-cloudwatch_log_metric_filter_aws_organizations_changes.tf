@@ -16,7 +16,7 @@ resource "aws_cloudwatch_log_metric_filter" "organizations_changes" {
   }
 }
 
-# Create a CloudWatch alarm for the Organizations changes metric
+# Create a CloudWatch alarm to notify responders of AWS Organizations changes
 resource "aws_cloudwatch_metric_alarm" "organizations_changes_alarm" {
   alarm_name          = "organizations-changes-alarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -26,7 +26,7 @@ resource "aws_cloudwatch_metric_alarm" "organizations_changes_alarm" {
   period              = "60"
   statistic           = "Sum"
   threshold           = "1"
-  alarm_description   = "Alarm when there are changes to AWS Organizations"
+  alarm_description   = "Alarm when changes are made to AWS Organizations"
   alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:my-alert-topic"]
 }
 
@@ -34,5 +34,7 @@ resource "aws_cloudwatch_metric_alarm" "organizations_changes_alarm" {
 The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a CloudWatch Logs metric filter for AWS Organizations changes. The filter looks for events where the `eventSource` is `organizations.amazonaws.com`.
-3. Creates a CloudWatch alarm that triggers when the "OrganizationsChanges" metric is greater than or equal to 1. This alarm will send notifications to the specified SNS topic.
+2. Creates a CloudWatch Logs metric filter that monitors for events with the source `organizations.amazonaws.com`, indicating changes to AWS Organizations.
+3. Creates a CloudWatch alarm that triggers when the `OrganizationsChanges` metric is greater than or equal to 1, indicating that a change has occurred in AWS Organizations. The alarm is configured to send notifications to an SNS topic with the ARN `arn:aws:sns:ap-northeast-2:132410971304:my-alert-topic`.
+
+This code addresses the security finding by setting up monitoring and alerting for changes to AWS Organizations, which is a recommended best practice for ensuring the security and integrity of your AWS environment.

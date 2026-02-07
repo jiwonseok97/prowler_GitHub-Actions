@@ -4,8 +4,8 @@ provider "aws" {
 }
 
 # Create a CloudWatch Logs metric filter for ConsoleLogin failures
-resource "aws_cloudwatch_log_metric_filter" "console_login_failures" {
-  name           = "console-login-failures"
+resource "aws_cloudwatch_log_metric_filter" "authentication_failures" {
+  name           = "ConsoleLoginFailures"
   pattern        = "{$.eventName = ConsoleLogin && $.errorMessage = \"Failed authentication\"}"
   log_group_name = "arn:aws:logs:ap-northeast-2:132410971304:log-group"
 
@@ -17,8 +17,8 @@ resource "aws_cloudwatch_log_metric_filter" "console_login_failures" {
 }
 
 # Create a CloudWatch alarm for the ConsoleLogin failures metric
-resource "aws_cloudwatch_metric_alarm" "console_login_failures_alarm" {
-  alarm_name          = "console-login-failures-alarm"
+resource "aws_cloudwatch_metric_alarm" "authentication_failures_alarm" {
+  alarm_name          = "ConsoleLoginFailuresAlarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = "1"
   metric_name         = "ConsoleLoginFailures"
@@ -26,7 +26,7 @@ resource "aws_cloudwatch_metric_alarm" "console_login_failures_alarm" {
   period              = "60"
   statistic           = "Sum"
   threshold           = "5"
-  alarm_description   = "Alarm when there are 5 or more failed console logins within 1 minute"
+  alarm_description   = "Alarm when there are 5 or more failed console logins in a 1-minute period"
   alarm_actions       = ["arn:aws:sns:ap-northeast-2:132410971304:security-alerts"]
 }
 
@@ -34,5 +34,6 @@ resource "aws_cloudwatch_metric_alarm" "console_login_failures_alarm" {
 The provided Terraform code does the following:
 
 1. Configures the AWS provider for the `ap-northeast-2` region.
-2. Creates a CloudWatch Logs metric filter for `ConsoleLogin` failures, where the `errorMessage` is "Failed authentication". The metric is named `ConsoleLoginFailures` and is stored in the `SecurityMetrics` namespace.
-3. Creates a CloudWatch alarm for the `ConsoleLoginFailures` metric. The alarm is triggered when the sum of the metric is greater than or equal to 5 within a 1-minute period. When the alarm is triggered, it sends a notification to the `arn:aws:sns:ap-northeast-2:132410971304:security-alerts` SNS topic.
+2. Creates a CloudWatch Logs metric filter named `ConsoleLoginFailures` that captures failed console login attempts with the error message "Failed authentication".
+3. Creates a CloudWatch alarm named `ConsoleLoginFailuresAlarm` that triggers when the `ConsoleLoginFailures` metric exceeds a threshold of 5 events in a 1-minute period.
+4. The alarm action is set to an SNS topic `arn:aws:sns:ap-northeast-2:132410971304:security-alerts`, which can be used to send notifications to the incident response team.
