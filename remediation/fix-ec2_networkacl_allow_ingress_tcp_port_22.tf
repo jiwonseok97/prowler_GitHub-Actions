@@ -9,7 +9,7 @@ data "aws_network_acl" "existing_nacl" {
 }
 
 # Create a new Network ACL entry to deny ingress TCP port 22 from 0.0.0.0/0
-resource "aws_network_acl_rule" "deny_ssh_ingress" {
+resource "aws_network_acl_rule" "deny_ssh_from_internet" {
   network_acl_id = data.aws_network_acl.existing_nacl.id
   rule_number    = 100
   egress         = false
@@ -21,7 +21,7 @@ resource "aws_network_acl_rule" "deny_ssh_ingress" {
 }
 
 # Add a comment to explain the purpose of the new Network ACL rule
-resource "aws_network_acl_rule" "comment_deny_ssh_ingress" {
+resource "aws_network_acl_rule" "comment_deny_ssh_from_internet" {
   network_acl_id = data.aws_network_acl.existing_nacl.id
   rule_number    = 101
   egress         = false
@@ -30,5 +30,5 @@ resource "aws_network_acl_rule" "comment_deny_ssh_ingress" {
   cidr_block     = "0.0.0.0/0"
   from_port      = 0
   to_port        = 0
-  comments       = "Deny ingress TCP port 22 (SSH) from 0.0.0.0/0"
+  comments       = "Deny SSH access from the internet"
 }

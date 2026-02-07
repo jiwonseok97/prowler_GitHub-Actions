@@ -3,7 +3,7 @@ provider "aws" {
   region = "ap-northeast-2"
 }
 
-# Get information about the existing EC2 instance
+# Retrieve the existing EC2 instance
 data "aws_instance" "problematic_instance" {
   instance_id = "i-0fbecaba3c48e7c79"
 }
@@ -15,7 +15,16 @@ locals {
 
 # Terminate the EC2 instance if it is older than the configured maximum age
 resource "aws_instance_termination" "terminate_old_instance" {
-  count         = local.instance_age_in_days > 30 ? 1 : 0 # Adjust `max_ec2_instance_age_in_days` as needed
-  instance_id   = data.aws_instance.problematic_instance.id
-  force_delete = true
+  count = local.instance_age_in_days > 30 ? 1 : 0 # Adjust `max_ec2_instance_age_in_days` as needed
+  instance_id = data.aws_instance.problematic_instance.id
+}
+
+# Create a new EC2 instance from a hardened, updated AMI
+resource "aws_instance" "new_instance" {
+  ami           = "ami-0b0af3577fe5e3532" # Replace with a secure, updated AMI
+  instance_type = "t2.micro"
+  
+  # Apply least privilege and defense in depth
+  vpc_security_group_ids = ["sg-0123456789abcdef"] # Replace with appropriate security group
+  iam_instance_profile   = "my-instance-profile" # Replace with appropriate IAM instance profile
 }
