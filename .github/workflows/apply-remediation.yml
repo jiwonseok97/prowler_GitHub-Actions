@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   # -------------------------------------------------------
-  # Plan: PR 열릴 때 실행 → plan 결과를 PR 코멘트로 게시
+  # Plan: PR 열릴 때 실행 → plan 결과를 PR. 코멘트로 게시
   # -------------------------------------------------------
   plan:
     if: github.event.pull_request.merged != true && github.event.action != 'closed'
