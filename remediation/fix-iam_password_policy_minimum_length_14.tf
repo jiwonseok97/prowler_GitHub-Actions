@@ -23,7 +23,8 @@ resource "aws_iam_account_password_policy" "updated" {
   max_password_age = 90
 
   # Require MFA for all IAM users
-  require_users_to_change_password = true
+  require_hard_token = true
+  allow_users_to_change_password = true
 }
 
 
@@ -36,4 +37,5 @@ This Terraform code does the following:
    - Requirement for at least one uppercase letter, one lowercase letter, and one number
    - Prevention of password reuse for the last 24 passwords
    - Password expiration after 90 days
-   - Requirement for all IAM users to change their passwords
+   - Requirement of MFA for all IAM users
+   - Allowing users to change their own passwords
