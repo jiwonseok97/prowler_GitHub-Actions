@@ -121,11 +121,13 @@ Region: {row.get('region', 'ap-northeast-2')}
 Recommendation: {row.get('recommendation_text', '')}
 
 Requirements:
-- Output ONLY valid Terraform HCL code
-- No markdown, no explanations, no code fences
-- Use data sources to reference existing resources when possible
+- Output ONLY valid Terraform HCL code, nothing else
+- No markdown, no explanations, no code fences, no text before or after the code
+- NEVER set computed/read-only attributes (arn, id, owner_id, creation_date, unique_id) in resource blocks
+- Use "data" sources to reference existing resources, NOT resource blocks with hardcoded ARNs
+- Use "import" blocks if you need to bring existing resources under Terraform management
 - Include provider configuration for ap-northeast-2 region
-- Add comments explaining what the code does
+- Add HCL comments (lines starting with #) explaining what the code does
 
 Output the Terraform code:"""
 
@@ -157,6 +159,24 @@ for _, row in high_priority.iterrows():
     if tf_code:
         # AI ?묐떟??留덊겕?ㅼ슫 肄붾뱶 ?쒖뒪媛 ?ы븿??寃쎌슦 ?쒓굅
         tf_code = tf_code.replace('```hcl', '').replace('```terraform', '').replace('```', '').strip()
+
+        # Strip trailing non-HCL text (AI sometimes appends plain-text explanations)
+        import re
+        _hcl_line_re = re.compile(
+            r'^(\s*$|#|//|resource\s|data\s|provider\s|variable\s|locals\s'
+            r'|terraform\s|output\s|module\s|import\s|\s+\w+|\})'
+        )
+        _cleaned = []
+        for _line in tf_code.split('\n'):
+            if _hcl_line_re.match(_line):
+                _cleaned.append(_line)
+            else:
+                break
+        tf_code = '\n'.join(_cleaned).strip()
+
+        if not tf_code:
+            print(f"SKIP (generated code was empty after cleanup): {check_id}")
+            continue
 
         # 媛쒕퀎 .tf ?뚯씪濡????
         filename = f"fix-{check_id}.tf"
