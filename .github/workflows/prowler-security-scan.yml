@@ -89,6 +89,12 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: pip install pyyaml
 
+      - name: Setup Terraform (for validate during generation)
+        if: github.ref == 'refs/heads/main'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
       - name: Generate Remediation Code
         if: github.ref == 'refs/heads/main'
         run: |

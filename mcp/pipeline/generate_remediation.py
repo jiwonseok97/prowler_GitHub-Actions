@@ -96,6 +96,75 @@ def call_bedrock(prompt):
         return None
 
 
+MAX_RETRIES = int(os.getenv("BEDROCK_MAX_RETRIES", "3"))
+
+
+def validate_terraform(tf_code):
+    """Write code to temp dir, run terraform init+validate, return (ok, error_msg)."""
+    import tempfile, subprocess, shutil
+    work = tempfile.mkdtemp(prefix="tf-validate-")
+    try:
+        # Write main.tf (strip provider block, use our own)
+        import re as _re
+        lines = tf_code.split('\n')
+        filtered = []
+        in_prov = False
+        brace = 0
+        for line in lines:
+            if not in_prov and _re.match(r'^\s*provider\s+"aws"\s*\{', line):
+                in_prov = True
+                brace += line.count('{') - line.count('}')
+                if brace <= 0:
+                    in_prov = False
+                continue
+            if in_prov:
+                brace += line.count('{') - line.count('}')
+                if brace <= 0:
+                    in_prov = False
+                continue
+            if _re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
+                continue
+            filtered.append(line)
+        with open(os.path.join(work, "main.tf"), "w") as f:
+            f.write('\n'.join(filtered) + '\n')
+        with open(os.path.join(work, "provider.tf"), "w") as f:
+            f.write('provider "aws" { region = "ap-northeast-2" }\n')
+        with open(os.path.join(work, "backend.tf"), "w") as f:
+            f.write('terraform { backend "local" { path = "terraform.tfstate" } }\n')
+
+        r1 = subprocess.run(
+            ["terraform", "init", "-input=false", "-no-color"],
+            cwd=work, capture_output=True, text=True, timeout=120
+        )
+        if r1.returncode != 0:
+            return False, f"init failed: {r1.stderr}"
+
+        r2 = subprocess.run(
+            ["terraform", "validate", "-no-color"],
+            cwd=work, capture_output=True, text=True, timeout=60
+        )
+        if r2.returncode != 0:
+            return False, r2.stdout + r2.stderr
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def make_fix_prompt(original_prompt, tf_code, error_msg):
+    """Send error back to AI for code correction."""
+    return f"""{original_prompt}
+
+The previous attempt generated this code:
+{tf_code}
+
+But terraform validate returned this error:
+{error_msg}
+
+Fix the code to resolve this error. Output ONLY the corrected Terraform HCL code, nothing else."""
+
+
 def fallback_from_iac_snippet(check_id):
     """Bedrock ?ㅽ뙣 ??check_to_iac.yaml 留ㅽ븨?먯꽌 誘몃━ ?묒꽦??Terraform ?ㅻ땲??濡쒕뱶"""
     snippet_path = iac_map.get(check_id)
@@ -148,7 +217,8 @@ for _, row in high_priority.iterrows():
     category = categorize_check_id(row.get('check_id', ''))
 
     # 1李? Bedrock AI濡?Terraform 肄붾뱶 ?앹꽦 ?쒕룄
-    tf_code = call_bedrock(make_remediation_prompt(row))
+    original_prompt = make_remediation_prompt(row)
+    tf_code = call_bedrock(original_prompt)
 
     # 2李? Bedrock ?ㅽ뙣 ??IaC ?ㅻ땲??留ㅽ븨?먯꽌 ?대갚
     if not tf_code:
@@ -159,25 +229,44 @@ for _, row in high_priority.iterrows():
 
     if tf_code:
         # AI ?묐떟??留덊겕?ㅼ슫 肄붾뱶 ?쒖뒪媛 ?ы븿??寃쎌슦 ?쒓굅
-        tf_code = tf_code.replace('```hcl', '').replace('```terraform', '').replace('```', '').strip()
-
-        # Strip trailing non-HCL text (AI sometimes appends plain-text explanations)
         import re
-        _hcl_line_re = re.compile(
-            r'^(\s*$|#|//|resource\s|data\s|provider\s|variable\s|locals\s'
-            r'|terraform\s|output\s|module\s|import\s|\s+\w+|\})'
-        )
-        _cleaned = []
-        for _line in tf_code.split('\n'):
-            if _hcl_line_re.match(_line):
-                _cleaned.append(_line)
-            else:
-                break
-        tf_code = '\n'.join(_cleaned).strip()
+        def cleanup_tf(code):
+            code = code.replace('```hcl', '').replace('```terraform', '').replace('```', '').strip()
+            _pat = re.compile(
+                r'^(\s*$|#|//|resource\s|data\s|provider\s|variable\s|locals\s'
+                r'|terraform\s|output\s|module\s|import\s|\s+\w+|\})'
+            )
+            _cl = []
+            for _l in code.split('\n'):
+                if _pat.match(_l):
+                    _cl.append(_l)
+                else:
+                    break
+            return '\n'.join(_cl).strip()
+
+        tf_code = cleanup_tf(tf_code)
 
         if not tf_code:
             print(f"SKIP (generated code was empty after cleanup): {check_id}")
             continue
+
+        # Validate generated code and retry with error feedback
+        for attempt in range(1, MAX_RETRIES + 1):
+            ok, err = validate_terraform(tf_code)
+            if ok:
+                print(f"  validate OK (attempt {attempt})")
+                break
+            print(f"  validate FAILED (attempt {attempt}/{MAX_RETRIES}): {err[:200]}")
+            if attempt < MAX_RETRIES:
+                fix_response = call_bedrock(make_fix_prompt(original_prompt, tf_code, err))
+                if fix_response:
+                    tf_code = cleanup_tf(fix_response)
+                if not tf_code:
+                    break
+        else:
+            print(f"SKIP {check_id}: failed validation after {MAX_RETRIES} attempts")
+            continue
+
 
         # 媛쒕퀎 .tf ?뚯씪濡????
         filename = f"fix-{check_id}.tf"
