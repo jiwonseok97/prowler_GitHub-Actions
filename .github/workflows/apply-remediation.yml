@@ -85,6 +85,9 @@ jobs:
                   if brace <= 0:
                       in_provider = False
                   continue
+              # Strip provider alias references inside resource/data blocks
+              if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
+                  continue
               out.append(line)
 
           path.write_text("\n".join(out) + "\n")
@@ -241,6 +244,9 @@ jobs:
                   brace += line.count('{') - line.count('}')
                   if brace <= 0:
                       in_provider = False
+                  continue
+              # Strip provider alias references inside resource/data blocks
+              if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
                   continue
               out.append(line)
 

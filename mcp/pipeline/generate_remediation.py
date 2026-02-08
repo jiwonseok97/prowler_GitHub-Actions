@@ -126,7 +126,8 @@ Requirements:
 - NEVER set computed/read-only attributes (arn, id, owner_id, creation_date, unique_id) in resource blocks
 - Use "data" sources to reference existing resources, NOT resource blocks with hardcoded ARNs
 - Use "import" blocks if you need to bring existing resources under Terraform management
-- Include provider configuration for ap-northeast-2 region
+- Include a single provider "aws" block for ap-northeast-2 region WITHOUT alias
+- NEVER use provider aliases (no "alias" in provider, no "provider = aws.xxx" in resources)
 - Add HCL comments (lines starting with #) explaining what the code does
 
 Output the Terraform code:"""
