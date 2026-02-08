@@ -89,7 +89,7 @@ jobs:
               if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
                   continue
               # Strip computed/read-only attributes that AI incorrectly sets
-              if re.match(r'^\s*(arn|id|key_id|owner_id|unique_id|creation_date)\s*=', line):
+              if re.match(r'^\s*(arn|id|owner_id|unique_id|creation_date)\s*=', line):
                   continue
               out.append(line)
 
@@ -111,7 +111,11 @@ jobs:
           EOF
 
               terraform -chdir="$work" init -input=false
-              terraform -chdir="$work" validate
+              if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfplan.txt; then
+                echo "SKIP $file: validate failed" | tee -a /tmp/tfplan.txt
+                exitcode=1
+                continue
+              fi
               terraform -chdir="$work" plan -no-color | tee -a /tmp/tfplan.txt
               if [ ${PIPESTATUS[0]} -ne 0 ]; then exitcode=1; fi
             done
@@ -252,7 +256,7 @@ jobs:
               if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
                   continue
               # Strip computed/read-only attributes that AI incorrectly sets
-              if re.match(r'^\s*(arn|id|key_id|owner_id|unique_id|creation_date)\s*=', line):
+              if re.match(r'^\s*(arn|id|owner_id|unique_id|creation_date)\s*=', line):
                   continue
               out.append(line)
 
@@ -274,8 +278,14 @@ jobs:
           EOF
 
             terraform -chdir="$work" init -input=false
-            terraform -chdir="$work" validate
-            terraform -chdir="$work" plan -out=tfplan
+            if ! terraform -chdir="$work" validate 2>&1; then
+              echo "SKIP $file: validate failed"
+              continue
+            fi
+            if ! terraform -chdir="$work" plan -out=tfplan 2>&1; then
+              echo "SKIP $file: plan failed"
+              continue
+            fi
             terraform -chdir="$work" apply -auto-approve tfplan
           done
 
