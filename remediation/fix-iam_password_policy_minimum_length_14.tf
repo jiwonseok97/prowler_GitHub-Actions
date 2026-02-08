@@ -1,36 +1,33 @@
-# Configure the AWS provider for the ap-northeast-2 region
-
-# Retrieve the existing IAM password policy
-data "aws_iam_account_password_policy" "current" {}
-
-# Update the IAM password policy
-resource "aws_iam_account_password_policy" "updated" {
-  # Require passwords to be at least 14 characters long
-  minimum_password_length = 14
-
-  # Require at least one uppercase letter, one lowercase letter, and one number
-  require_uppercase_characters = true
-  require_lowercase_characters = true
-  require_numbers = true
-
-  # Prevent password reuse
-  password_reuse_prevention = 24
-
-  # Expire passwords after 90 days
-  max_password_age = 90
-
-  # Require MFA for all IAM users
-  require_users_to_change_password = true
+provider "aws" {
+  region = "ap-northeast-2"
 }
 
+# Set the IAM password policy to require at least 14 characters
+resource "aws_iam_account_password_policy" "strict" {
+  minimum_password_length        = 14
+  require_lowercase_characters   = true
+  require_uppercase_characters   = true
+  require_numbers                = true
+  require_symbols                = true
+  allow_users_to_change_password = true
+  password_reuse_prevention      = 24
+}
 
-# This Terraform code does the following:
-# 
-# 1. Configures the AWS provider for the `ap-northeast-2` region.
-# 2. Retrieves the existing IAM password policy using the `data` source.
-# 3. Updates the IAM password policy with the following settings:
-#    - Minimum password length of 14 characters
-#    - Requirement for at least one uppercase letter, one lowercase letter, and one number
-#    - Prevention of password reuse for the last 24 passwords
-#    - Password expiration after 90 days
-#    - Requirement for all IAM users to change their passwords
+# Enforce MFA for all IAM users
+data "aws_iam_account_alias" "current" {}
+
+resource "aws_iam_account_alias" "current" {
+  account_alias = data.aws_iam_account_alias.current.account_alias
+}
+
+resource "aws_iam_user_login_profile" "mfa_required" {
+  user                    = aws_iam_account_alias.current.account_alias
+  password_length         = 16
+  password_reset_required = true
+}
+
+resource "aws_iam_user_mfa_device" "mfa_required" {
+  user = aws_iam_account_alias.current.account_alias
+  serial_number = "arn:aws:iam::${data.aws_iam_account_alias.current.account_id}:mfa/${aws_iam_account_alias.current.account_alias}"
+  enable_mfa = true
+}
