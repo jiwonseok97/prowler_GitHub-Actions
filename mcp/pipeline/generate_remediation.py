@@ -96,7 +96,7 @@ def call_bedrock(prompt):
         return None
 
 
-MAX_RETRIES = int(os.getenv("BEDROCK_MAX_RETRIES", "3"))
+MAX_RETRIES = int(os.getenv("BEDROCK_MAX_RETRIES", "1"))
 
 
 def validate_terraform(tf_code):
