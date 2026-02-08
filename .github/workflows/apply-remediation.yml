@@ -88,6 +88,9 @@ jobs:
               # Strip provider alias references inside resource/data blocks
               if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
                   continue
+              # Strip computed/read-only attributes that AI incorrectly sets
+              if re.match(r'^\s*(arn|id|key_id|owner_id|unique_id|creation_date)\s*=', line):
+                  continue
               out.append(line)
 
           path.write_text("\n".join(out) + "\n")
@@ -247,6 +250,9 @@ jobs:
                   continue
               # Strip provider alias references inside resource/data blocks
               if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
+                  continue
+              # Strip computed/read-only attributes that AI incorrectly sets
+              if re.match(r'^\s*(arn|id|key_id|owner_id|unique_id|creation_date)\s*=', line):
                   continue
               out.append(line)
 

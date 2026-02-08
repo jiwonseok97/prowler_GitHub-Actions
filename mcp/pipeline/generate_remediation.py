@@ -123,7 +123,7 @@ Recommendation: {row.get('recommendation_text', '')}
 Requirements:
 - Output ONLY valid Terraform HCL code, nothing else
 - No markdown, no explanations, no code fences, no text before or after the code
-- NEVER set computed/read-only attributes (arn, id, owner_id, creation_date, unique_id) in resource blocks
+- NEVER set computed/read-only attributes (arn, id, key_id, owner_id, creation_date, unique_id) in resource blocks
 - Use "data" sources to reference existing resources, NOT resource blocks with hardcoded ARNs
 - Use "import" blocks if you need to bring existing resources under Terraform management
 - Include a single provider "aws" block for ap-northeast-2 region WITHOUT alias
