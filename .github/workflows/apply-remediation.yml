@@ -66,11 +66,27 @@ jobs:
           out = []
           in_provider = False
           in_import = False
+          in_heredoc = False
+          heredoc_marker = None
           brace = 0
           import_brace = 0
           comment_tail = False
 
           for line in lines:
+              # heredoc 내부: 내용 그대로 유지
+              if in_heredoc:
+                  out.append(line)
+                  if line.strip() == heredoc_marker:
+                      in_heredoc = False
+                      heredoc_marker = None
+                  continue
+              # heredoc 시작 감지
+              hm = re.search(r'<<-?\s*([A-Z_]+)\s*$', line)
+              if hm and not in_provider:
+                  in_heredoc = True
+                  heredoc_marker = hm.group(1)
+                  out.append(line)
+                  continue
               if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
                   comment_tail = True
               if comment_tail or re.match(r'^\s*\d+\.\s', line):
@@ -249,11 +265,27 @@ jobs:
           out = []
           in_provider = False
           in_import = False
+          in_heredoc = False
+          heredoc_marker = None
           brace = 0
           import_brace = 0
           comment_tail = False
 
           for line in lines:
+              # heredoc 내부: 내용 그대로 유지
+              if in_heredoc:
+                  out.append(line)
+                  if line.strip() == heredoc_marker:
+                      in_heredoc = False
+                      heredoc_marker = None
+                  continue
+              # heredoc 시작 감지
+              hm = re.search(r'<<-?\s*([A-Z_]+)\s*$', line)
+              if hm and not in_provider:
+                  in_heredoc = True
+                  heredoc_marker = hm.group(1)
+                  out.append(line)
+                  continue
               if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
                   comment_tail = True
               if comment_tail or re.match(r'^\s*\d+\.\s', line):

@@ -81,6 +81,14 @@ COMPUTED_ATTRS = {
     "unique_id",
 }
 
+# Terraform으로 해결 불가능한 체크 (AWS Console/수동 설정만 가능)
+SKIP_CHECKS = {
+    "account_maintain_current_contact_details",
+    "account_maintain_different_contact_details_to_security_billing_and_operations",
+    "account_security_contact_information_is_registered",
+    "account_security_questions_are_registered_in_the_aws_account",
+}
+
 DATA_ONLY_RESOURCE_TYPES = {
     "aws_kms_ciphertext",
     "aws_iam_policy_document",
@@ -124,7 +132,23 @@ def _strip_code_fences(code: str) -> str:
 def _comment_explanations(lines):
     out = []
     in_expl = False
+    in_heredoc = False
+    heredoc_marker = None
     for line in lines:
+        # heredoc 내부에서는 설명 패턴 매칭 건너뜀
+        if in_heredoc:
+            out.append(line)
+            if line.strip() == heredoc_marker:
+                in_heredoc = False
+                heredoc_marker = None
+            continue
+        # heredoc 시작 감지
+        m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)
+        if m:
+            in_heredoc = True
+            heredoc_marker = m.group(1)
+            out.append(line)
+            continue
         if any(pat.match(line) for pat in EXPLANATION_PATTERNS):
             in_expl = True
             out.append("# " + line.strip())
@@ -210,14 +234,30 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
 
     out = []
     in_resource = False
+    in_heredoc = False
+    heredoc_marker = None
     brace = 0
     for line in lines:
+        # heredoc 내부에서는 attr 매칭/brace 카운팅 건너뜀
+        if in_heredoc:
+            out.append(line)
+            if line.strip() == heredoc_marker:
+                in_heredoc = False
+                heredoc_marker = None
+            continue
         if not in_resource and re.match(r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{', line):
             in_resource = True
             brace = _brace_delta(line)
             out.append(line)
             continue
         if in_resource:
+            # heredoc 시작 감지
+            m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)
+            if m:
+                in_heredoc = True
+                heredoc_marker = m.group(1)
+                out.append(line)
+                continue
             if attr_re.match(line):
                 continue
             brace += _brace_delta(line)
@@ -330,7 +370,7 @@ def call_bedrock(prompt):
 
 
 # Bedrock 오류 수정 재시도 횟수 (환경 변수로 조정 가능)
-MAX_RETRIES = int(os.getenv("BEDROCK_MAX_RETRIES", "1"))
+MAX_RETRIES = int(os.getenv("BEDROCK_MAX_RETRIES", "2"))
 
 
 def validate_terraform(tf_code):
@@ -377,7 +417,7 @@ def validate_terraform(tf_code):
             cwd=work, capture_output=True, text=True, timeout=120
         )
         if r1.returncode != 0:
-            return False, f"init failed: {r1.stderr}"
+            return False, f"init failed: {r1.stdout}\n{r1.stderr}"
 
         # validate
         r2 = subprocess.run(
@@ -455,11 +495,17 @@ os.makedirs(args.output_dir, exist_ok=True)
 high_priority = df[df['priority'].isin(['P0', 'P1', 'P2'])]
 print(f"Found {len(high_priority)} high-priority findings (P0/P1/P2) out of {len(df)} total")
 
+# check_id 기준 중복 제거 (같은 체크가 여러 리소스에 반복될 수 있음)
+unique_checks = high_priority.drop_duplicates(subset=['check_id'], keep='first')
+skipped_checks = [c for c in unique_checks['check_id'] if c in SKIP_CHECKS]
+unique_checks = unique_checks[~unique_checks['check_id'].isin(SKIP_CHECKS)]
+print(f"Unique check_ids: {len(unique_checks)} (skipped {len(skipped_checks)} non-terraform checks: {skipped_checks})")
+
 # 생성 결과/통계
 generated = []
 bedrock_failures = 0
 
-for _, row in high_priority.iterrows():
+for _, row in unique_checks.iterrows():
     # check_id를 파일명에 안전하게 사용하도록 문자 치환
     check_id = str(row.get('check_id', 'unknown')).replace('/', '-').replace(':', '-')
     category = categorize_check_id(row.get('check_id', ''))
@@ -500,7 +546,7 @@ for _, row in high_priority.iterrows():
         # 여전히 실패하면 Bedrock 수정 요청 재시도
         if not ok:
             for attempt in range(1, MAX_RETRIES + 1):
-                print(f"  validate FAILED (attempt {attempt}/{MAX_RETRIES}): {err[:200]}")
+                print(f"  validate FAILED (attempt {attempt}/{MAX_RETRIES}): {err[:500]}")
                 fix_response = call_bedrock(make_fix_prompt(original_prompt, tf_code, err))
                 if not fix_response:
                     continue
