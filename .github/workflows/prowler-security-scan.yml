@@ -165,6 +165,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write
 
     steps:
       # 브랜치 생성/푸시를 위해 full clone
@@ -185,6 +186,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      # GitHub OIDC → AWS IAM Role Assume (Bedrock 호출용)
+      - name: Configure AWS credentials (OIDC assume-role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
 
       # IaC 보조 라이브러리 설치
       - name: Install IaC helper libraries
