@@ -37,6 +37,15 @@ jobs:
         with:
           terraform_version: 1.6.0
 
+      - name: Install IaC quality tools (tflint + tfsec)
+        run: |
+          curl -sSL -o /usr/local/bin/tfsec https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64
+          chmod +x /usr/local/bin/tfsec
+          curl -sSL -o /tmp/tflint.zip https://github.com/terraform-linters/tflint/releases/latest/download/tflint_linux_amd64.zip
+          unzip -q /tmp/tflint.zip -d /tmp
+          mv /tmp/tflint /usr/local/bin/tflint
+          tflint --init
+
       - name: Collect changed remediation files
         id: changed
         run: |
@@ -49,6 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           : > /tmp/tfplan.txt
+          : > /tmp/tfgate.txt
           exitcode=0
 
           if [ -z "${{ steps.changed.outputs.files }}" ]; then
@@ -56,8 +66,10 @@ jobs:
           else
             for file in ${{ steps.changed.outputs.files }}; do
               echo "### $file" >> /tmp/tfplan.txt
+              echo "### $file" >> /tmp/tfgate.txt
               if [ ! -f "$file" ]; then
                 echo "(skip missing file: $file)" >> /tmp/tfplan.txt
+                echo "(skip missing file: $file)" >> /tmp/tfgate.txt
                 continue
               fi
               work=$(mktemp -d)
@@ -146,9 +158,19 @@ jobs:
           }
           EOF
 
-              terraform -chdir="$work" init -input=false
-              if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfplan.txt; then
-                echo "SKIP $file: validate failed" | tee -a /tmp/tfplan.txt
+              terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfplan.txt
+              if ! (cd "$work" && tflint -f compact 2>&1 | tee -a /tmp/tfgate.txt); then
+                echo "SKIP $file: tflint failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
+                exitcode=1
+                continue
+              fi
+              if ! tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfgate.txt; then
+                echo "SKIP $file: tfsec failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
+                exitcode=1
+                continue
+              fi
+              if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfplan.txt /tmp/tfgate.txt; then
+                echo "SKIP $file: validate failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
                 exitcode=1
                 continue
               fi
@@ -220,6 +242,13 @@ jobs:
         if: steps.plan.outputs.exitcode != '0'
         run: exit 1
 
+      - name: Upload quality gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation-quality-gates
+          path: /tmp/tfgate.txt
+
   # -------------------------------------------------------
   # Apply: PR 머지 후 실행 → 실제 AWS 적용
   # -------------------------------------------------------
@@ -244,6 +273,15 @@ jobs:
         with:
           terraform_version: 1.6.0
 
+      - name: Install IaC quality tools (tflint + tfsec)
+        run: |
+          curl -sSL -o /usr/local/bin/tfsec https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64
+          chmod +x /usr/local/bin/tfsec
+          curl -sSL -o /tmp/tflint.zip https://github.com/terraform-linters/tflint/releases/latest/download/tflint_linux_amd64.zip
+          unzip -q /tmp/tflint.zip -d /tmp
+          mv /tmp/tflint /usr/local/bin/tflint
+          tflint --init
+
       - name: Collect changed remediation files
         id: changed
         run: |
@@ -253,14 +291,17 @@ jobs:
       - name: Terraform Apply (per file)
         run: |
           set -euo pipefail
+          : > /tmp/tfapply.txt
           if [ -z "${{ steps.changed.outputs.files }}" ]; then
             echo "No remediation files changed."
             exit 0
           fi
 
           for file in ${{ steps.changed.outputs.files }}; do
+            echo "### $file" >> /tmp/tfapply.txt
             if [ ! -f "$file" ]; then
               echo "Skip missing file: $file"
+              echo "Skip missing file: $file" >> /tmp/tfapply.txt
               continue
             fi
             work=$(mktemp -d)
@@ -349,16 +390,24 @@ jobs:
           }
           EOF
 
-            terraform -chdir="$work" init -input=false
-            if ! terraform -chdir="$work" validate 2>&1; then
-              echo "SKIP $file: validate failed"
+            terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfapply.txt
+            if ! (cd "$work" && tflint -f compact 2>&1 | tee -a /tmp/tfapply.txt); then
+              echo "SKIP $file: tflint failed" | tee -a /tmp/tfapply.txt
               continue
             fi
-            if ! terraform -chdir="$work" plan -out=tfplan 2>&1; then
-              echo "SKIP $file: plan failed"
+            if ! tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfapply.txt; then
+              echo "SKIP $file: tfsec failed" | tee -a /tmp/tfapply.txt
               continue
             fi
-            terraform -chdir="$work" apply -auto-approve tfplan
+            if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfapply.txt; then
+              echo "SKIP $file: validate failed" | tee -a /tmp/tfapply.txt
+              continue
+            fi
+            if ! terraform -chdir="$work" plan -out=tfplan 2>&1 | tee -a /tmp/tfapply.txt; then
+              echo "SKIP $file: plan failed" | tee -a /tmp/tfapply.txt
+              continue
+            fi
+            terraform -chdir="$work" apply -auto-approve tfplan 2>&1 | tee -a /tmp/tfapply.txt
           done
 
       - name: Trigger Prowler Re-scan
@@ -366,3 +415,10 @@ jobs:
           gh workflow run prowler-security-scan.yml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload apply logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation-apply-logs
+          path: /tmp/tfapply.txt
