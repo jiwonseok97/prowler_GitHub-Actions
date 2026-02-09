@@ -289,6 +289,7 @@ jobs:
 
             # 기존 remediation 파일 정리 후 해당 카테고리 파일만 복사
             mkdir -p remediation
+            find remediation -type f ! -name '.gitkeep' -delete
             for fname in $CAT_FILES; do
               if [ -f "$TMPGEN/$fname" ]; then
                 cp "$TMPGEN/$fname" "remediation/$fname"
