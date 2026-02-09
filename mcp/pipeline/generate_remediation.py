@@ -518,7 +518,7 @@ def _repair_unclosed_heredoc(lines):
         indent = re.match(r'^(\s*)', start_line).group(1)  # 들여쓰기 추출
         attr = re.match(r'^\s*([A-Za-z0-9_]+)\s*=', start_line).group(1)  # 속성명 추출
         out = out[:start_idx]  # heredoc 시작 이전으로 잘라냄
-        out.append(f'{indent}{attr} = "{}"')  # 안전한 빈 JSON으로 대체
+        out.append(f'{indent}{attr} = "{{}}"')  # 안전한 빈 JSON으로 대체
     return out  # 결과 반환
 
 
