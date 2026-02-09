@@ -486,6 +486,69 @@ def _strip_schema_computed_attrs(lines):
     return out  # 결과 라인 반환
 
 
+
+def _repair_unclosed_heredoc(lines):
+    # 미닫힌 heredoc을 안전하게 대체하여 HCL 파싱 오류 방지
+    out = []  # 출력 라인 버퍼
+    in_heredoc = False  # heredoc 내부 여부
+    heredoc_marker = None  # heredoc 종료 마커
+    start_idx = None  # heredoc 시작 라인 인덱스
+    start_line = None  # heredoc 시작 라인 내용
+    for line in lines:  # 라인 순회
+        if not in_heredoc:  # heredoc 밖이면
+            m = re.match(r'^\s*([A-Za-z0-9_]+)\s*=\s*<<-?\s*([A-Z_]+)\s*$', line)  # heredoc 시작 감지
+            if m:  # heredoc 시작이면
+                in_heredoc = True  # heredoc 진입
+                heredoc_marker = m.group(2)  # 종료 마커 저장
+                start_idx = len(out)  # 시작 위치 기록
+                start_line = line  # 시작 라인 기록
+                out.append(line)  # 원본 라인 보존
+                continue  # 다음 라인으로
+            out.append(line)  # 일반 라인 추가
+            continue  # 다음 라인으로
+        # heredoc 내부 처리
+        out.append(line)  # heredoc 내용 유지
+        if line.strip() == heredoc_marker:  # 종료 마커면
+            in_heredoc = False  # heredoc 종료
+            heredoc_marker = None  # 마커 초기화
+            start_idx = None  # 시작 인덱스 초기화
+            start_line = None  # 시작 라인 초기화
+    # 파일 끝까지 heredoc이 닫히지 않았으면 대체
+    if in_heredoc and start_idx is not None and start_line:  # 미닫힘 상태 확인
+        indent = re.match(r'^(\s*)', start_line).group(1)  # 들여쓰기 추출
+        attr = re.match(r'^\s*([A-Za-z0-9_]+)\s*=', start_line).group(1)  # 속성명 추출
+        out = out[:start_idx]  # heredoc 시작 이전으로 잘라냄
+        out.append(f'{indent}{attr} = "{}"')  # 안전한 빈 JSON으로 대체
+    return out  # 결과 반환
+
+
+def _balance_braces(lines):
+    # 중괄호 개수가 맞지 않으면 보정하여 "Unclosed config" 완화
+    out = []  # 출력 라인 버퍼
+    brace = 0  # 중괄호 카운터
+    in_heredoc = False  # heredoc 내부 여부
+    heredoc_marker = None  # heredoc 종료 마커
+    for line in lines:  # 라인 순회
+        if in_heredoc:  # heredoc 내부면
+            out.append(line)  # 그대로 추가
+            if line.strip() == heredoc_marker:  # 종료 마커면
+                in_heredoc = False  # heredoc 종료
+                heredoc_marker = None  # 마커 초기화
+            continue  # 다음 라인으로
+        m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)  # heredoc 시작 감지
+        if m:  # heredoc 시작이면
+            in_heredoc = True  # heredoc 진입
+            heredoc_marker = m.group(1)  # 종료 마커 저장
+            out.append(line)  # 라인 추가
+            continue  # 다음 라인으로
+        brace += _brace_delta(line)  # 중괄호 카운트 갱신
+        out.append(line)  # 라인 추가
+    # 남은 중괄호만큼 닫기
+    if brace > 0:  # 닫히지 않은 블록이 있으면
+        out.extend(["}"] * brace)  # 부족한 닫는 괄호 추가
+    return out  # 결과 반환
+
+
 def _sanitize_label(name: str, prefix: str | None = None) -> str:
     # 라벨에 허용되지 않는 문자를 '_'로 치환
     label = re.sub(r"[^A-Za-z0-9_]", "_", name or "")
@@ -601,6 +664,10 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
     # resource/data 이름 정규화 및 참조 동기화
     lines = _normalize_block_names(lines)
+    # 미닫힌 heredoc 보정
+    lines = _repair_unclosed_heredoc(lines)
+    # 중괄호 균형 보정
+    lines = _balance_braces(lines)
 
     # 앞/뒤 공백 라인 제거
     while lines and lines[0].strip() == "":
