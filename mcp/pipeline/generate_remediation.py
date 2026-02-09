@@ -407,9 +407,19 @@ def validate_terraform(tf_code):
         with open(os.path.join(work, "main.tf"), "w") as f:
             f.write('\n'.join(filtered) + '\n')
         with open(os.path.join(work, "provider.tf"), "w") as f:
-            f.write('provider "aws" { region = "ap-northeast-2" }\n')
+            f.write(
+                'provider "aws" {\n'
+                '  region = "ap-northeast-2"\n'
+                '}\n'
+            )
         with open(os.path.join(work, "backend.tf"), "w") as f:
-            f.write('terraform { backend "local" { path = "terraform.tfstate" } }\n')
+            f.write(
+                'terraform {\n'
+                '  backend "local" {\n'
+                '    path = "terraform.tfstate"\n'
+                '  }\n'
+                '}\n'
+            )
 
         # init
         r1 = subprocess.run(
