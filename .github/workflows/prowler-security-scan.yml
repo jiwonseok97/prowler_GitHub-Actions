@@ -189,7 +189,7 @@ jobs:
       # IaC 보조 라이브러리 설치
       - name: Install IaC helper libraries
         run: |
-          pip install pyyaml
+          pip install pandas pyyaml boto3
 
       # Terraform CLI 설치 (검증용)
       - name: Setup Terraform CLI
