@@ -6,6 +6,11 @@ on:
     paths:
       - 'remediation/*.tf'
 
+env:
+  TF_BACKEND_BUCKET: prowler-terraform-state-132410971304
+  TF_BACKEND_TABLE: prowler-terraform-locks
+  TF_BACKEND_REGION: ap-northeast-2
+
 permissions:
   contents: read
   id-token: write
@@ -74,6 +79,8 @@ jobs:
               fi
               work=$(mktemp -d)
               cp "$file" "$work/main.tf"
+              base=$(basename "$file" .tf)
+              state_key="remediation/pr-${{ github.event.pull_request.number }}/${base}.tfstate"
 
               python3 - "$work/main.tf" <<'PY'
           import re, sys, pathlib
@@ -219,10 +226,14 @@ jobs:
                 continue
               fi
 
-              cat > "$work/backend.tf" <<'EOF'
+              cat > "$work/backend.tf" <<EOF
           terraform {
-            backend "local" {
-              path = "terraform.tfstate"
+            backend "s3" {
+              bucket         = "${TF_BACKEND_BUCKET}"
+              key            = "${state_key}"
+              region         = "${TF_BACKEND_REGION}"
+              dynamodb_table = "${TF_BACKEND_TABLE}"
+              encrypt        = true
             }
           }
           EOF
@@ -405,6 +416,8 @@ jobs:
             fi
             work=$(mktemp -d)
             cp "$file" "$work/main.tf"
+            base=$(basename "$file" .tf)
+            state_key="remediation/pr-${{ github.event.pull_request.number }}/${base}.tfstate"
 
             python3 - "$work/main.tf" <<'PY'
           import re, sys, pathlib
@@ -551,10 +564,14 @@ jobs:
               continue
             fi
 
-            cat > "$work/backend.tf" <<'EOF'
+            cat > "$work/backend.tf" <<EOF
           terraform {
-            backend "local" {
-              path = "terraform.tfstate"
+            backend "s3" {
+              bucket         = "${TF_BACKEND_BUCKET}"
+              key            = "${state_key}"
+              region         = "${TF_BACKEND_REGION}"
+              dynamodb_table = "${TF_BACKEND_TABLE}"
+              encrypt        = true
             }
           }
           EOF
