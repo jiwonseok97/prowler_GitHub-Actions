@@ -484,9 +484,6 @@ def _strip_schema_computed_attrs(lines):
         out.append(line)  # 일반 라인 유지
     # 처리 결과 반환
     return out  # 결과 라인 반환
-
-
-
 def _repair_unclosed_heredoc(lines):
     # 미닫힌 heredoc을 안전하게 대체하여 HCL 파싱 오류 방지
     out = []  # 출력 라인 버퍼
@@ -546,6 +543,105 @@ def _balance_braces(lines):
     # 남은 중괄호만큼 닫기
     if brace > 0:  # 닫히지 않은 블록이 있으면
         out.extend(["}"] * brace)  # 부족한 닫는 괄호 추가
+    return out  # 결과 반환
+def _balance_parens_brackets(lines):
+    # 괄호/대괄호 균형 보정 (미닫힘 완화)
+    out = []  # 출력 라인 버퍼
+    paren = 0  # 소괄호 카운터
+    bracket = 0  # 대괄호 카운터
+    in_heredoc = False  # heredoc 내부 여부
+    heredoc_marker = None  # heredoc 종료 마커
+    for line in lines:  # 라인 순회
+        if in_heredoc:  # heredoc 내부면
+            out.append(line)  # 그대로 추가
+            if line.strip() == heredoc_marker:  # 종료 마커면
+                in_heredoc = False  # heredoc 종료
+                heredoc_marker = None  # 마커 초기화
+            continue  # 다음 라인으로
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc 시작 감지
+        if m:  # heredoc 시작이면
+            in_heredoc = True  # heredoc 진입
+            heredoc_marker = m.group(1)  # 종료 마커 저장
+            out.append(line)  # 라인 추가
+            continue  # 다음 라인으로
+        safe_line = re.sub(r'"([^"\\]|\\.)*"', '""', line)  # 문자열 내부 괄호 제거
+        paren += safe_line.count("(") - safe_line.count(")")  # 소괄호 균형 갱신
+        bracket += safe_line.count("[") - safe_line.count("]")  # 대괄호 균형 갱신
+        out.append(line)  # 라인 추가
+    if paren > 0:  # 소괄호가 부족하면
+        out.extend([")"] * paren)  # 닫는 소괄호 추가
+    if bracket > 0:  # 대괄호가 부족하면
+        out.extend(["]"] * bracket)  # 닫는 대괄호 추가
+    return out  # 결과 반환
+
+
+def _repair_unbalanced_quotes(lines):
+    # 따옴표 개수가 홀수인 라인을 보정하여 파싱 오류 완화
+    out = []  # 출력 라인 버퍼
+    in_heredoc = False  # heredoc 내부 여부
+    heredoc_marker = None  # heredoc 종료 마커
+    for line in lines:  # 라인 순회
+        if in_heredoc:  # heredoc 내부면
+            out.append(line)  # 그대로 추가
+            if line.strip() == heredoc_marker:  # 종료 마커면
+                in_heredoc = False  # heredoc 종료
+                heredoc_marker = None  # 마커 초기화
+            continue  # 다음 라인으로
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc 시작 감지
+        if m:  # heredoc 시작이면
+            in_heredoc = True  # heredoc 진입
+            heredoc_marker = m.group(1)  # 종료 마커 저장
+            out.append(line)  # 라인 추가
+            continue  # 다음 라인으로
+        # 따옴표 개수 계산 (간단 휴리스틱)
+        quote_count = line.count('"')  # 이중 따옴표 개수
+        if quote_count % 2 == 1:  # 홀수면 미닫힘으로 판단
+            out.append(line + '"')  # 닫는 따옴표 추가
+            continue  # 다음 라인으로
+        out.append(line)  # 정상 라인 유지
+    return out  # 결과 반환
+
+
+def _strip_backtick_lines(lines):
+    # 백틱(`)이 포함된 라인을 주석 처리하여 HCL 오류 방지
+    out = []  # 출력 라인 버퍼
+    in_heredoc = False  # heredoc 내부 여부
+    heredoc_marker = None  # heredoc 종료 마커
+    for line in lines:  # 라인 순회
+        if in_heredoc:  # heredoc 내부면
+            out.append(line)  # 그대로 추가
+            if line.strip() == heredoc_marker:  # 종료 마커면
+                in_heredoc = False  # heredoc 종료
+                heredoc_marker = None  # 마커 초기화
+            continue  # 다음 라인으로
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc 시작 감지
+        if m:  # heredoc 시작이면
+            in_heredoc = True  # heredoc 진입
+            heredoc_marker = m.group(1)  # 종료 마커 저장
+            out.append(line)  # 라인 추가
+            continue  # 다음 라인으로
+        if '`' in line and not line.lstrip().startswith("#"):  # 백틱 포함 + 주석 아님
+            out.append("# " + line)  # 주석 처리
+            continue  # 다음 라인으로
+        out.append(line)  # 정상 라인 유지
+    return out  # 결과 반환
+
+
+def _fix_log_group_name_arn(lines):
+    # log_group_name에 ARN이 들어간 경우 로그 그룹 이름으로 치환
+    out = []  # 출력 라인 버퍼
+    for line in lines:  # 라인 순회
+        m = re.match(r'^\s*log_group_name\s*=\s*"([^"]+)"\s*$', line)  # log_group_name 라인 감지
+        if m:  # 매칭되면
+            value = m.group(1)  # 값 추출
+            if value.startswith("arn:aws:logs:") and ":log-group:" in value:  # 로그 그룹 ARN이면
+                name = value.split(":log-group:", 1)[1]  # log-group 이후 부분 추출
+                name = name.split(":*")[0]  # 와일드카드 접미 제거
+                name = name.strip()  # 공백 제거
+                indent = re.match(r'^(\s*)', line).group(1)  # 들여쓰기 추출
+                out.append(f'{indent}log_group_name = "{name}"')  # 이름으로 치환
+                continue  # 다음 라인으로
+        out.append(line)  # 변경 없음
     return out  # 결과 반환
 
 
@@ -666,6 +762,14 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _normalize_block_names(lines)
     # 미닫힌 heredoc 보정
     lines = _repair_unclosed_heredoc(lines)
+    # 백틱 포함 라인 주석 처리
+    lines = _strip_backtick_lines(lines)
+    # ARN 형태 log_group_name 보정
+    lines = _fix_log_group_name_arn(lines)
+    # 미닫힌 따옴표 보정
+    lines = _repair_unbalanced_quotes(lines)
+    # 괄호/대괄호 균형 보정
+    lines = _balance_parens_brackets(lines)
     # 중괄호 균형 보정
     lines = _balance_braces(lines)
 
@@ -687,10 +791,26 @@ def apply_error_fixes(tf_code, error_msg):
             extra_attrs.add(m)
     if extra_attrs:
         return sanitize_tf_code(tf_code, extra_unconfig_attrs=extra_attrs)
+    # Unsupported argument 오류일 경우 해당 인자 제거
+    m = re.search(r"Error: Unsupported argument.*?\n.*?:\s+([A-Za-z0-9_]+)\s*=", error_msg, flags=re.DOTALL)
+    if m:
+        bad_attr = m.group(1)
+        lines = tf_code.splitlines()
+        filtered = []
+        for line in lines:
+            if re.match(rf'^\s*{re.escape(bad_attr)}\s*=', line):
+                continue
+            filtered.append(line)
+        return sanitize_tf_code("\n".join(filtered))
+    # log_group_name에 ARN이 들어간 경우 보정 시도
+    if "log_group_name" in error_msg and "arn:aws:logs" in error_msg:
+        return sanitize_tf_code(tf_code)
     if any(
         key in error_msg
         for key in ["Unsupported block type", "Invalid block definition", "Invalid character"]
     ):
+        return sanitize_tf_code(tf_code)
+    if "Unclosed config" in error_msg:
         return sanitize_tf_code(tf_code)
     return tf_code
 
@@ -765,71 +885,68 @@ MAX_RETRIES = int(os.getenv("BEDROCK_MAX_RETRIES", "2"))
 def validate_terraform(tf_code):
     """임시 디렉터리에 코드를 작성하고 terraform init/validate로 검증.
 
-    - provider 블록은 제거하고, 고정된 provider/backend를 별도 파일로 주입
-    - init/validate 실패 시 에러 메시지 반환
+    핵심:
+    - main.tf 하나로 '조립'하지 않는다 (중첩 블록 사고 방지)
+    - 공통 data/provier/terraform 블록은 고정 파일로 분리
+    - tf_code는 단일 파일(candidate.tf)로만 넣고 validate
     """
     import tempfile, subprocess, shutil
+
     work = tempfile.mkdtemp(prefix="tf-validate-")
     try:
-        # main.tf 작성 (provider 블록 제거 + provider 별칭 사용 제거)
-        import re as _re
-        lines = tf_code.split('\n')
-        filtered = []
-        in_prov = False
-        brace = 0
-        for line in lines:
-            if not in_prov and _re.match(r'^\s*provider\s+"aws"\s*\{', line):
-                in_prov = True
-                brace += line.count('{') - line.count('}')
-                if brace <= 0:
-                    in_prov = False
-                continue
-            if in_prov:
-                brace += line.count('{') - line.count('}')
-                if brace <= 0:
-                    in_prov = False
-                continue
-            # provider = aws.xxx 형태의 alias 지정 제거
-            if _re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
-                continue
-            filtered.append(line)
-        with open(os.path.join(work, "main.tf"), "w") as f:
-            f.write('\n'.join(filtered) + '\n')
-        with open(os.path.join(work, "provider.tf"), "w") as f:
+        # 1) candidate.tf : 생성된 코드(이미 sanitize된 결과)
+        with open(os.path.join(work, "candidate.tf"), "w", encoding="utf-8") as f:
+            f.write(tf_code.strip() + "\n")
+
+        # 2) 00-data.tf : 공통 data는 '최상위 블록'으로만 제공 (중첩 금지)
+        with open(os.path.join(work, "00-data.tf"), "w", encoding="utf-8") as f:
+            f.write(
+                'data "aws_caller_identity" "current" {}\n'
+                'data "aws_region" "current" {}\n'
+                'data "aws_partition" "current" {}\n'
+            )
+
+        # 3) providers.tf : provider는 한 번만
+        with open(os.path.join(work, "providers.tf"), "w", encoding="utf-8") as f:
             f.write(
                 'provider "aws" {\n'
                 '  region = "ap-northeast-2"\n'
                 '}\n'
             )
-        with open(os.path.join(work, "backend.tf"), "w") as f:
+
+        # 4) versions.tf : required_providers 고정 (가드레일)
+        with open(os.path.join(work, "versions.tf"), "w", encoding="utf-8") as f:
             f.write(
                 'terraform {\n'
-                '  backend "local" {\n'
-                '    path = "terraform.tfstate"\n'
+                '  required_providers {\n'
+                '    aws = {\n'
+                '      source = "hashicorp/aws"\n'
+                '    }\n'
                 '  }\n'
                 '}\n'
             )
 
-        # init
+        # 5) init (backend 불필요: -backend=false)
         r1 = subprocess.run(
-            ["terraform", "init", "-input=false", "-no-color"],
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
             cwd=work, capture_output=True, text=True, timeout=120
         )
         if r1.returncode != 0:
             return False, f"init failed: {r1.stdout}\n{r1.stderr}"
 
-        # validate
+        # 6) validate
         r2 = subprocess.run(
             ["terraform", "validate", "-no-color"],
             cwd=work, capture_output=True, text=True, timeout=60
         )
         if r2.returncode != 0:
-            return False, r2.stdout + r2.stderr
+            return False, (r2.stdout + "\n" + r2.stderr).strip()
         return True, ""
     except Exception as e:
         return False, str(e)
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
 
 
 def make_fix_prompt(original_prompt, tf_code, error_msg):
@@ -888,11 +1005,11 @@ Recommendation: {row.get('recommendation_text', '')}
 Requirements:
 - Output ONLY valid Terraform HCL code, nothing else
 - No markdown, no explanations, no code fences, no text before or after the code
-- Always create NEW resources to remediate the finding. Do NOT try to modify or import existing resources
+- Prefer modifying existing resources referenced by the finding; create new resources only when required
 - NEVER use "import" blocks
 - NEVER set computed/read-only attributes (arn, id, key_id, owner_id, creation_date, unique_id) in resource blocks
-- NEVER reference existing resources by hardcoded ARN or ID in resource blocks
-- Use "data" sources ONLY when you need to look up existing resource info (e.g., data "aws_caller_identity")
+- Avoid hardcoded ARNs/IDs in resource blocks; use data sources to look up existing resources when needed
+- Use "data" sources to reference existing resource info (e.g., data "aws_caller_identity")
 - Include a single provider "aws" block for ap-northeast-2 region WITHOUT alias
 - NEVER use provider aliases (no "alias" in provider, no "provider = aws.xxx" in resources)
 - For IAM policies, use jsonencode() instead of heredoc (<<EOF) to avoid string termination issues
@@ -1021,3 +1138,5 @@ with open(os.path.join(args.output_dir, 'manifest.json'), 'w') as f:
 print(f"Total generated: {len(generated)} remediation files")
 if bedrock_failures > 0:
     print(f"WARNING: Bedrock failed for {bedrock_failures}/{len(high_priority)} findings")
+
+

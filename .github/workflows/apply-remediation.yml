@@ -97,7 +97,7 @@ jobs:
                       heredoc_marker = None
                   continue
               # heredoc 시작 감지
-              hm = re.search(r'<<-?\s*([A-Z_]+)\s*$', line)
+              hm = re.search(r'<<-?\s*([A-Za-z0-9_]+)\s*$', line)
               if hm and not in_provider:
                   in_heredoc = True
                   heredoc_marker = hm.group(1)
@@ -329,7 +329,7 @@ jobs:
                       heredoc_marker = None
                   continue
               # heredoc 시작 감지
-              hm = re.search(r'<<-?\s*([A-Z_]+)\s*$', line)
+              hm = re.search(r'<<-?\s*([A-Za-z0-9_]+)\s*$', line)
               if hm and not in_provider:
                   in_heredoc = True
                   heredoc_marker = hm.group(1)
