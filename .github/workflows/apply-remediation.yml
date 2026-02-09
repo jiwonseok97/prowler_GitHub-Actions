@@ -212,6 +212,13 @@ jobs:
           path.write_text("\n".join(out) + "\n")
           PY
 
+              # 리소스 블록이 없으면 실제 적용 불가 → 실패 처리
+              if ! grep -Eq '^\s*resource\s+"' "$work/main.tf"; then
+                echo "SKIP $file: no resource blocks after cleanup" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
+                exitcode=1
+                continue
+              fi
+
               cat > "$work/backend.tf" <<'EOF'
           terraform {
             backend "local" {
@@ -380,6 +387,9 @@ jobs:
         run: |
           set -euo pipefail
           : > /tmp/tfapply.txt
+          applied=0
+          skipped=0
+          failed=0
           if [ -z "${{ steps.changed.outputs.files }}" ]; then
             echo "No remediation files changed."
             exit 0
@@ -390,6 +400,7 @@ jobs:
             if [ ! -f "$file" ]; then
               echo "Skip missing file: $file"
               echo "Skip missing file: $file" >> /tmp/tfapply.txt
+              skipped=$((skipped+1))
               continue
             fi
             work=$(mktemp -d)
@@ -532,6 +543,14 @@ jobs:
           path.write_text("\n".join(out) + "\n")
           PY
 
+            # 리소스 블록이 없으면 실제 적용 불가 → 실패 처리
+            if ! grep -Eq '^\s*resource\s+"' "$work/main.tf"; then
+              echo "SKIP $file: no resource blocks after cleanup" | tee -a /tmp/tfapply.txt
+              skipped=$((skipped+1))
+              failed=1
+              continue
+            fi
+
             cat > "$work/backend.tf" <<'EOF'
           terraform {
             backend "local" {
@@ -569,22 +588,41 @@ jobs:
             terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfapply.txt
             if ! (cd "$work" && tflint -f compact 2>&1 | tee -a /tmp/tfapply.txt); then
               echo "SKIP $file: tflint failed" | tee -a /tmp/tfapply.txt
+              failed=1
               continue
             fi
             if ! tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfapply.txt; then
               echo "SKIP $file: tfsec failed" | tee -a /tmp/tfapply.txt
+              failed=1
               continue
             fi
             if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfapply.txt; then
               echo "SKIP $file: validate failed" | tee -a /tmp/tfapply.txt
+              failed=1
               continue
             fi
             if ! terraform -chdir="$work" plan -out=tfplan 2>&1 | tee -a /tmp/tfapply.txt; then
               echo "SKIP $file: plan failed" | tee -a /tmp/tfapply.txt
+              failed=1
               continue
             fi
-            terraform -chdir="$work" apply -auto-approve tfplan 2>&1 | tee -a /tmp/tfapply.txt
+            if ! terraform -chdir="$work" apply -auto-approve tfplan 2>&1 | tee -a /tmp/tfapply.txt; then
+              echo "SKIP $file: apply failed" | tee -a /tmp/tfapply.txt
+              failed=1
+              continue
+            fi
+            applied=$((applied+1))
           done
+
+          echo "applied=$applied skipped=$skipped failed=$failed" >> /tmp/tfapply.txt
+          if [ "$applied" -eq 0 ]; then
+            echo "No resources applied. Failing job." | tee -a /tmp/tfapply.txt
+            exit 1
+          fi
+          if [ "$failed" -ne 0 ]; then
+            echo "One or more files failed. Failing job." | tee -a /tmp/tfapply.txt
+            exit 1
+          fi
 
       - name: Trigger Prowler Re-scan
         run: |
