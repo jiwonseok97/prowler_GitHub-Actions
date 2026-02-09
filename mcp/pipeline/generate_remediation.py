@@ -57,6 +57,7 @@ MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", "ap-northeast-2")
 MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))  # Terraform 코드 최대 길이
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"
+# IaC 스니펫을 Bedrock보다 우선 적용할지 여부
 PREFER_IAC_SNIPPET = os.getenv("PREFER_IAC_SNIPPET", "true").lower() == "true"
 
 # -----------------------------------------------------------------------------
@@ -186,22 +187,39 @@ def _remove_import_blocks(lines):
 
 
 def _remove_terraform_blocks(lines):
+    # 결과를 담을 리스트
     out = []
+    # terraform 블록 내부 여부
     in_tf = False
+    # 중괄호 카운터
     brace = 0
+    # 모든 라인 순회
     for line in lines:
+        # terraform 블록 시작 감지
         if not in_tf and re.match(r"^\s*terraform\s*\{", line):
+            # 블록 진입
             in_tf = True
+            # 중괄호 카운트 갱신
             brace += _brace_delta(line)
+            # 한 줄 블록이면 즉시 종료
             if brace <= 0:
+                # 블록 종료
                 in_tf = False
+            # terraform 블록 라인은 제거
             continue
+        # terraform 블록 내부 처리
         if in_tf:
+            # 중괄호 카운트 갱신
             brace += _brace_delta(line)
+            # 블록 종료 조건
             if brace <= 0:
+                # 블록 종료
                 in_tf = False
+            # 블록 내부 라인은 제거
             continue
+        # 일반 라인은 유지
         out.append(line)
+    # 결과 반환
     return out
 
 
@@ -291,34 +309,47 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
 
 
 def _sanitize_label(name: str, prefix: str | None = None) -> str:
+    # 라벨에 허용되지 않는 문자를 '_'로 치환
     label = re.sub(r"[^A-Za-z0-9_]", "_", name or "")
+    # 연속된 '_'를 하나로 축소
     label = re.sub(r"_+", "_", label).strip("_")
+    # 빈 라벨이면 기본값 사용
     if not label:
         label = "resource"
+    # 숫자로 시작하면 접두어 추가
     if re.match(r"^\d", label):
         label = f"r_{label}"
+    # prefix가 있고 이미 없으면 prefix 추가
     if prefix and not label.startswith(prefix):
         label = f"{prefix}{label}"
+    # 정규화된 라벨 반환
     return label
 
 
 def _replace_refs(lines, mapping):
+    # 결과 라인 저장
     out = []
+    # heredoc 내부 여부
     in_heredoc = False
+    # heredoc 종료 마커
     heredoc_marker = None
+    # 라인 순회
     for line in lines:
+        # heredoc 내부는 치환하지 않음
         if in_heredoc:
             out.append(line)
             if line.strip() == heredoc_marker:
                 in_heredoc = False
                 heredoc_marker = None
             continue
+        # heredoc 시작 감지
         m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)
         if m:
             in_heredoc = True
             heredoc_marker = m.group(1)
             out.append(line)
             continue
+        # 매핑된 참조 치환
         for kind, rtype, old, new in mapping:
             if old == new:
                 continue
@@ -334,28 +365,45 @@ def _replace_refs(lines, mapping):
                 line,
             )
         out.append(line)
+    # 치환 결과 반환
     return out
 
 
 def _normalize_block_names(lines):
+    # 변경 매핑 저장
     mapping = []
+    # 이름 중복 카운트
     counts = {}
+    # 결과 라인 저장
     out = []
+    # 라인 순회
     for line in lines:
+        # resource/data 블록 선언 감지
         m = re.match(r'^(\s*)(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
         if m:
+            # 캡처된 정보 추출
             indent, kind, rtype, name = m.groups()
+            # resource는 remediation_ 접두어 강제
             prefix = "remediation_" if kind == "resource" else None
+            # 라벨 정규화
             base_name = _sanitize_label(name, prefix=prefix)
+            # 중복 판단 키
             key = (kind, rtype, base_name)
+            # 현재 중복 인덱스
             idx = counts.get(key, 0)
+            # 중복이면 suffix 부여
             new_name = base_name if idx == 0 else f"{base_name}_{idx}"
+            # 카운트 갱신
             counts[key] = idx + 1
+            # 참조 치환을 위한 매핑 저장
             mapping.append((kind, rtype, name, new_name))
+            # 라벨이 바뀐 블록 선언 라인 생성
             line = f'{indent}{kind} "{rtype}" "{new_name}" {{'
         out.append(line)
+    # 매핑이 없으면 그대로 반환
     if not mapping:
         return out
+    # 참조 치환 적용
     return _replace_refs(out, mapping)
 
 
@@ -366,10 +414,12 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = code.splitlines()
     lines = _comment_explanations(lines)
     lines = _remove_import_blocks(lines)
+    # terraform { } 블록 제거
     lines = _remove_terraform_blocks(lines)
     lines = _convert_data_only_resources(lines)
     lines = _remove_provider_blocks(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
+    # resource/data 이름 정규화 및 참조 동기화
     lines = _normalize_block_names(lines)
 
     # 앞/뒤 공백 라인 제거
@@ -612,26 +662,37 @@ for _, row in unique_checks.iterrows():
     check_id = str(row.get('check_id', 'unknown')).replace('/', '-').replace(':', '-')
     category = categorize_check_id(row.get('check_id', ''))
 
+    # 생성용 프롬프트 구성
     original_prompt = make_remediation_prompt(row)
 
     # 템플릿(IaC 스니펫) 우선 적용 옵션
+    # 초기 코드 결과는 없음
     tf_code = None
+    # 기본 소스는 bedrock으로 표시
     source = "bedrock"
+    # 템플릿 우선 옵션이 켜져 있으면 스니펫부터 시도
     if PREFER_IAC_SNIPPET:
+        # 체크 ID에 매핑된 스니펫 로드
         tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')))
+        # 스니펫이 있으면 소스를 갱신하고 로그 출력
         if tf_code:
             source = "iac_snippet"
             print(f"IaC snippet used for: {check_id}")
 
     # IaC 스니펫이 없거나 비활성인 경우 Bedrock 사용
     if not tf_code:
+        # Bedrock으로 코드 생성 시도
         tf_code = call_bedrock(original_prompt)
+        # 소스는 bedrock으로 유지
         source = "bedrock"
 
     # Bedrock 실패 시 IaC 스니펫으로 대체
     if not tf_code:
+        # Bedrock 실패 카운트 증가
         bedrock_failures += 1
+        # 스니펫으로 대체 시도
         tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')))
+        # 스니펫이 있으면 소스 갱신 및 로그 출력
         if tf_code:
             source = "iac_snippet"
             print(f"Fallback IaC snippet used for: {check_id}")
