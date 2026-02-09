@@ -201,6 +201,8 @@ jobs:
       - name: Generate Terraform remediation
         run: |
           mkdir -p remediation
+          # 이번 실행에서 생성된 파일만 유지 (이전 결과 정리)
+          find remediation -type f ! -name '.gitkeep' -delete
 
           if [ -f mcp/output/findings-scored-ai.csv ]; then
             python mcp/pipeline/generate_remediation.py \
