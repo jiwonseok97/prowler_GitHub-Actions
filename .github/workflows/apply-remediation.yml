@@ -233,6 +233,19 @@ jobs:
           data "aws_partition" "current" {}
           EOF
 
+              # tflint: scaffolding 파일 관련 경고 비활성화
+              cat > "$work/.tflint.hcl" <<'EOF'
+          rule "terraform_unused_declarations" {
+            enabled = false
+          }
+          rule "terraform_required_providers" {
+            enabled = false
+          }
+          rule "terraform_required_version" {
+            enabled = false
+          }
+          EOF
+
               terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfplan.txt
               if ! (cd "$work" && tflint -f compact 2>&1 | tee -a /tmp/tfgate.txt); then
                 echo "SKIP $file: tflint failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
@@ -538,6 +551,19 @@ jobs:
           data "aws_caller_identity" "current" {}
           data "aws_region" "current" {}
           data "aws_partition" "current" {}
+          EOF
+
+            # tflint: scaffolding 파일 관련 경고 비활성화
+            cat > "$work/.tflint.hcl" <<'EOF'
+          rule "terraform_unused_declarations" {
+            enabled = false
+          }
+          rule "terraform_required_providers" {
+            enabled = false
+          }
+          rule "terraform_required_version" {
+            enabled = false
+          }
           EOF
 
             terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfapply.txt
