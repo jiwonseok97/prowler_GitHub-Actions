@@ -57,6 +57,7 @@ MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", "ap-northeast-2")
 MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))  # Terraform 코드 최대 길이
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"
+PREFER_IAC_SNIPPET = os.getenv("PREFER_IAC_SNIPPET", "true").lower() == "true"
 
 # -----------------------------------------------------------------------------
 # IaC 스니펫 매핑 로드 (Bedrock 실패 시 fallback)
@@ -184,6 +185,26 @@ def _remove_import_blocks(lines):
     return out
 
 
+def _remove_terraform_blocks(lines):
+    out = []
+    in_tf = False
+    brace = 0
+    for line in lines:
+        if not in_tf and re.match(r"^\s*terraform\s*\{", line):
+            in_tf = True
+            brace += _brace_delta(line)
+            if brace <= 0:
+                in_tf = False
+            continue
+        if in_tf:
+            brace += _brace_delta(line)
+            if brace <= 0:
+                in_tf = False
+            continue
+        out.append(line)
+    return out
+
+
 def _remove_provider_blocks(lines):
     out = []
     in_prov = False
@@ -269,6 +290,75 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
     return out
 
 
+def _sanitize_label(name: str, prefix: str | None = None) -> str:
+    label = re.sub(r"[^A-Za-z0-9_]", "_", name or "")
+    label = re.sub(r"_+", "_", label).strip("_")
+    if not label:
+        label = "resource"
+    if re.match(r"^\d", label):
+        label = f"r_{label}"
+    if prefix and not label.startswith(prefix):
+        label = f"{prefix}{label}"
+    return label
+
+
+def _replace_refs(lines, mapping):
+    out = []
+    in_heredoc = False
+    heredoc_marker = None
+    for line in lines:
+        if in_heredoc:
+            out.append(line)
+            if line.strip() == heredoc_marker:
+                in_heredoc = False
+                heredoc_marker = None
+            continue
+        m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)
+        if m:
+            in_heredoc = True
+            heredoc_marker = m.group(1)
+            out.append(line)
+            continue
+        for kind, rtype, old, new in mapping:
+            if old == new:
+                continue
+            if kind == "data":
+                line = re.sub(
+                    rf"\bdata\.{re.escape(rtype)}\.{re.escape(old)}\b",
+                    f"data.{rtype}.{new}",
+                    line,
+                )
+            line = re.sub(
+                rf"\b{re.escape(rtype)}\.{re.escape(old)}\b",
+                f"{rtype}.{new}",
+                line,
+            )
+        out.append(line)
+    return out
+
+
+def _normalize_block_names(lines):
+    mapping = []
+    counts = {}
+    out = []
+    for line in lines:
+        m = re.match(r'^(\s*)(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+        if m:
+            indent, kind, rtype, name = m.groups()
+            prefix = "remediation_" if kind == "resource" else None
+            base_name = _sanitize_label(name, prefix=prefix)
+            key = (kind, rtype, base_name)
+            idx = counts.get(key, 0)
+            new_name = base_name if idx == 0 else f"{base_name}_{idx}"
+            counts[key] = idx + 1
+            mapping.append((kind, rtype, name, new_name))
+            line = f'{indent}{kind} "{rtype}" "{new_name}" {{'
+        out.append(line)
+    if not mapping:
+        return out
+    return _replace_refs(out, mapping)
+
+
 def sanitize_tf_code(code, extra_unconfig_attrs=None):
     if not code:
         return ""
@@ -276,9 +366,11 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = code.splitlines()
     lines = _comment_explanations(lines)
     lines = _remove_import_blocks(lines)
+    lines = _remove_terraform_blocks(lines)
     lines = _convert_data_only_resources(lines)
     lines = _remove_provider_blocks(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
+    lines = _normalize_block_names(lines)
 
     # 앞/뒤 공백 라인 제거
     while lines and lines[0].strip() == "":
@@ -520,17 +612,28 @@ for _, row in unique_checks.iterrows():
     check_id = str(row.get('check_id', 'unknown')).replace('/', '-').replace(':', '-')
     category = categorize_check_id(row.get('check_id', ''))
 
-    # 1차: Bedrock으로 Terraform 코드 생성 시도
     original_prompt = make_remediation_prompt(row)
-    tf_code = call_bedrock(original_prompt)
-    source = "bedrock"
 
-    # 2차: Bedrock 실패 시 IaC 스니펫으로 대체
+    # 템플릿(IaC 스니펫) 우선 적용 옵션
+    tf_code = None
+    source = "bedrock"
+    if PREFER_IAC_SNIPPET:
+        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')))
+        if tf_code:
+            source = "iac_snippet"
+            print(f"IaC snippet used for: {check_id}")
+
+    # IaC 스니펫이 없거나 비활성인 경우 Bedrock 사용
+    if not tf_code:
+        tf_code = call_bedrock(original_prompt)
+        source = "bedrock"
+
+    # Bedrock 실패 시 IaC 스니펫으로 대체
     if not tf_code:
         bedrock_failures += 1
         tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')))
-        source = "iac_snippet"
         if tf_code:
+            source = "iac_snippet"
             print(f"Fallback IaC snippet used for: {check_id}")
 
     if tf_code:
