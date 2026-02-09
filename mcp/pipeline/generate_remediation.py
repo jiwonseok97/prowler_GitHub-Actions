@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import re
+import shutil  # terraform 바이너리 존재 여부 확인용
 import pandas as pd
 
 # 선택적 의존성: 없는 경우에도 스크립트가 동작하도록 안전하게 처리
@@ -59,6 +60,12 @@ MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))  # Terraform 코드 �
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"
 # IaC 스니펫을 Bedrock보다 우선 적용할지 여부
 PREFER_IAC_SNIPPET = os.getenv("PREFER_IAC_SNIPPET", "true").lower() == "true"
+# provider 스키마 기반 가드레일 사용 여부
+USE_SCHEMA_GUARDRAIL = os.getenv("USE_SCHEMA_GUARDRAIL", "true").lower() == "true"
+# IaC 스니펫 기본 경로
+IAC_SNIPPET_DIR = os.getenv("IAC_SNIPPET_DIR", "iac/terraform/snippets")
+# 카테고리 스니펫 fallback 사용 여부
+USE_CATEGORY_SNIPPET = os.getenv("USE_CATEGORY_SNIPPET", "true").lower() == "true"
 
 # -----------------------------------------------------------------------------
 # IaC 스니펫 매핑 로드 (Bedrock 실패 시 fallback)
@@ -116,6 +123,99 @@ HCL_START_RE = re.compile(
     r"^\s*(#|//|resource\b|data\b|provider\b|variable\b|locals\b|terraform\b|"
     r"output\b|module\b|import\b|\})"
 )
+
+# provider 스키마에서 추출한 computed-only 속성 맵
+SCHEMA_COMPUTED_ATTRS = {}
+
+
+def _terraform_cli_available():
+    # Terraform CLI가 PATH에 있는지 확인
+    return shutil.which("terraform") is not None  # PATH에 terraform이 있으면 True
+
+
+def _load_schema_computed_attrs():
+    # 스키마 가드레일이 비활성화면 빈 맵 반환
+    if not USE_SCHEMA_GUARDRAIL:  # 가드레일 비활성 체크
+        return {}  # 비활성화 시 빈 맵 반환
+    # 이미 로드된 캐시가 있으면 그대로 반환
+    if SCHEMA_COMPUTED_ATTRS:  # 캐시가 있으면 재사용
+        return SCHEMA_COMPUTED_ATTRS  # 캐시된 값 반환
+    # Terraform CLI가 없으면 스키마 로딩 불가
+    if not _terraform_cli_available():  # terraform 바이너리 존재 여부 확인
+        return {}  # 실행 불가 시 빈 맵 반환
+    # 표준 라이브러리 로컬 import (필요 시에만)
+    import tempfile  # 임시 디렉터리 생성용
+    import subprocess  # terraform 명령 실행용
+    # 임시 작업 디렉터리 생성
+    work = tempfile.mkdtemp(prefix="tf-schema-")  # 스키마 조회용 임시 폴더
+    try:
+        # 스키마 로딩용 최소 main.tf 작성
+        with open(os.path.join(work, "main.tf"), "w") as f:  # main.tf 생성
+            # required_providers 블록 정의
+            f.write('terraform {\n')  # terraform 블록 시작
+            # aws 프로바이더 소스 지정
+            f.write('  required_providers {\n')  # required_providers 블록 시작
+            # aws provider 핀 고정 (소스만 지정)
+            f.write('    aws = {\n')  # aws 프로바이더 블록 시작
+            # registry 소스 지정
+            f.write('      source = "hashicorp/aws"\n')  # aws 소스 지정
+            # 블록 종료
+            f.write('    }\n')  # aws 프로바이더 블록 종료
+            # required_providers 종료
+            f.write('  }\n')  # required_providers 종료
+            # terraform 블록 종료
+            f.write('}\n')  # terraform 블록 종료
+            # provider 블록 추가
+            f.write('provider "aws" {\n')  # provider 블록 시작
+            # 리전 고정
+            f.write('  region = "ap-northeast-2"\n')  # 리전 설정
+            # provider 블록 종료
+            f.write('}\n')  # provider 블록 종료
+        # terraform init 실행 (backend 불필요)
+        r1 = subprocess.run(  # init 실행
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],  # init 옵션
+            cwd=work, capture_output=True, text=True, timeout=120  # 실행 경로/옵션
+        )
+        # init 실패 시 빈 결과 반환
+        if r1.returncode != 0:  # init 실패 체크
+            return {}  # 실패 시 빈 맵 반환
+        # provider schema JSON 출력
+        r2 = subprocess.run(  # schema 출력 실행
+            ["terraform", "providers", "schema", "-json"],  # schema 출력 옵션
+            cwd=work, capture_output=True, text=True, timeout=120  # 실행 경로/옵션
+        )
+        # schema 조회 실패 시 빈 결과 반환
+        if r2.returncode != 0:  # schema 실행 실패 체크
+            return {}  # 실패 시 빈 맵 반환
+        # JSON 파싱
+        schema = json.loads(r2.stdout)  # schema JSON 파싱
+        # aws provider 스키마 위치 찾기
+        provider = schema.get("provider_schemas", {}).get(  # provider 위치 탐색
+            "registry.terraform.io/hashicorp/aws"  # aws provider 키
+        )
+        # provider 스키마 없으면 종료
+        if not provider:  # provider 스키마 존재 체크
+            return {}  # 없으면 빈 맵 반환
+        # 리소스 스키마 추출
+        resource_schemas = provider.get("resource_schemas", {})  # 리소스 스키마 목록
+        # 각 리소스별 computed-only 속성 추출
+        for rtype, rschema in resource_schemas.items():  # 리소스 스키마 순회
+            # 최상위 attribute 목록
+            attrs = rschema.get("block", {}).get("attributes", {})  # 속성 맵 추출
+            # computed-only 속성 필터링
+            computed = {  # computed-only 속성 집합
+                name  # 속성 이름
+                for name, meta in attrs.items()  # 속성 메타 순회
+                if meta.get("computed") and not meta.get("optional") and not meta.get("required")  # computed-only 조건
+            }
+            # computed-only 속성이 있으면 맵에 저장
+            if computed:  # computed-only 존재 여부
+                SCHEMA_COMPUTED_ATTRS[rtype] = computed  # 리소스 타입별 저장
+        # 캐시된 맵 반환
+        return SCHEMA_COMPUTED_ATTRS  # computed-only 맵 반환
+    finally:
+        # 임시 디렉터리 삭제
+        shutil.rmtree(work, ignore_errors=True)  # 임시 폴더 정리
 
 
 def _brace_delta(line: str) -> int:
@@ -308,6 +408,84 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
     return out
 
 
+def _strip_schema_computed_attrs(lines):
+    # 스키마 기반 computed-only 속성 제거
+    schema_map = _load_schema_computed_attrs()  # computed-only 맵 로드
+    # 스키마가 없으면 그대로 반환
+    if not schema_map:  # 스키마 맵이 비어있으면
+        return lines  # 원본 라인 반환
+    # 결과 라인 리스트
+    out = []  # 출력 라인 버퍼
+    # resource 블록 내부 여부
+    in_resource = False  # resource 블록 상태
+    # 현재 resource 타입
+    current_type = None  # 현재 리소스 타입
+    # 현재 resource의 computed-only 속성
+    current_attrs = set()  # 현재 리소스 속성 집합
+    # 현재 resource의 속성 매칭 정규식
+    current_re = None  # 속성 제거용 정규식
+    # heredoc 내부 여부
+    in_heredoc = False  # heredoc 상태
+    # heredoc 종료 마커
+    heredoc_marker = None  # heredoc 종료 라벨
+    # 중괄호 카운트
+    brace = 0  # 블록 깊이 카운터
+    # 라인 순회
+    for line in lines:  # 입력 라인 반복
+        # heredoc 내부는 그대로 유지
+        if in_heredoc:  # heredoc 내부면
+            out.append(line)  # 라인 그대로 유지
+            if line.strip() == heredoc_marker:  # 종료 마커 체크
+                in_heredoc = False  # heredoc 종료
+                heredoc_marker = None  # 마커 초기화
+            continue  # 다음 라인으로
+        # heredoc 시작 감지
+        m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)  # heredoc 시작 패턴
+        if m:  # heredoc 시작이면
+            in_heredoc = True  # heredoc 진입
+            heredoc_marker = m.group(1)  # 종료 마커 저장
+            out.append(line)  # 라인 유지
+            continue  # 다음 라인으로
+        # resource 블록 시작 감지
+        if not in_resource:  # resource 내부가 아니면
+            m = re.match(r'^\s*resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)  # resource 시작
+            if m:  # resource 시작이면
+                in_resource = True  # resource 진입
+                current_type = m.group(1)  # 리소스 타입 저장
+                current_attrs = schema_map.get(current_type, set())  # 타입별 속성 집합
+                if current_attrs:  # 속성이 있으면
+                    current_re = re.compile(  # 속성 제거 정규식 생성
+                        r"^\s*(" + "|".join(sorted(current_attrs)) + r")\s*="
+                    )
+                else:  # 속성이 없으면
+                    current_re = None  # 정규식 비활성
+                brace = _brace_delta(line)  # brace 초기화
+                out.append(line)  # 블록 시작 라인 유지
+                continue  # 다음 라인으로
+        # resource 블록 내부 처리
+        if in_resource:  # resource 내부면
+            if current_re and current_re.match(line):  # computed-only 속성이면
+                brace += _brace_delta(line)  # brace 갱신
+                if brace <= 0:  # 블록 종료면
+                    in_resource = False  # resource 종료
+                    current_type = None  # 타입 초기화
+                    current_attrs = set()  # 속성 초기화
+                    current_re = None  # 정규식 초기화
+                continue  # 해당 라인 제거
+            brace += _brace_delta(line)  # brace 갱신
+            out.append(line)  # 라인 유지
+            if brace <= 0:  # 블록 종료면
+                in_resource = False  # resource 종료
+                current_type = None  # 타입 초기화
+                current_attrs = set()  # 속성 초기화
+                current_re = None  # 정규식 초기화
+            continue  # 다음 라인으로
+        # 일반 라인은 유지
+        out.append(line)  # 일반 라인 유지
+    # 처리 결과 반환
+    return out  # 결과 라인 반환
+
+
 def _sanitize_label(name: str, prefix: str | None = None) -> str:
     # 라벨에 허용되지 않는 문자를 '_'로 치환
     label = re.sub(r"[^A-Za-z0-9_]", "_", name or "")
@@ -418,6 +596,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _remove_terraform_blocks(lines)
     lines = _convert_data_only_resources(lines)
     lines = _remove_provider_blocks(lines)
+    # provider 스키마 기반 computed-only 속성 제거
+    lines = _strip_schema_computed_attrs(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
     # resource/data 이름 정규화 및 참조 동기화
     lines = _normalize_block_names(lines)
@@ -598,17 +778,33 @@ But terraform validate returned this error:
 Fix the code to resolve this error. Output ONLY the corrected Terraform HCL code, nothing else."""
 
 
-def fallback_from_iac_snippet(check_id):
+def _read_snippet_file(path):
+    # 스니펫 파일 읽기 헬퍼
+    if not path:  # 경로가 없으면
+        return None  # None 반환
+    if not path.endswith(".tf"):  # .tf만 허용
+        return None  # .tf가 아니면 무시
+    if os.path.exists(path):  # 파일이 존재하면
+        with open(path) as f:  # 파일 열기
+            return f.read().strip()  # 내용 반환
+    return None  # 파일 없으면 None
+
+
+def fallback_from_iac_snippet(check_id, category=None):
     """Bedrock 실패 시 check_to_iac.yaml 매핑에서 스니펫을 로드."""
-    snippet_path = iac_map.get(check_id)
-    if not snippet_path:
-        return None
-    if not snippet_path.endswith(".tf"):
-        return None  # .tf만 사용 (.md 등은 제외)
-    if os.path.exists(snippet_path):
-        with open(snippet_path) as f:
-            return f.read().strip()
-    return None
+    snippet_path = iac_map.get(check_id)  # 체크 ID 매핑 경로 조회
+    snippet = _read_snippet_file(snippet_path)  # 매핑된 스니펫 읽기
+    if snippet:  # 매핑된 스니펫이 있으면
+        return snippet  # 매핑 스니펫 반환
+    if not USE_CATEGORY_SNIPPET:  # 카테고리 스니펫 비활성화면
+        return None  # 바로 종료
+    if category:  # 카테고리가 있으면
+        category_path = os.path.join(IAC_SNIPPET_DIR, f"{category}.tf")  # 카테고리 스니펫 경로
+        snippet = _read_snippet_file(category_path)  # 카테고리 스니펫 읽기
+        if snippet:  # 카테고리 스니펫이 있으면
+            return snippet  # 카테고리 스니펫 반환
+    default_path = os.path.join(IAC_SNIPPET_DIR, "default.tf")  # 기본 스니펫 경로
+    return _read_snippet_file(default_path)  # 기본 스니펫 반환
 
 
 def make_remediation_prompt(row):
@@ -673,7 +869,7 @@ for _, row in unique_checks.iterrows():
     # 템플릿 우선 옵션이 켜져 있으면 스니펫부터 시도
     if PREFER_IAC_SNIPPET:
         # 체크 ID에 매핑된 스니펫 로드
-        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')))
+        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # 체크 ID/카테고리 스니펫 조회
         # 스니펫이 있으면 소스를 갱신하고 로그 출력
         if tf_code:
             source = "iac_snippet"
@@ -691,7 +887,7 @@ for _, row in unique_checks.iterrows():
         # Bedrock 실패 카운트 증가
         bedrock_failures += 1
         # 스니펫으로 대체 시도
-        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')))
+        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # 체크 ID/카테고리 스니펫 조회
         # 스니펫이 있으면 소스 갱신 및 로그 출력
         if tf_code:
             source = "iac_snippet"
@@ -709,7 +905,7 @@ for _, row in unique_checks.iterrows():
 
         # Bedrock 코드가 실패하면 IaC 스니펫으로 재시도
         if not ok and source == "bedrock":
-            fallback = fallback_from_iac_snippet(str(row.get('check_id', '')))
+            fallback = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # 체크 ID/카테고리 스니펫 조회
             if fallback:
                 fb_code = sanitize_tf_code(fallback)
                 ok, fb_code, err = validate_with_autofix(fb_code)
