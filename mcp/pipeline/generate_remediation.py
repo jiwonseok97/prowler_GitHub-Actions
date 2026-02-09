@@ -245,7 +245,7 @@ def _comment_explanations(lines):
                 heredoc_marker = None
             continue
         # heredoc 시작 감지
-        m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
         if m:
             in_heredoc = True
             heredoc_marker = m.group(1)
@@ -391,7 +391,7 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
             continue
         if in_resource:
             # heredoc 시작 감지
-            m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)
+            m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
             if m:
                 in_heredoc = True
                 heredoc_marker = m.group(1)
@@ -440,7 +440,7 @@ def _strip_schema_computed_attrs(lines):
                 heredoc_marker = None  # 마커 초기화
             continue  # 다음 라인으로
         # heredoc 시작 감지
-        m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)  # heredoc 시작 패턴
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc 시작 패턴
         if m:  # heredoc 시작이면
             in_heredoc = True  # heredoc 진입
             heredoc_marker = m.group(1)  # 종료 마커 저장
@@ -496,7 +496,7 @@ def _repair_unclosed_heredoc(lines):
     start_line = None  # heredoc 시작 라인 내용
     for line in lines:  # 라인 순회
         if not in_heredoc:  # heredoc 밖이면
-            m = re.match(r'^\s*([A-Za-z0-9_]+)\s*=\s*<<-?\s*([A-Z_]+)\s*$', line)  # heredoc 시작 감지
+            m = re.match(r'^\s*([A-Za-z0-9_]+)\s*=\s*<<-?\s*([A-Za-z0-9_]+)\s*$', line)  # heredoc 시작 감지
             if m:  # heredoc 시작이면
                 in_heredoc = True  # heredoc 진입
                 heredoc_marker = m.group(2)  # 종료 마커 저장
@@ -535,7 +535,7 @@ def _balance_braces(lines):
                 in_heredoc = False  # heredoc 종료
                 heredoc_marker = None  # 마커 초기화
             continue  # 다음 라인으로
-        m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)  # heredoc 시작 감지
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc 시작 감지
         if m:  # heredoc 시작이면
             in_heredoc = True  # heredoc 진입
             heredoc_marker = m.group(1)  # 종료 마커 저장
@@ -584,7 +584,7 @@ def _replace_refs(lines, mapping):
                 heredoc_marker = None
             continue
         # heredoc 시작 감지
-        m = re.search(r"<<-?\s*([A-Z_]+)\s*$", line)
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
         if m:
             in_heredoc = True
             heredoc_marker = m.group(1)
