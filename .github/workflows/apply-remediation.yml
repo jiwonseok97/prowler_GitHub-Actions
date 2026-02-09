@@ -40,7 +40,7 @@ jobs:
       - name: Collect changed remediation files
         id: changed
         run: |
-          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | tr '\n' ' ')
+          files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
       - name: Terraform Plan (per file)
@@ -56,6 +56,10 @@ jobs:
           else
             for file in ${{ steps.changed.outputs.files }}; do
               echo "### $file" >> /tmp/tfplan.txt
+              if [ ! -f "$file" ]; then
+                echo "(skip missing file: $file)" >> /tmp/tfplan.txt
+                continue
+              fi
               work=$(mktemp -d)
               cp "$file" "$work/main.tf"
 
@@ -243,7 +247,7 @@ jobs:
       - name: Collect changed remediation files
         id: changed
         run: |
-          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | tr '\n' ' ')
+          files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
       - name: Terraform Apply (per file)
@@ -255,6 +259,10 @@ jobs:
           fi
 
           for file in ${{ steps.changed.outputs.files }}; do
+            if [ ! -f "$file" ]; then
+              echo "Skip missing file: $file"
+              continue
+            fi
             work=$(mktemp -d)
             cp "$file" "$work/main.tf"
 
