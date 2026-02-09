@@ -180,7 +180,7 @@ jobs:
           name: mcp-output
           path: mcp/output
 
-      # Python 환경 구성
+      # Python 환경 구성.
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -201,8 +201,6 @@ jobs:
       - name: Generate Terraform remediation
         run: |
           mkdir -p remediation
-          # 이전 생성 파일 정리 (최신 결과만 반영)
-          find remediation -type f ! -name '.gitkeep' -delete
 
           if [ -f mcp/output/findings-scored-ai.csv ]; then
             python mcp/pipeline/generate_remediation.py \
