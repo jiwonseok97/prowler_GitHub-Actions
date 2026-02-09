@@ -246,10 +246,15 @@ jobs:
             exit 0
           fi
 
+          # 생성된 파일을 임시 디렉터리에 백업 (checkout 시 유실 방지)
+          TMPGEN=$(mktemp -d)
+          cp -r remediation/* "$TMPGEN/"
+          echo "Backed up generated files to $TMPGEN"
+
           # manifest.json에서 카테고리 목록 추출
           CATEGORIES=$(python3 -c "
-          import json
-          with open('$MANIFEST') as f:
+          import json, sys
+          with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
           cats = sorted(set(item['category'] for item in items))
           for c in cats:
@@ -264,17 +269,17 @@ jobs:
           for CATEGORY in $CATEGORIES; do
             echo "=== Processing category: $CATEGORY ==="
 
-            # 해당 카테고리 파일 목록 추출
-            FILES=$(python3 -c "
+            # 해당 카테고리 파일명 목록 추출 (basename만)
+            CAT_FILES=$(python3 -c "
           import json
-          with open('$MANIFEST') as f:
+          with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
           for item in items:
               if item['category'] == '$CATEGORY':
-                  print('remediation/' + item['file'])
+                  print(item['file'])
           ")
 
-            if [ -z "$FILES" ]; then
+            if [ -z "$CAT_FILES" ]; then
               echo "No files for category $CATEGORY; skipping."
               continue
             fi
@@ -282,49 +287,51 @@ jobs:
             BRANCH="remediation/$CATEGORY"
             git checkout -B "$BRANCH" main
 
-            # 해당 카테고리 파일만 추가
-            for f in $FILES; do
-              if [ -f "$f" ]; then
-                git add "$f"
+            # 기존 remediation 파일 정리 후 해당 카테고리 파일만 복사
+            mkdir -p remediation
+            for fname in $CAT_FILES; do
+              if [ -f "$TMPGEN/$fname" ]; then
+                cp "$TMPGEN/$fname" "remediation/$fname"
+                git add "remediation/$fname"
               fi
             done
-            # manifest.json도 포함
-            git add "$MANIFEST"
 
-            if [ -z "$(git status --porcelain remediation/)" ]; then
+            # 카테고리별 manifest 생성 (머지 충돌 방지)
+            python3 -c "
+          import json
+          with open('$TMPGEN/manifest.json') as f:
+              items = json.load(f)
+          filtered = [i for i in items if i['category'] == '$CATEGORY']
+          with open('remediation/manifest.json', 'w') as f:
+              json.dump(filtered, f, indent=2)
+          "
+            git add remediation/manifest.json
+
+            if [ -z "$(git diff --cached --name-only)" ]; then
               echo "No changes for $CATEGORY; skipping."
               continue
             fi
 
-            git commit -m "fix($CATEGORY): auto-generated Terraform remediation"
+            FILE_COUNT=$(echo "$CAT_FILES" | wc -l | tr -d ' ')
+            git commit -m "fix($CATEGORY): auto-generated Terraform remediation [$FILE_COUNT files]"
             git push origin "$BRANCH" --force
-
-            # 파일 수 계산
-            FILE_COUNT=$(echo "$FILES" | wc -l | tr -d ' ')
 
             # 기존 PR이 있으면 업데이트, 없으면 생성
             EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
             if [ -z "$EXISTING_PR" ]; then
-              gh pr create \
-                --title "Security Remediation: $CATEGORY ($FILE_COUNT files)" \
-                --body "$(cat <<EOF
-          ## Category: \`$CATEGORY\`
-
-          Auto-generated Terraform remediation from Prowler pipeline.
-
-          **Files:** $FILE_COUNT remediation(s)
-
-          ### Included checks:
-          $(python3 -c "
+              PR_BODY=$(python3 -c "
           import json
-          with open('$MANIFEST') as f:
+          with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
+          lines = ['## Category: \`$CATEGORY\`', '', 'Auto-generated Terraform remediation from Prowler pipeline.', '', '**Files:** $FILE_COUNT remediation(s)', '', '### Included checks:']
           for item in items:
               if item['category'] == '$CATEGORY':
-                  print(f\"- [{item['priority']}] {item['check_title']} (\`{item['check_id']}\`)\")
+                  lines.append(f\"- [{item['priority']}] {item['check_title']} (\`{item['check_id']}\`)\")
+          print('\n'.join(lines))
           ")
-          EOF
-              )" \
+              gh pr create \
+                --title "Security Remediation: $CATEGORY ($FILE_COUNT files)" \
+                --body "$PR_BODY" \
                 --base main \
                 --head "$BRANCH"
               echo "Created PR for category: $CATEGORY"
@@ -332,3 +339,5 @@ jobs:
               echo "PR #${EXISTING_PR} already exists for ${BRANCH} – updated via force-push."
             fi
           done
+
+          rm -rf "$TMPGEN"

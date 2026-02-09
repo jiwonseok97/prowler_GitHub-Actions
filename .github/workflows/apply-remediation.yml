@@ -129,12 +129,20 @@ jobs:
                   if data_brace <= 0:
                       skip_data = False
                   continue
+              # HCL 시작 패턴 (comment_tail 리셋용)
+              HCL_START = re.compile(r'^\s*(#|//|resource\b|data\b|provider\b|variable\b|locals\b|terraform\b|output\b|module\b|\})')
               if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
                   comment_tail = True
-              if comment_tail or re.match(r'^\s*\d+\.\s', line):
+              if comment_tail:
+                  if HCL_START.match(line):
+                      comment_tail = False
+                  else:
+                      out.append('# ' + line)
+                      continue
+              if re.match(r'^\s*\d+\.\s', line):
                   out.append('# ' + line)
                   continue
-              if not in_provider and re.match(r'^\s*provider\s+"aws"\s*{', line):
+              if not in_provider and re.match(r'^\s*provider\s+"aws"\s*\{', line):
                   in_provider = True
                   brace += line.count('{') - line.count('}')
                   if brace <= 0:
@@ -428,12 +436,20 @@ jobs:
                   if data_brace <= 0:
                       skip_data = False
                   continue
+              # HCL 시작 패턴 (comment_tail 리셋용)
+              HCL_START = re.compile(r'^\s*(#|//|resource\b|data\b|provider\b|variable\b|locals\b|terraform\b|output\b|module\b|\})')
               if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
                   comment_tail = True
-              if comment_tail or re.match(r'^\s*\d+\.\s', line):
+              if comment_tail:
+                  if HCL_START.match(line):
+                      comment_tail = False
+                  else:
+                      out.append('# ' + line)
+                      continue
+              if re.match(r'^\s*\d+\.\s', line):
                   out.append('# ' + line)
                   continue
-              if not in_provider and re.match(r'^\s*provider\s+"aws"\s*{', line):
+              if not in_provider and re.match(r'^\s*provider\s+"aws"\s*\{', line):
                   in_provider = True
                   brace += line.count('{') - line.count('}')
                   if brace <= 0:
