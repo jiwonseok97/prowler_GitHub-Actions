@@ -1,8 +1,9 @@
 # =============================================================================
-# export_ocsf.py - OCSF 표준 포맷 내보내기 스크립트
+# export_ocsf.py - OCSF 표준 포맷 전송 스크립트
 # =============================================================================
 # 역할: Prowler가 생성한 OCSF(Open Cybersecurity Schema Framework) JSON 파일 중
 #       가장 최신 파일을 표준 출력 경로로 복사
+#
 # 입력: output/*.ocsf.json (Prowler OCSF 출력)
 # 출력: mcp/output/ocsf-findings.json
 #
