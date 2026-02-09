@@ -10,6 +10,9 @@ data "aws_iam_role" "target_role" {
   name = "GitHubActionsProwlerRole"
 }
 
+# NOTE: IAM permissions for GitHubActionsProwlerRole are managed in
+# iac/terraform/bootstrap/ — do not add inline policies here.
+
 # Enforce strict account password policy
 resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
   minimum_password_length        = 14
