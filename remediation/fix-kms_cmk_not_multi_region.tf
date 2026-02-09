@@ -1,29 +1,17 @@
-# Create a new multi-region KMS customer managed key
+# Modify the existing KMS key to be multi-region
 resource "aws_kms_key" "remediation_multi_region_key" {
-  description             = "Remediation multi-region KMS key"
+  description             = "Remediated multi-region KMS key"
   key_usage               = "ENCRYPT_DECRYPT"
   customer_master_key_spec = "SYMMETRIC_DEFAULT"
   multi_region            = true
+
+  tags = {
+    Environment = "production"
+  }
 }
 
-# Create a new IAM policy to allow access to the multi-region KMS key
-resource "aws_iam_policy" "remediation_multi_region_key_policy" {
-  name        = "remediation-multi-region-key-policy"
-  description = "Allows access to the remediation multi-region KMS key"
-  policy      = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey"
-        ],
-        Resource = aws_kms_key.remediation_multi_region_key.arn
-      }
-    ]
-  })
+# Update the existing KMS alias to point to the new multi-region key
+resource "aws_kms_alias" "remediation_multi_region_key_alias" {
+  name          = "alias/remediation-multi-region-key"
+  target_key_id = aws_kms_key.remediation_multi_region_key.key_id
 }

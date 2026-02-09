@@ -1,43 +1,51 @@
 [
   {
-    "check_id": "cloudwatch_changes_to_network_gateways_alarm_configured",
-    "check_title": "CloudWatch Logs metric filter and alarm exist for changes to network gateways",
-    "file": "fix-cloudwatch_changes_to_network_gateways_alarm_configured.tf",
+    "check_id": "cloudtrail_log_file_validation_enabled",
+    "check_title": "CloudTrail trail has log file validation enabled",
+    "file": "fix-cloudtrail_log_file_validation_enabled.tf",
     "priority": "P2",
-    "category": "cloudwatch",
-    "source": "bedrock"
+    "category": "cloudtrail",
+    "source": "iac_snippet"
   },
   {
-    "check_id": "cloudwatch_changes_to_vpcs_alarm_configured",
-    "check_title": "AWS account has a CloudWatch Logs metric filter and alarm for VPC changes",
-    "file": "fix-cloudwatch_changes_to_vpcs_alarm_configured.tf",
+    "check_id": "cloudtrail_logs_s3_bucket_access_logging_enabled",
+    "check_title": "CloudTrail trail destination S3 bucket has access logging enabled",
+    "file": "fix-cloudtrail_logs_s3_bucket_access_logging_enabled.tf",
     "priority": "P2",
-    "category": "cloudwatch",
-    "source": "bedrock"
+    "category": "cloudtrail",
+    "source": "iac_snippet"
   },
   {
-    "check_id": "cloudwatch_cross_account_sharing_disabled",
-    "check_title": "CloudWatch does not allow cross-account sharing",
-    "file": "fix-cloudwatch_cross_account_sharing_disabled.tf",
+    "check_id": "cloudwatch_changes_to_network_acls_alarm_configured",
+    "check_title": "CloudWatch log metric filter and alarm exist for Network ACL (NACL) change events",
+    "file": "fix-cloudwatch_changes_to_network_acls_alarm_configured.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
-    "check_id": "cloudwatch_log_group_kms_encryption_enabled",
-    "check_title": "CloudWatch log group is encrypted with an AWS KMS key",
-    "file": "fix-cloudwatch_log_group_kms_encryption_enabled.tf",
+    "check_id": "cloudwatch_changes_to_network_route_tables_alarm_configured",
+    "check_title": "Account monitors VPC route table changes with a CloudWatch Logs metric filter and alarm",
+    "file": "fix-cloudwatch_changes_to_network_route_tables_alarm_configured.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
-    "check_id": "cloudwatch_log_group_no_secrets_in_logs",
-    "check_title": "CloudWatch log group contains no secrets in its log events",
-    "file": "fix-cloudwatch_log_group_no_secrets_in_logs.tf",
+    "check_id": "cloudwatch_log_group_retention_policy_specific_days_enabled",
+    "check_title": "CloudWatch log group has a retention policy of at least the configured minimum days or never expires",
+    "file": "fix-cloudwatch_log_group_retention_policy_specific_days_enabled.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_and_alarm_for_aws_config_configuration_changes_enabled",
+    "check_title": "CloudWatch Logs metric filter and alarm exist for AWS Config configuration changes",
+    "file": "fix-cloudwatch_log_metric_filter_and_alarm_for_aws_config_configuration_changes_enabled.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "iac_snippet"
   },
   {
     "check_id": "cloudwatch_log_metric_filter_and_alarm_for_cloudtrail_configuration_changes_enabled",
@@ -45,7 +53,15 @@
     "file": "fix-cloudwatch_log_metric_filter_and_alarm_for_cloudtrail_configuration_changes_enabled.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_disable_or_scheduled_deletion_of_kms_cmk",
+    "check_title": "Account has a CloudWatch log metric filter and alarm for disabling or scheduled deletion of customer-managed KMS keys",
+    "file": "fix-cloudwatch_log_metric_filter_disable_or_scheduled_deletion_of_kms_cmk.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "iac_snippet"
   },
   {
     "check_id": "cloudwatch_log_metric_filter_for_s3_bucket_policy_changes",
@@ -53,7 +69,7 @@
     "file": "fix-cloudwatch_log_metric_filter_for_s3_bucket_policy_changes.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "cloudwatch_log_metric_filter_policy_changes",
@@ -61,7 +77,7 @@
     "file": "fix-cloudwatch_log_metric_filter_policy_changes.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "cloudwatch_log_metric_filter_root_usage",
@@ -69,15 +85,15 @@
     "file": "fix-cloudwatch_log_metric_filter_root_usage.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
-    "check_id": "cloudwatch_log_metric_filter_security_group_changes",
-    "check_title": "CloudWatch Logs metric filter and alarm exist for security group changes",
-    "file": "fix-cloudwatch_log_metric_filter_security_group_changes.tf",
+    "check_id": "cloudwatch_log_metric_filter_sign_in_without_mfa",
+    "check_title": "CloudWatch log metric filter and alarm exist for Management Console sign-in without MFA",
+    "file": "fix-cloudwatch_log_metric_filter_sign_in_without_mfa.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "cloudwatch_log_metric_filter_unauthorized_api_calls",
@@ -85,7 +101,7 @@
     "file": "fix-cloudwatch_log_metric_filter_unauthorized_api_calls.tf",
     "priority": "P2",
     "category": "cloudwatch",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "config_recorder_all_regions_enabled",
@@ -93,7 +109,7 @@
     "file": "fix-config_recorder_all_regions_enabled.tf",
     "priority": "P2",
     "category": "other",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "ec2_instance_managed_by_ssm",
@@ -101,15 +117,7 @@
     "file": "fix-ec2_instance_managed_by_ssm.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "ec2_instance_older_than_specific_days",
-    "check_title": "EC2 instance is not older than the configured maximum age or is not running",
-    "file": "fix-ec2_instance_older_than_specific_days.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "ec2_instance_paravirtual_type",
@@ -117,15 +125,23 @@
     "file": "fix-ec2_instance_paravirtual_type.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
-    "check_id": "ec2_instance_with_outdated_ami",
-    "check_title": "EC2 instance uses a non-deprecated Amazon AMI",
-    "file": "fix-ec2_instance_with_outdated_ami.tf",
+    "check_id": "ec2_instance_profile_attached",
+    "check_title": "EC2 instance is associated with an IAM instance profile role",
+    "file": "fix-ec2_instance_profile_attached.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
-    "source": "bedrock"
+    "source": "iac_snippet"
+  },
+  {
+    "check_id": "ec2_instance_public_ip",
+    "check_title": "EC2 instance does not have a public IP address",
+    "file": "fix-ec2_instance_public_ip.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "iac_snippet"
   },
   {
     "check_id": "ec2_networkacl_allow_ingress_tcp_port_22",
@@ -133,7 +149,7 @@
     "file": "fix-ec2_networkacl_allow_ingress_tcp_port_22.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "ec2_networkacl_allow_ingress_tcp_port_3389",
@@ -141,39 +157,7 @@
     "file": "fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "ec2_securitygroup_from_launch_wizard",
-    "check_title": "Security group not created using the EC2 Launch Wizard",
-    "file": "fix-ec2_securitygroup_from_launch_wizard.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "ec2_securitygroup_with_many_ingress_egress_rules",
-    "check_title": "Security group has 50 or fewer inbound rules and 50 or fewer outbound rules",
-    "file": "fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_customer_unattached_policy_no_administrative_privileges",
-    "check_title": "Unattached customer managed IAM policy does not allow '*:*' administrative privileges",
-    "file": "fix-iam_customer_unattached_policy_no_administrative_privileges.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_inline_policy_no_full_access_to_kms",
-    "check_title": "Inline IAM policy does not allow kms:* privileges",
-    "file": "fix-iam_inline_policy_no_full_access_to_kms.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_expires_passwords_within_90_days_or_less",
@@ -181,7 +165,7 @@
     "file": "fix-iam_password_policy_expires_passwords_within_90_days_or_less.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_number",
@@ -189,7 +173,7 @@
     "file": "fix-iam_password_policy_number.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_reuse_24",
@@ -197,7 +181,7 @@
     "file": "fix-iam_password_policy_reuse_24.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_symbol",
@@ -205,7 +189,7 @@
     "file": "fix-iam_password_policy_symbol.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_uppercase",
@@ -213,15 +197,7 @@
     "file": "fix-iam_password_policy_uppercase.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_policy_cloudshell_admin_not_attached",
-    "check_title": "No IAM users, groups, or roles have the AWSCloudShellFullAccess policy attached",
-    "file": "fix-iam_policy_cloudshell_admin_not_attached.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_policy_no_full_access_to_cloudtrail",
@@ -229,23 +205,7 @@
     "file": "fix-iam_policy_no_full_access_to_cloudtrail.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_policy_no_full_access_to_kms",
-    "check_title": "Custom IAM policy does not allow 'kms:*' privileges",
-    "file": "fix-iam_policy_no_full_access_to_kms.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_user_console_access_unused",
-    "check_title": "IAM user console access is disabled, used within the configured inactivity period, or never used",
-    "file": "fix-iam_user_console_access_unused.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "kms_cmk_not_multi_region",
@@ -253,31 +213,15 @@
     "file": "fix-kms_cmk_not_multi_region.tf",
     "priority": "P2",
     "category": "kms",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
-    "check_id": "organizations_account_part_of_organizations",
-    "check_title": "AWS account is a member of an active AWS Organization",
-    "file": "fix-organizations_account_part_of_organizations.tf",
-    "priority": "P2",
-    "category": "org-account",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "organizations_opt_out_ai_services_policy",
-    "check_title": "AWS Organization has opted out of all AI services and child accounts cannot override the policy",
-    "file": "fix-organizations_opt_out_ai_services_policy.tf",
-    "priority": "P2",
-    "category": "org-account",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "s3_bucket_kms_encryption",
-    "check_title": "S3 bucket has server-side encryption with AWS KMS",
-    "file": "fix-s3_bucket_kms_encryption.tf",
+    "check_id": "s3_bucket_default_encryption",
+    "check_title": "S3 bucket has default server-side encryption (SSE) enabled",
+    "file": "fix-s3_bucket_default_encryption.tf",
     "priority": "P2",
     "category": "s3",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "s3_bucket_secure_transport_policy",
@@ -285,7 +229,15 @@
     "file": "fix-s3_bucket_secure_transport_policy.tf",
     "priority": "P2",
     "category": "s3",
-    "source": "bedrock"
+    "source": "iac_snippet"
+  },
+  {
+    "check_id": "vpc_different_regions",
+    "check_title": "VPCs are present in more than one region",
+    "file": "fix-vpc_different_regions.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "iac_snippet"
   },
   {
     "check_id": "vpc_endpoint_for_ec2_enabled",
@@ -293,7 +245,15 @@
     "file": "fix-vpc_endpoint_for_ec2_enabled.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
-    "source": "bedrock"
+    "source": "iac_snippet"
+  },
+  {
+    "check_id": "vpc_flow_logs_enabled",
+    "check_title": "VPC flow logs are enabled",
+    "file": "fix-vpc_flow_logs_enabled.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "iac_snippet"
   },
   {
     "check_id": "vpc_subnet_different_az",
@@ -301,7 +261,7 @@
     "file": "fix-vpc_subnet_different_az.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "vpc_subnet_separate_private_public",
@@ -309,6 +269,6 @@
     "file": "fix-vpc_subnet_separate_private_public.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
-    "source": "bedrock"
+    "source": "iac_snippet"
   }
 ]

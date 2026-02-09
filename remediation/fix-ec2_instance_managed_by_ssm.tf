@@ -1,4 +1,17 @@
-# Create an IAM role for the EC2 instance to access AWS Systems Manager
+# Remediate the EC2 instance to be managed by AWS Systems Manager
+resource "aws_instance" "remediation_ec2" {
+  ami           = data.aws_ami.amazon_linux.id
+  instance_type = "t2.micro"
+  subnet_id     = data.aws_subnet.public.id
+
+  # Enroll the instance as a Systems Manager managed node
+  iam_instance_profile = aws_iam_instance_profile.remediation_ssm_profile.name
+  tags = {
+    Name = "Remediation EC2 Instance"
+  }
+}
+
+# Create an IAM role and instance profile for Systems Manager access
 resource "aws_iam_role" "remediation_ssm_role" {
   name = "remediation-ssm-role"
 
@@ -11,26 +24,41 @@ resource "aws_iam_role" "remediation_ssm_role" {
         Principal = {
           Service = "ec2.amazonaws.com"
         }
-      }
+      },
     ]
   })
 }
 
-# Attach the AWS managed policy for Systems Manager to the IAM role
-resource "aws_iam_role_policy_attachment" "remediation_ssm_role_policy_attachment" {
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+resource "aws_iam_role_policy_attachment" "remediation_ssm_managed_instance_core" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   role       = aws_iam_role.remediation_ssm_role.name
 }
 
-# Create an EC2 instance with the IAM role attached
-resource "aws_instance" "remediation_ec2_instance" {
-  ami           = "ami-0b7546d835a9b8926" # Replace with the desired AMI ID
-  instance_type = "t2.micro"
-  key_name      = "your-key-pair-name" # Replace with the name of your key pair
+resource "aws_iam_instance_profile" "remediation_ssm_profile" {
+  name = "remediation-ssm-profile"
+  role = aws_iam_role.remediation_ssm_role.name
+}
 
-  iam_instance_profile = aws_iam_role.remediation_ssm_role.name
+# Look up the latest Amazon Linux 2 AMI
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"]
 
-  tags = {
-    Name = "remediation-ec2-instance"
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
   }
+}
+
+# Look up the public subnet to launch the EC2 instance in
+data "aws_subnet" "public" {
+  vpc_id            = data.aws_vpc.default.id
+  availability_zone = "ap-northeast-2a"
+  tags = {
+    Tier = "Public"
+  }
+}
+
+data "aws_vpc" "default" {
+  default = true
 }

@@ -1,32 +1,49 @@
-# Create a new network ACL to replace the existing one
-resource "aws_network_acl" "remediation_network_acl" {
-  vpc_id = data.aws_vpc.current.id
+# Modify the existing Network ACL to restrict RDP access from the internet
+resource "aws_network_acl" "remediation_acl" {
+  vpc_id     = data.aws_vpc.current.id
+  subnet_ids = data.aws_subnet.private_subnets[*].id
+
+  ingress {
+    from_port   = 3389
+    to_port     = 3389
+    rule_no    = 100
+    protocol    = "tcp"
+    action      = "deny"
+    cidr_block  = "0.0.0.0/0"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0 
+    rule_no    = 100
+    protocol    = "-1"
+    action      = "allow"
+    cidr_block  = "0.0.0.0/0"
+  }
+
+  tags = {
+    Name = "remediation_acl"
+  }
 }
 
-# Add a new rule to deny ingress TCP port 3389 from 0.0.0.0/0
-resource "aws_network_acl_rule" "remediation_deny_rdp_ingress" {
-  network_acl_id = aws_network_acl.remediation_network_acl.id
-  rule_number    = 100
-  egress         = false
-  protocol       = "tcp"
-  rule_action    = "deny"
-  cidr_block     = "0.0.0.0/0"
-  from_port      = 3389
-  to_port        = 3389
-}
-
-# Add a new rule to allow ingress TCP port 22 (SSH) from a specific IP range
-resource "aws_network_acl_rule" "remediation_allow_ssh_ingress" {
-  network_acl_id = aws_network_acl.remediation_network_acl.id
-  rule_number    = 200
-  egress         = false
-  protocol       = "tcp"
-  rule_action    = "allow"
-  cidr_block     = "192.168.0.0/16"
-  from_port      = 22
-  to_port        = 22
-}
-
+# Use data sources to reference existing VPC and subnet information
 data "aws_vpc" "current" {
-  default = true
+  id = "vpc-0123456789abcdef"
+}
+
+data "aws_subnets" "private" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.current.id]
+  }
+
+  filter {
+    name   = "tag:Tier"
+    values = ["private"]
+  }
+}
+
+data "aws_subnet" "private_subnets" {
+  count = length(data.aws_subnets.private.ids)
+  id    = data.aws_subnets.private.ids[count.index]
 }

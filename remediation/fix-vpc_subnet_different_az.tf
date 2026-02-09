@@ -1,43 +1,41 @@
-# Create a new VPC with subnets in 2 different Availability Zones
-resource "aws_vpc" "remediation_vpc" {
-  cidr_block = "10.0.0.0/16"
+# Remediate the VPC subnet across multiple Availability Zones
+# Use data sources to reference existing VPC and subnets
+data "aws_vpc" "existing_vpc" {
+  id = "vpc-0565167ce4f7cc871"
 }
 
-# Create a public subnet in AZ 1
-resource "aws_subnet" "remediation_public_subnet_1" {
-  vpc_id            = aws_vpc.remediation_vpc.id
+data "aws_subnets" "existing_subnets" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.existing_vpc.id]
+  }
+}
+
+# Create new subnets in different Availability Zones
+resource "aws_subnet" "remediation_subnet_1" {
+  vpc_id            = data.aws_vpc.existing_vpc.id
   cidr_block        = "10.0.1.0/24"
   availability_zone = "ap-northeast-2a"
 }
 
-# Create a public subnet in AZ 2
-resource "aws_subnet" "remediation_public_subnet_2" {
-  vpc_id            = aws_vpc.remediation_vpc.id
+resource "aws_subnet" "remediation_subnet_2" {
+  vpc_id            = data.aws_vpc.existing_vpc.id
   cidr_block        = "10.0.2.0/24"
-  availability_zone = "ap-northeast-2c"
+  availability_zone = "ap-northeast-2b"
 }
 
-# Create an internet gateway and attach it to the VPC
-resource "aws_internet_gateway" "remediation_igw" {
-  vpc_id = aws_vpc.remediation_vpc.id
+# Associate the new subnets with the existing VPC
+resource "aws_route_table_association" "remediation_subnet_1_route" {
+  subnet_id      = aws_subnet.remediation_subnet_1.id
+  route_table_id = data.aws_route_table.existing_route_table.id
 }
 
-# Create a route table for the public subnets and associate it with the subnets
-resource "aws_route_table" "remediation_public_rt" {
-  vpc_id = aws_vpc.remediation_vpc.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.remediation_igw.id
-  }
+resource "aws_route_table_association" "remediation_subnet_2_route" {
+  subnet_id      = aws_subnet.remediation_subnet_2.id
+  route_table_id = data.aws_route_table.existing_route_table.id
 }
 
-resource "aws_route_table_association" "remediation_public_subnet_1_rt_association" {
-  subnet_id      = aws_subnet.remediation_public_subnet_1.id
-  route_table_id = aws_route_table.remediation_public_rt.id
-}
-
-resource "aws_route_table_association" "remediation_public_subnet_2_rt_association" {
-  subnet_id      = aws_subnet.remediation_public_subnet_2.id
-  route_table_id = aws_route_table.remediation_public_rt.id
+# Retrieve the existing route table for the VPC
+data "aws_route_table" "existing_route_table" {
+  vpc_id = data.aws_vpc.existing_vpc.id
 }

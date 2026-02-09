@@ -1,8 +1,9 @@
-# Create a new IAM policy with the required permissions for CloudTrail
-resource "aws_iam_policy" "remediation_cloudtrail_policy" {
-  name        = "remediation-cloudtrail-policy"
-  description = "Allows required CloudTrail actions"
-  policy      = jsonencode({
+# Update the existing IAM policy to allow only the required CloudTrail actions
+resource "aws_iam_policy" "remediation_prowler_readonly" {
+  name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
+  description = "Prowler read-only access policy"
+
+  policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
@@ -10,34 +11,27 @@ resource "aws_iam_policy" "remediation_cloudtrail_policy" {
         Action = [
           "cloudtrail:DescribeTrails",
           "cloudtrail:GetTrailStatus",
-          "cloudtrail:LookupEvents",
-          "cloudtrail:StartLogging",
-          "cloudtrail:StopLogging"
+          "cloudtrail:LookupEvents"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetBucketLocation",
+          "s3:GetBucketAcl",
+          "s3:ListAllMyBuckets"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "iam:GetRole",
+          "iam:GetRolePolicy"
         ],
         Resource = "*"
       }
     ]
   })
-}
-
-# Create a new IAM role with the remediation policy attached
-resource "aws_iam_role" "remediation_cloudtrail_role" {
-  name               = "remediation-cloudtrail-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole",
-        Effect = "Allow",
-        Principal = {
-          AWS = "*"
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "remediation_cloudtrail_policy_attachment" {
-  policy_arn = aws_iam_policy.remediation_cloudtrail_policy.arn
-  role       = aws_iam_role.remediation_cloudtrail_role.name
 }

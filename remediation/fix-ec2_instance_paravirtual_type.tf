@@ -1,44 +1,78 @@
-# Create a new EC2 instance with HVM virtualization type
-resource "aws_instance" "remediation_ec2_instance" {
-  ami           = data.aws_ami.latest_hvm_ami.id
+# Remediate the EC2 instance virtualization type to HVM/Nitro
+resource "aws_instance" "remediation_ec2" {
+  ami           = data.aws_ami.hvm_ami.id
   instance_type = "t3.micro"
-  key_name      = "my-key-pair"
+  subnet_id     = data.aws_subnet.target_subnet.id
 
-  vpc_security_group_ids = [aws_security_group.remediation_security_group.id]
-  subnet_id              = data.aws_subnet.default_subnet.id
+  # Ensure HVM/Nitro virtualization
+  ebs_optimized = true
+  
+  # Enable ENA and NVMe support
+  ebs_block_device {
+    device_name = "/dev/xvda"
+    volume_type = "gp2"
+  }
+
+  # Apply security hardening
+  iam_instance_profile = aws_iam_instance_profile.remediation_profile.name
+  user_data            = data.template_file.user_data.rendered
 
   tags = {
-    Name = "Remediation EC2 Instance"
+    Name = "remediation-ec2"
   }
 }
 
-# Create a new security group to apply to the EC2 instance
-resource "aws_security_group" "remediation_security_group" {
-  name_prefix = "remediation-sg-"
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# Look up the latest HVM-based Amazon Machine Image (AMI)
-data "aws_ami" "latest_hvm_ami" {
-  owners      = ["amazon"]
+data "aws_ami" "hvm_ami" {
   most_recent = true
-  name_regex  = "^amzn2-ami-hvm-.*-x86_64-gp2$"
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
 }
 
-# Look up the default subnet in the current VPC
-data "aws_subnet" "default_subnet" {
-  default_for_az = true
+data "aws_subnet" "target_subnet" {
+  id = "subnet-0123456789abcdef"
+}
+
+data "aws_vpc" "target_vpc" {
+  id = "vpc-0fedcba9876543210"
+}
+
+data "template_file" "user_data" {
+  template = jsonencode({
+    # Add security hardening scripts here
+  })
+}
+
+resource "aws_iam_instance_profile" "remediation_profile" {
+  name = "remediation-profile"
+  role = aws_iam_role.remediation_role.name
+}
+
+resource "aws_iam_role" "remediation_role" {
+  name = "remediation-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "remediation_role_policy_attachment_1" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+  role       = aws_iam_role.remediation_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "remediation_role_policy_attachment_2" {
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  role       = aws_iam_role.remediation_role.name
 }
