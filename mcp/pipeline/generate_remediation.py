@@ -627,6 +627,110 @@ def _strip_backtick_lines(lines):
     return out  # 결과 반환
 
 
+def _strip_deprecated_s3_bucket_attrs(lines):
+    """aws_s3_bucket 리소스에서 deprecated된 acl, server_side_encryption_configuration 제거.
+
+    AWS provider v4+ 에서는 별도 리소스(aws_s3_bucket_acl,
+    aws_s3_bucket_server_side_encryption_configuration)를 사용해야 한다.
+    """
+    out = []
+    in_s3_bucket = False
+    in_deprecated_block = False
+    brace = 0
+    dep_brace = 0
+    in_heredoc = False
+    heredoc_marker = None
+    for line in lines:
+        # heredoc 내부는 그대로 유지
+        if in_heredoc:
+            out.append(line)
+            if line.strip() == heredoc_marker:
+                in_heredoc = False
+                heredoc_marker = None
+            continue
+        hm = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
+        if hm:
+            in_heredoc = True
+            heredoc_marker = hm.group(1)
+            if not in_deprecated_block:
+                out.append(line)
+            continue
+        # aws_s3_bucket 리소스 블록 시작 감지
+        if not in_s3_bucket:
+            m = re.match(r'^\s*resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_s3_bucket = True
+                brace = _brace_delta(line)
+                out.append(line)
+                continue
+        if in_s3_bucket:
+            # deprecated nested block 내부 처리
+            if in_deprecated_block:
+                dep_brace += _brace_delta(line)
+                if dep_brace <= 0:
+                    in_deprecated_block = False
+                # deprecated block 라인은 모두 제거
+                brace += _brace_delta(line)
+                if brace <= 0:
+                    in_s3_bucket = False
+                continue
+            # acl = "..." 라인 제거
+            if re.match(r'^\s*acl\s*=', line):
+                brace += _brace_delta(line)
+                if brace <= 0:
+                    in_s3_bucket = False
+                continue
+            # server_side_encryption_configuration 블록 시작 → deprecated block 진입
+            if re.match(r'^\s*server_side_encryption_configuration\s*\{', line):
+                in_deprecated_block = True
+                dep_brace = _brace_delta(line)
+                brace += _brace_delta(line)
+                if dep_brace <= 0:
+                    in_deprecated_block = False
+                if brace <= 0:
+                    in_s3_bucket = False
+                continue
+            brace += _brace_delta(line)
+            out.append(line)
+            if brace <= 0:
+                in_s3_bucket = False
+            continue
+        out.append(line)
+    return out
+
+
+def _remove_duplicate_data_blocks(lines):
+    """검증/apply 프레임워크가 이미 제공하는 data 블록 제거.
+
+    00-data.tf에서 aws_caller_identity, aws_region, aws_partition이 자동 제공되므로
+    생성 코드에 중복으로 들어가면 충돌한다.
+    """
+    FRAMEWORK_DATA = {
+        ("aws_caller_identity", "current"),
+        ("aws_region", "current"),
+        ("aws_partition", "current"),
+    }
+    out = []
+    skip_block = False
+    brace = 0
+    for line in lines:
+        if not skip_block:
+            m = re.match(r'^\s*data\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+            if m and (m.group(1), m.group(2)) in FRAMEWORK_DATA:
+                skip_block = True
+                brace = _brace_delta(line)
+                if brace <= 0:
+                    skip_block = False
+                continue
+        if skip_block:
+            brace += _brace_delta(line)
+            if brace <= 0:
+                skip_block = False
+            continue
+        out.append(line)
+    return out
+
+
 def _fix_log_group_name_arn(lines):
     # log_group_name에 ARN이 들어간 경우 로그 그룹 이름으로 치환
     out = []  # 출력 라인 버퍼
@@ -755,6 +859,10 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _remove_terraform_blocks(lines)
     lines = _convert_data_only_resources(lines)
     lines = _remove_provider_blocks(lines)
+    # deprecated S3 bucket 속성 제거 (acl, inline encryption)
+    lines = _strip_deprecated_s3_bucket_attrs(lines)
+    # 프레임워크 중복 data 블록 제거
+    lines = _remove_duplicate_data_blocks(lines)
     # provider 스키마 기반 computed-only 속성 제거
     lines = _strip_schema_computed_attrs(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
@@ -1009,13 +1117,17 @@ Requirements:
 - NEVER use "import" blocks
 - NEVER set computed/read-only attributes (arn, id, key_id, owner_id, creation_date, unique_id) in resource blocks
 - Avoid hardcoded ARNs/IDs in resource blocks; use data sources to look up existing resources when needed
-- Use "data" sources to reference existing resource info (e.g., data "aws_caller_identity")
+- Do NOT define data "aws_caller_identity" "current", data "aws_region" "current", or data "aws_partition" "current" — these are pre-provided by the framework. Just reference them directly (e.g., data.aws_caller_identity.current.account_id)
 - Include a single provider "aws" block for ap-northeast-2 region WITHOUT alias
 - NEVER use provider aliases (no "alias" in provider, no "provider = aws.xxx" in resources)
 - For IAM policies, use jsonencode() instead of heredoc (<<EOF) to avoid string termination issues
 - Add HCL comments (lines starting with #) explaining what the code does
 - Make sure all required attributes are set for each resource type
 - Use unique resource names with a "remediation_" prefix to avoid conflicts
+- For aws_s3_bucket: do NOT use deprecated "acl" argument or inline "server_side_encryption_configuration" block. Use separate resources: aws_s3_bucket_acl, aws_s3_bucket_server_side_encryption_configuration
+- For EC2 instances needing IAM roles: create an aws_iam_instance_profile resource and reference it. Do NOT assign a role name directly to iam_instance_profile
+- For IAM user policy attachments: the "user" argument must be an IAM user name (string), NOT an ARN. Do NOT use data.aws_caller_identity.current.arn as a user name
+- For aws_iam_role_policy_attachment: use correct managed policy ARNs (e.g., "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"), NOT deprecated policy names
 
 Output the Terraform code:"""
 

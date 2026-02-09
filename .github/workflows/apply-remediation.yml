@@ -87,6 +87,19 @@ jobs:
           brace = 0
           import_brace = 0
           comment_tail = False
+          # S3 deprecated 속성 제거용
+          in_s3_bucket = False
+          s3_brace = 0
+          in_dep_block = False
+          dep_brace = 0
+          # 중복 data 블록 제거용
+          FRAMEWORK_DATA = {
+              ('aws_caller_identity', 'current'),
+              ('aws_region', 'current'),
+              ('aws_partition', 'current'),
+          }
+          skip_data = False
+          data_brace = 0
 
           for line in lines:
               # heredoc 내부: 내용 그대로 유지
@@ -102,6 +115,19 @@ jobs:
                   in_heredoc = True
                   heredoc_marker = hm.group(1)
                   out.append(line)
+                  continue
+              # 중복 data 블록 스킵
+              if skip_data:
+                  data_brace += line.count('{') - line.count('}')
+                  if data_brace <= 0:
+                      skip_data = False
+                  continue
+              dm = re.match(r'^\s*data\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+              if dm and (dm.group(1), dm.group(2)) in FRAMEWORK_DATA:
+                  skip_data = True
+                  data_brace = line.count('{') - line.count('}')
+                  if data_brace <= 0:
+                      skip_data = False
                   continue
               if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
                   comment_tail = True
@@ -139,6 +165,40 @@ jobs:
               # Strip computed/read-only attributes that AI incorrectly sets
               if re.match(r'^\s*(arn|id|owner_id|unique_id|creation_date)\s*=', line):
                   continue
+              # S3 bucket deprecated 속성 제거
+              if not in_s3_bucket and re.match(r'^\s*resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{', line):
+                  in_s3_bucket = True
+                  s3_brace = line.count('{') - line.count('}')
+                  out.append(line)
+                  continue
+              if in_s3_bucket:
+                  if in_dep_block:
+                      dep_brace += line.count('{') - line.count('}')
+                      s3_brace += line.count('{') - line.count('}')
+                      if dep_brace <= 0:
+                          in_dep_block = False
+                      if s3_brace <= 0:
+                          in_s3_bucket = False
+                      continue
+                  if re.match(r'^\s*acl\s*=', line):
+                      s3_brace += line.count('{') - line.count('}')
+                      if s3_brace <= 0:
+                          in_s3_bucket = False
+                      continue
+                  if re.match(r'^\s*server_side_encryption_configuration\s*\{', line):
+                      in_dep_block = True
+                      dep_brace = line.count('{') - line.count('}')
+                      s3_brace += line.count('{') - line.count('}')
+                      if dep_brace <= 0:
+                          in_dep_block = False
+                      if s3_brace <= 0:
+                          in_s3_bucket = False
+                      continue
+                  s3_brace += line.count('{') - line.count('}')
+                  out.append(line)
+                  if s3_brace <= 0:
+                      in_s3_bucket = False
+                  continue
               out.append(line)
 
           path.write_text("\n".join(out) + "\n")
@@ -156,6 +216,13 @@ jobs:
           provider "aws" {
             region = "ap-northeast-2"
           }
+          EOF
+
+              # 공통 data source (중복 방지)
+              cat > "$work/data.tf" <<'EOF'
+          data "aws_caller_identity" "current" {}
+          data "aws_region" "current" {}
+          data "aws_partition" "current" {}
           EOF
 
               terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfplan.txt
@@ -319,6 +386,19 @@ jobs:
           brace = 0
           import_brace = 0
           comment_tail = False
+          # S3 deprecated 속성 제거용
+          in_s3_bucket = False
+          s3_brace = 0
+          in_dep_block = False
+          dep_brace = 0
+          # 중복 data 블록 제거용
+          FRAMEWORK_DATA = {
+              ('aws_caller_identity', 'current'),
+              ('aws_region', 'current'),
+              ('aws_partition', 'current'),
+          }
+          skip_data = False
+          data_brace = 0
 
           for line in lines:
               # heredoc 내부: 내용 그대로 유지
@@ -334,6 +414,19 @@ jobs:
                   in_heredoc = True
                   heredoc_marker = hm.group(1)
                   out.append(line)
+                  continue
+              # 중복 data 블록 스킵
+              if skip_data:
+                  data_brace += line.count('{') - line.count('}')
+                  if data_brace <= 0:
+                      skip_data = False
+                  continue
+              dm = re.match(r'^\s*data\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+              if dm and (dm.group(1), dm.group(2)) in FRAMEWORK_DATA:
+                  skip_data = True
+                  data_brace = line.count('{') - line.count('}')
+                  if data_brace <= 0:
+                      skip_data = False
                   continue
               if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
                   comment_tail = True
@@ -371,6 +464,40 @@ jobs:
               # Strip computed/read-only attributes that AI incorrectly sets
               if re.match(r'^\s*(arn|id|owner_id|unique_id|creation_date)\s*=', line):
                   continue
+              # S3 bucket deprecated 속성 제거
+              if not in_s3_bucket and re.match(r'^\s*resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{', line):
+                  in_s3_bucket = True
+                  s3_brace = line.count('{') - line.count('}')
+                  out.append(line)
+                  continue
+              if in_s3_bucket:
+                  if in_dep_block:
+                      dep_brace += line.count('{') - line.count('}')
+                      s3_brace += line.count('{') - line.count('}')
+                      if dep_brace <= 0:
+                          in_dep_block = False
+                      if s3_brace <= 0:
+                          in_s3_bucket = False
+                      continue
+                  if re.match(r'^\s*acl\s*=', line):
+                      s3_brace += line.count('{') - line.count('}')
+                      if s3_brace <= 0:
+                          in_s3_bucket = False
+                      continue
+                  if re.match(r'^\s*server_side_encryption_configuration\s*\{', line):
+                      in_dep_block = True
+                      dep_brace = line.count('{') - line.count('}')
+                      s3_brace += line.count('{') - line.count('}')
+                      if dep_brace <= 0:
+                          in_dep_block = False
+                      if s3_brace <= 0:
+                          in_s3_bucket = False
+                      continue
+                  s3_brace += line.count('{') - line.count('}')
+                  out.append(line)
+                  if s3_brace <= 0:
+                      in_s3_bucket = False
+                  continue
               out.append(line)
 
           path.write_text("\n".join(out) + "\n")
@@ -388,6 +515,13 @@ jobs:
           provider "aws" {
             region = "ap-northeast-2"
           }
+          EOF
+
+            # 공통 data source (중복 방지)
+            cat > "$work/data.tf" <<'EOF'
+          data "aws_caller_identity" "current" {}
+          data "aws_region" "current" {}
+          data "aws_partition" "current" {}
           EOF
 
             terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfapply.txt

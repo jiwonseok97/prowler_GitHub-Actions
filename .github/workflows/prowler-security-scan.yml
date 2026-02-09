@@ -232,34 +232,103 @@ jobs:
             exit 0
           fi
 
-      # 생성된 .tf 파일이 있을 경우 PR 생성
-      - name: Create remediation PR (single branch)
+      # 생성된 .tf 파일이 있을 경우 카테고리별 PR 생성
+      - name: Create remediation PRs (per category)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          BRANCH="remediation/auto-fix"
-          git checkout -B "$BRANCH" main
-          git add remediation/
-
-          if [ -z "$(git status --porcelain remediation/)" ]; then
-            echo "No remediation changes detected; skipping PR."
+          MANIFEST="remediation/manifest.json"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "No manifest.json found; skipping PR creation."
             exit 0
           fi
 
-          git commit -m "fix: auto-generated Terraform remediation"
-          git push origin "$BRANCH" --force
+          # manifest.json에서 카테고리 목록 추출
+          CATEGORIES=$(python3 -c "
+          import json
+          with open('$MANIFEST') as f:
+              items = json.load(f)
+          cats = sorted(set(item['category'] for item in items))
+          for c in cats:
+              print(c)
+          ")
 
-          # 기존 PR이 있으면 업데이트, 없으면 생성
-          EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
-          if [ -z "$EXISTING_PR" ]; then
-            gh pr create \
-              --title "Security Remediation (Auto Generated)" \
-              --body "Auto-generated Terraform fixes from Prowler pipeline." \
-              --base main \
-              --head "$BRANCH"
-          else
-            echo "PR #${EXISTING_PR} already exists for ${BRANCH} – updated via force-push."
+          if [ -z "$CATEGORIES" ]; then
+            echo "No categories found in manifest."
+            exit 0
           fi
+
+          for CATEGORY in $CATEGORIES; do
+            echo "=== Processing category: $CATEGORY ==="
+
+            # 해당 카테고리 파일 목록 추출
+            FILES=$(python3 -c "
+          import json
+          with open('$MANIFEST') as f:
+              items = json.load(f)
+          for item in items:
+              if item['category'] == '$CATEGORY':
+                  print('remediation/' + item['file'])
+          ")
+
+            if [ -z "$FILES" ]; then
+              echo "No files for category $CATEGORY; skipping."
+              continue
+            fi
+
+            BRANCH="remediation/$CATEGORY"
+            git checkout -B "$BRANCH" main
+
+            # 해당 카테고리 파일만 추가
+            for f in $FILES; do
+              if [ -f "$f" ]; then
+                git add "$f"
+              fi
+            done
+            # manifest.json도 포함
+            git add "$MANIFEST"
+
+            if [ -z "$(git status --porcelain remediation/)" ]; then
+              echo "No changes for $CATEGORY; skipping."
+              continue
+            fi
+
+            git commit -m "fix($CATEGORY): auto-generated Terraform remediation"
+            git push origin "$BRANCH" --force
+
+            # 파일 수 계산
+            FILE_COUNT=$(echo "$FILES" | wc -l | tr -d ' ')
+
+            # 기존 PR이 있으면 업데이트, 없으면 생성
+            EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
+            if [ -z "$EXISTING_PR" ]; then
+              gh pr create \
+                --title "Security Remediation: $CATEGORY ($FILE_COUNT files)" \
+                --body "$(cat <<EOF
+          ## Category: \`$CATEGORY\`
+
+          Auto-generated Terraform remediation from Prowler pipeline.
+
+          **Files:** $FILE_COUNT remediation(s)
+
+          ### Included checks:
+          $(python3 -c "
+          import json
+          with open('$MANIFEST') as f:
+              items = json.load(f)
+          for item in items:
+              if item['category'] == '$CATEGORY':
+                  print(f\"- [{item['priority']}] {item['check_title']} (\`{item['check_id']}\`)\")
+          ")
+          EOF
+              )" \
+                --base main \
+                --head "$BRANCH"
+              echo "Created PR for category: $CATEGORY"
+            else
+              echo "PR #${EXISTING_PR} already exists for ${BRANCH} – updated via force-push."
+            fi
+          done
