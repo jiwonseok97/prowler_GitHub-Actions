@@ -115,7 +115,7 @@ jobs:
         with:
           name: remediation
           path: remediation/
-      - name: Create Remediation PRs (by category)
+      - name: Create Remediation PRs (by category, overwrite branch)
         if: github.ref == 'refs/heads/main' && hashFiles('remediation/*.tf') != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -190,12 +190,11 @@ jobs:
 
             BRANCH="remediation/${cat}"
 
-            # Check if an open PR already exists for this fixed branch
+            # open PR exists?
             EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
 
-            git checkout main
-            git branch -D "$BRANCH" 2>/dev/null || true
-            git checkout -b "$BRANCH"
+            # reset branch to main, then commit only the category files
+            git checkout -B "$BRANCH" main
             git add -- "${files[@]}"
             git commit -m "fix: remediation (${cat})" || { git checkout main; continue; }
             git push origin "$BRANCH" --force

@@ -24,6 +24,7 @@
 import argparse
 import json
 import os
+import re
 import pandas as pd
 
 # 선택적 의존성: 없는 경우에도 스크립트가 동작하도록 안전하게 처리
@@ -65,6 +66,218 @@ if yaml and os.path.exists(args.iac_mapping):
     with open(args.iac_mapping) as f:
         iac_map = yaml.safe_load(f) or {}
     print(f"Loaded {len(iac_map)} IaC snippet mappings")
+
+# -----------------------------------------------------------------------------
+# Guardrail 설정 (문법/스키마 위반 최소화)
+# -----------------------------------------------------------------------------
+COMPUTED_ATTRS = {
+    "arn",
+    "id",
+    "key_id",
+    "owner_id",
+    "creation_date",
+    "create_date",
+    "created_date",
+    "unique_id",
+}
+
+DATA_ONLY_RESOURCE_TYPES = {
+    "aws_kms_ciphertext",
+    "aws_iam_policy_document",
+    "aws_caller_identity",
+    "aws_partition",
+    "aws_region",
+    "aws_availability_zones",
+    "aws_arn",
+}
+
+EXPLANATION_PATTERNS = [
+    re.compile(r"^\s*This\s+Terraform\s+code", re.IGNORECASE),
+    re.compile(r"^\s*The\s+Terraform\s+code", re.IGNORECASE),
+    re.compile(r"^\s*The\s+provided\s+Terraform\s+code", re.IGNORECASE),
+    re.compile(r"^\s*This\s+should", re.IGNORECASE),
+    re.compile(r"^\s*Here\s+is", re.IGNORECASE),
+    re.compile(r"^\s*Below\s+is", re.IGNORECASE),
+    re.compile(r"^\s*\d+\.\s+"),
+    re.compile(r"^\s*[-*]\s+"),
+]
+
+HCL_START_RE = re.compile(
+    r"^\s*(#|//|resource\b|data\b|provider\b|variable\b|locals\b|terraform\b|"
+    r"output\b|module\b|import\b|\})"
+)
+
+
+def _brace_delta(line: str) -> int:
+    return line.count("{") - line.count("}")
+
+
+def _strip_code_fences(code: str) -> str:
+    lines = []
+    for line in code.splitlines():
+        if line.strip().startswith("```"):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _comment_explanations(lines):
+    out = []
+    in_expl = False
+    for line in lines:
+        if any(pat.match(line) for pat in EXPLANATION_PATTERNS):
+            in_expl = True
+            out.append("# " + line.strip())
+            continue
+        if in_expl:
+            if HCL_START_RE.match(line):
+                in_expl = False
+                out.append(line)
+            else:
+                out.append("# " + line.strip())
+            continue
+        out.append(line)
+    return out
+
+
+def _remove_import_blocks(lines):
+    out = []
+    in_import = False
+    brace = 0
+    for line in lines:
+        if not in_import and re.match(r"^\s*import\s*\{", line):
+            in_import = True
+            brace += _brace_delta(line)
+            if brace <= 0:
+                in_import = False
+            continue
+        if in_import:
+            brace += _brace_delta(line)
+            if brace <= 0:
+                in_import = False
+            continue
+        out.append(line)
+    return out
+
+
+def _remove_provider_blocks(lines):
+    out = []
+    in_prov = False
+    brace = 0
+    for line in lines:
+        if not in_prov and re.match(r'^\s*provider\s+"aws"\s*\{', line):
+            in_prov = True
+            brace += _brace_delta(line)
+            if brace <= 0:
+                in_prov = False
+            continue
+        if in_prov:
+            brace += _brace_delta(line)
+            if brace <= 0:
+                in_prov = False
+            continue
+        if re.match(r"^\s*provider\s*=\s*aws\.\S+", line):
+            continue
+        out.append(line)
+    return out
+
+
+def _fix_invalid_type_tokens(line: str) -> str:
+    line = re.sub(r'^(\s*(resource|data)\s+")aws:([^"]+")', r"\1aws_\3", line)
+    return line
+
+
+def _convert_data_only_resources(lines):
+    out = []
+    for line in lines:
+        line = _fix_invalid_type_tokens(line)
+        m = re.match(r'^(\s*)resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+        if m and m.group(2) in DATA_ONLY_RESOURCE_TYPES:
+            indent, rtype, rname = m.group(1), m.group(2), m.group(3)
+            out.append(f'{indent}data "{rtype}" "{rname}" {{')
+            continue
+        out.append(line)
+    return out
+
+
+def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
+    attrs = set(COMPUTED_ATTRS)
+    if extra_attrs:
+        attrs.update(extra_attrs)
+    if not attrs:
+        return lines
+    attr_re = re.compile(r"^\s*(" + "|".join(sorted(attrs)) + r")\s*=")
+
+    out = []
+    in_resource = False
+    brace = 0
+    for line in lines:
+        if not in_resource and re.match(r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{', line):
+            in_resource = True
+            brace = _brace_delta(line)
+            out.append(line)
+            continue
+        if in_resource:
+            if attr_re.match(line):
+                continue
+            brace += _brace_delta(line)
+            out.append(line)
+            if brace <= 0:
+                in_resource = False
+            continue
+        out.append(line)
+    return out
+
+
+def sanitize_tf_code(code, extra_unconfig_attrs=None):
+    if not code:
+        return ""
+    code = _strip_code_fences(code)
+    lines = code.splitlines()
+    lines = _comment_explanations(lines)
+    lines = _remove_import_blocks(lines)
+    lines = _convert_data_only_resources(lines)
+    lines = _remove_provider_blocks(lines)
+    lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
+
+    # 앞/뒤 공백 라인 제거
+    while lines and lines[0].strip() == "":
+        lines.pop(0)
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+    return "\n".join(lines).strip()
+
+
+def apply_error_fixes(tf_code, error_msg):
+    extra_attrs = set()
+    for pat in [
+        r'Can\'t configure a value for "([^"]+)"',
+        r'Value for unconfigurable attribute.*?"([^"]+)"',
+    ]:
+        for m in re.findall(pat, error_msg, flags=re.DOTALL):
+            extra_attrs.add(m)
+    if extra_attrs:
+        return sanitize_tf_code(tf_code, extra_unconfig_attrs=extra_attrs)
+    if any(
+        key in error_msg
+        for key in ["Unsupported block type", "Invalid block definition", "Invalid character"]
+    ):
+        return sanitize_tf_code(tf_code)
+    return tf_code
+
+
+def validate_with_autofix(tf_code, max_auto_fixes=2):
+    last_err = ""
+    for _ in range(max_auto_fixes + 1):
+        ok, err = validate_terraform(tf_code)
+        if ok:
+            return True, tf_code, ""
+        last_err = err
+        fixed = apply_error_fixes(tf_code, err)
+        if fixed == tf_code:
+            break
+        tf_code = fixed
+    return False, tf_code, last_err
 
 
 def categorize_check_id(check_id: str) -> str:
@@ -254,62 +467,50 @@ for _, row in high_priority.iterrows():
     # 1차: Bedrock으로 Terraform 코드 생성 시도
     original_prompt = make_remediation_prompt(row)
     tf_code = call_bedrock(original_prompt)
+    source = "bedrock"
 
     # 2차: Bedrock 실패 시 IaC 스니펫으로 대체
     if not tf_code:
         bedrock_failures += 1
         tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')))
+        source = "iac_snippet"
         if tf_code:
             print(f"Fallback IaC snippet used for: {check_id}")
 
     if tf_code:
-        # AI 응답에 markdown/code fence가 섞였을 경우 제거
-        import re
-        def cleanup_tf(code):
-            code = code.replace('```hcl', '').replace('```terraform', '').replace('```', '').strip()
-            # 앞부분: HCL 시작 전 설명 텍스트 제거
-            lines = code.split('\n')
-            start = 0
-            _hcl_start = re.compile(
-                r'^(\s*$|#|//|resource\s|data\s|provider\s|variable\s|locals\s'
-                r'|terraform\s|output\s|module\s|import\s|\})'
-            )
-            for i, line in enumerate(lines):
-                if _hcl_start.match(line):
-                    start = i
-                    break
-            # 뒷부분: 마지막 닫는 중괄호 이후의 설명 텍스트 제거
-            end = len(lines)
-            for i in range(len(lines) - 1, start - 1, -1):
-                if lines[i].strip() == '}' or lines[i].strip().startswith('#') or lines[i].strip() == '':
-                    end = i + 1
-                    if lines[i].strip() == '}':
-                        break
-                else:
-                    end = i + 1
-                    break
-            return '\n'.join(lines[start:end]).strip()
-
-        tf_code = cleanup_tf(tf_code)
+        tf_code = sanitize_tf_code(tf_code)
 
         if not tf_code:
             print(f"SKIP (generated code was empty after cleanup): {check_id}")
             continue
 
-        # 생성 코드 검증 + 오류 피드백 재시도
-        for attempt in range(1, MAX_RETRIES + 1):
-            ok, err = validate_terraform(tf_code)
-            if ok:
-                print(f"  validate OK (attempt {attempt})")
-                break
-            print(f"  validate FAILED (attempt {attempt}/{MAX_RETRIES}): {err[:200]}")
-            if attempt < MAX_RETRIES:
+        # 생성 코드 검증 + 자동 수정(가드레일) 적용
+        ok, tf_code, err = validate_with_autofix(tf_code)
+
+        # Bedrock 코드가 실패하면 IaC 스니펫으로 재시도
+        if not ok and source == "bedrock":
+            fallback = fallback_from_iac_snippet(str(row.get('check_id', '')))
+            if fallback:
+                fb_code = sanitize_tf_code(fallback)
+                ok, fb_code, err = validate_with_autofix(fb_code)
+                if ok:
+                    tf_code = fb_code
+                    source = "iac_snippet"
+
+        # 여전히 실패하면 Bedrock 수정 요청 재시도
+        if not ok:
+            for attempt in range(1, MAX_RETRIES + 1):
+                print(f"  validate FAILED (attempt {attempt}/{MAX_RETRIES}): {err[:200]}")
                 fix_response = call_bedrock(make_fix_prompt(original_prompt, tf_code, err))
-                if fix_response:
-                    tf_code = cleanup_tf(fix_response)
-                if not tf_code:
+                if not fix_response:
+                    continue
+                tf_code = sanitize_tf_code(fix_response)
+                ok, tf_code, err = validate_with_autofix(tf_code)
+                if ok:
+                    print(f"  validate OK (attempt {attempt})")
                     break
-        else:
+
+        if not ok:
             print(f"SKIP {check_id}: failed validation after {MAX_RETRIES} attempts")
             continue
 
@@ -324,8 +525,7 @@ for _, row in high_priority.iterrows():
             'file': filename,
             'priority': row.get('priority'),
             'category': category,
-            # Bedrock 성공/실패 여부에 따라 source 기록
-            'source': 'bedrock' if bedrock_failures == 0 or tf_code != fallback_from_iac_snippet(str(row.get('check_id', ''))) else 'iac_snippet'
+            'source': source
         })
         print(f"Generated: {filename}")
     else:
