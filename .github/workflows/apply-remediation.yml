@@ -65,7 +65,9 @@ jobs:
           lines = path.read_text().splitlines()
           out = []
           in_provider = False
+          in_import = False
           brace = 0
+          import_brace = 0
           comment_tail = False
 
           for line in lines:
@@ -84,6 +86,20 @@ jobs:
                   brace += line.count('{') - line.count('}')
                   if brace <= 0:
                       in_provider = False
+                  continue
+              # Track import blocks (do not strip id= inside them)
+              if not in_import and re.match(r'^\s*import\s*\{', line):
+                  in_import = True
+                  import_brace = line.count('{') - line.count('}')
+                  out.append(line)
+                  if import_brace <= 0:
+                      in_import = False
+                  continue
+              if in_import:
+                  import_brace += line.count('{') - line.count('}')
+                  out.append(line)
+                  if import_brace <= 0:
+                      in_import = False
                   continue
               # Strip provider alias references inside resource/data blocks
               if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
@@ -232,7 +248,9 @@ jobs:
           lines = path.read_text().splitlines()
           out = []
           in_provider = False
+          in_import = False
           brace = 0
+          import_brace = 0
           comment_tail = False
 
           for line in lines:
@@ -251,6 +269,20 @@ jobs:
                   brace += line.count('{') - line.count('}')
                   if brace <= 0:
                       in_provider = False
+                  continue
+              # Track import blocks (do not strip id= inside them)
+              if not in_import and re.match(r'^\s*import\s*\{', line):
+                  in_import = True
+                  import_brace = line.count('{') - line.count('}')
+                  out.append(line)
+                  if import_brace <= 0:
+                      in_import = False
+                  continue
+              if in_import:
+                  import_brace += line.count('{') - line.count('}')
+                  out.append(line)
+                  if import_brace <= 0:
+                      in_import = False
                   continue
               # Strip provider alias references inside resource/data blocks
               if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):

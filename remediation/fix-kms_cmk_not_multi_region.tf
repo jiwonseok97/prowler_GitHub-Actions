@@ -1,19 +1,20 @@
+# Remediation: kms_cmk_not_multi_region
+# Create a new multi-region KMS key
+# (AWS does not allow converting existing single-region keys to multi-region)
+
 provider "aws" {
   region = "ap-northeast-2"
 }
 
-# Create a new KMS customer managed key in the ap-northeast-2 region
 resource "aws_kms_key" "multi_region_key" {
-  description             = "Multi-Region KMS Key"
+  description             = "Multi-Region KMS Key (remediation)"
   key_usage               = "ENCRYPT_DECRYPT"
   customer_master_key_spec = "SYMMETRIC_DEFAULT"
   multi_region            = true
+  enable_key_rotation     = true
 }
 
-# Import the existing single-Region KMS key into Terraform management
-# This will allow you to manage the key's configuration using Terraform
-resource "aws_kms_key" "single_region_key" {
-  provider = aws
-
-  key_id = "acf8da0a-9167-44bc-9373-b769fda7443b"
+resource "aws_kms_alias" "multi_region_key_alias" {
+  name          = "alias/multi-region-remediated"
+  target_key_id = aws_kms_key.multi_region_key.key_id
 }
