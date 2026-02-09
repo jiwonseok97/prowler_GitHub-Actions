@@ -64,7 +64,7 @@ jobs:
             --output-formats json-ocsf html csv
 
       # 원본 결과 아티팩트 업로드 (다음 job에서 사용)
-      - name: Upload artifacts: Prowler raw output
+      - name: "Upload artifacts: Prowler raw output"
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -94,7 +94,7 @@ jobs:
           mkdir -p output reports scripts mcp/output
 
       # scan job에서 업로드한 원본 결과 다운로드
-      - name: Download artifacts: Prowler raw output
+      - name: "Download artifacts: Prowler raw output"
         uses: actions/download-artifact@v4
         with:
           name: prowler-output
@@ -144,7 +144,7 @@ jobs:
           fi
 
       # 가공된 결과 업로드
-      - name: Upload artifacts: MCP processed output
+      - name: "Upload artifacts: MCP processed output"
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -174,7 +174,7 @@ jobs:
           fetch-depth: 0
 
       # MCP 가공 결과 다운로드
-      - name: Download artifacts: MCP processed output
+      - name: "Download artifacts: MCP processed output"
         uses: actions/download-artifact@v4
         with:
           name: mcp-output
