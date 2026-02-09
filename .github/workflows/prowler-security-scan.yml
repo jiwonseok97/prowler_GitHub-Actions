@@ -1,43 +1,59 @@
 ﻿name: ProwlerSecurityScan
 
 on:
+  # PR에서는 보안 점검 + 리포트 생성까지만 수행
   pull_request:
+  # main 브랜치에 머지되면 remediation + PR 자동 생성까지 수행
   push:
     branches: ["main"]
 
+# 기본은 최소 권한 (읽기 전용)
 permissions:
-  contents: write
-  id-token: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  prowler:
+
+  # ================================
+  # 1) SCAN JOB
+  # AWS에 실제로 접속해서 Prowler 보안 점검 수행
+  # ================================
+  scan:
+    name: 1) Scan (Prowler CIS 1.4)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # OIDC role assume을 위해 필요
 
     steps:
-      - name: Checkout
+      # 레포 코드 체크아웃
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Ensure folders
+      # 결과 저장 디렉토리 생성
+      - name: Create working directories
         run: |
           mkdir -p output reports scripts mcp/output
 
-      - name: Setup Python
+      # Python 환경 구성
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Configure AWS credentials (OIDC)
+      # GitHub OIDC → AWS IAM Role Assume
+      - name: Configure AWS credentials (OIDC assume-role)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
-      - name: Install Prowler + deps
+      # Prowler 및 리포트 라이브러리 설치
+      - name: Install dependencies (Prowler + report tools)
         run: |
           pip install prowler pandas openpyxl boto3
 
-      - name: Run Prowler (CIS 1.4 / ap-northeast-2)
+      # CIS 1.4 기준으로 AWS 스캔 실행
+      - name: Run Prowler scan (CIS 1.4 / ap-northeast-2)
         continue-on-error: true
         run: |
           prowler aws \
@@ -47,183 +63,184 @@ jobs:
             --output-directory output \
             --output-formats json-ocsf html csv
 
-      - name: Normalize + Score + AI Assist + Runbook + OCSF
-        run: |
-          python mcp/pipeline/normalize.py --input "output/*.csv" --output mcp/output/findings-normalized.csv
-          python mcp/pipeline/score.py --input mcp/output/findings-normalized.csv --output mcp/output/findings-scored.csv
-          python mcp/pipeline/ai_assist.py --input mcp/output/findings-scored.csv --output mcp/output/findings-scored-ai.csv
-          python mcp/pipeline/build_runbook.py --input mcp/output/findings-scored-ai.csv --template mcp/templates/runbook.md --output mcp/output/runbook.md
-          python mcp/pipeline/export_ocsf.py --input "output/*.ocsf.json" --output mcp/output/ocsf-findings.json
-
-      - name: Build Excel report (optional)
-        if: always()
-        run: |
-          if [ -f scripts/json_to_excel.py ]; then
-            python scripts/json_to_excel.py
-          else
-            echo "scripts/json_to_excel.py not found - skip"
-          fi
-
-      - name: Upload output (raw)
+      # 원본 결과 아티팩트 업로드 (다음 job에서 사용)
+      - name: Upload artifacts: Prowler raw output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: prowler-output
           path: output/
 
-      - name: Upload MCP artifacts
+
+  # ================================
+  # 2) PROCESS JOB
+  # Scan 결과를 정규화/점수화/AI보강/Runbook 생성
+  # ================================
+  process:
+    name: 2) Process (Normalize/Score/AI/Runbook/OCSF)
+    runs-on: ubuntu-latest
+    needs: scan
+    permissions:
+      contents: read
+
+    steps:
+      # 레포 코드 체크아웃
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 작업 디렉토리 생성
+      - name: Create working directories
+        run: |
+          mkdir -p output reports scripts mcp/output
+
+      # scan job에서 업로드한 원본 결과 다운로드
+      - name: Download artifacts: Prowler raw output
+        uses: actions/download-artifact@v4
+        with:
+          name: prowler-output
+          path: output
+
+      # Python 환경 구성
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 파이프라인 처리용 라이브러리 설치
+      - name: Install dependencies (pipeline tools)
+        run: |
+          pip install pandas openpyxl boto3
+
+      # Normalize → Score → AI Assist → Runbook → OCSF export
+      - name: Process findings pipeline
+        run: |
+          set -e
+
+          # CSV가 있을 경우만 처리
+          if ls output/*.csv >/dev/null 2>&1; then
+            python mcp/pipeline/normalize.py \
+              --input "output/*.csv" \
+              --output mcp/output/findings-normalized.csv
+
+            python mcp/pipeline/score.py \
+              --input mcp/output/findings-normalized.csv \
+              --output mcp/output/findings-scored.csv
+
+            python mcp/pipeline/ai_assist.py \
+              --input mcp/output/findings-scored.csv \
+              --output mcp/output/findings-scored-ai.csv
+
+            python mcp/pipeline/build_runbook.py \
+              --input mcp/output/findings-scored-ai.csv \
+              --template mcp/templates/runbook.md \
+              --output mcp/output/runbook.md
+          fi
+
+          # OCSF export 처리
+          if ls output/*.ocsf.json >/dev/null 2>&1; then
+            python mcp/pipeline/export_ocsf.py \
+              --input "output/*.ocsf.json" \
+              --output mcp/output/ocsf-findings.json
+          fi
+
+      # 가공된 결과 업로드
+      - name: Upload artifacts: MCP processed output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mcp-output
           path: mcp/output/
 
-      - name: Upload reports (human)
-        if: always()
-        uses: actions/upload-artifact@v4
+
+  # ================================
+  # 3) REMEDIATE JOB
+  # main push일 때만 Terraform 코드 생성 + PR 자동 생성
+  # ================================
+  remediate:
+    name: 3) Remediate (Generate IaC + Create PR)
+    runs-on: ubuntu-latest
+    needs: process
+    # Gate 조건: main push일 때만 실행
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      # 브랜치 생성/푸시를 위해 full clone
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
         with:
-          name: prowler-reports
-          path: reports/
+          fetch-depth: 0
 
-      - name: Install PyYAML for IaC fallback
-        if: github.ref == 'refs/heads/main'
-        run: pip install pyyaml
+      # MCP 가공 결과 다운로드
+      - name: Download artifacts: MCP processed output
+        uses: actions/download-artifact@v4
+        with:
+          name: mcp-output
+          path: mcp/output
 
-      - name: Setup Terraform (for validate during generation)
-        if: github.ref == 'refs/heads/main'
+      # Python 환경 구성
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # IaC 보조 라이브러리 설치
+      - name: Install IaC helper libraries
+        run: |
+          pip install pyyaml
+
+      # Terraform CLI 설치 (검증용)
+      - name: Setup Terraform CLI
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.6.0
 
-      - name: Generate Remediation Code
-        if: github.ref == 'refs/heads/main'
+      # AI 기반 Terraform remediation 코드 생성
+      - name: Generate Terraform remediation
         run: |
           mkdir -p remediation
-          echo "=== Input CSV row count ==="
-          wc -l mcp/output/findings-scored-ai.csv || true
-          python mcp/pipeline/generate_remediation.py \
-            --input mcp/output/findings-scored-ai.csv \
-            --output-dir remediation/
-          echo "=== Generated .tf files ==="
-          ls -la remediation/*.tf 2>/dev/null || echo "No .tf files generated"
-          echo "=== Manifest ==="
-          cat remediation/manifest.json 2>/dev/null || echo "No manifest"
+          # 이전 생성 파일 정리 (최신 결과만 반영)
+          find remediation -type f ! -name '.gitkeep' -delete
 
-      - name: Upload Remediation artifacts
-        if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: remediation
-          path: remediation/
-      - name: Create Remediation PRs (by category, overwrite branch)
-        if: github.ref == 'refs/heads/main' && hashFiles('remediation/*.tf') != ''
+          if [ -f mcp/output/findings-scored-ai.csv ]; then
+            python mcp/pipeline/generate_remediation.py \
+              --input mcp/output/findings-scored-ai.csv \
+              --output-dir remediation/
+          else
+            echo "No scored findings found. Skipping remediation."
+            exit 0
+          fi
+
+      # 생성된 .tf 파일이 있을 경우 PR 생성
+      - name: Create remediation PR (single branch)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          python - <<'PY' > /tmp/remediation-groups.txt
-          import glob
-          import json
-          import os
-          import re
-          from collections import defaultdict
+          BRANCH="remediation/auto-fix"
+          git checkout -B "$BRANCH" main
+          git add remediation/
 
-          def categorize(check_id: str) -> str:
-              cid = (check_id or "").lower()
-              if cid.startswith("iam_"):
-                  return "iam"
-              if cid.startswith("s3_"):
-                  return "s3"
-              if cid.startswith("cloudtrail_"):
-                  return "cloudtrail"
-              if cid.startswith("cloudwatch_"):
-                  return "cloudwatch"
-              if cid.startswith("kms_"):
-                  return "kms"
-              if cid.startswith("ec2_") or cid.startswith("vpc_") or cid.startswith("network"):
-                  return "network-ec2-vpc"
-              if cid.startswith("organizations_") or cid.startswith("account_"):
-                  return "org-account"
-              return "other"
-
-          groups = defaultdict(list)
-          manifest = "remediation/manifest.json"
-          if os.path.exists(manifest):
-              try:
-                  with open(manifest) as f:
-                      data = json.load(f)
-              except Exception:
-                  data = []
-              for item in data:
-                  cat = item.get("category") or categorize(item.get("check_id", ""))
-                  file = item.get("file")
-                  if not file:
-                      continue
-                  groups[cat].append(os.path.join("remediation", file))
-          else:
-              for file in glob.glob("remediation/*.tf"):
-                  base = os.path.basename(file)
-                  check_id = re.sub(r"^fix-", "", base)
-                  check_id = re.sub(r"\.tf$", "", check_id)
-                  cat = categorize(check_id)
-                  groups[cat].append(file)
-
-          for cat, files in groups.items():
-              safe = re.sub(r"[^a-z0-9-]+", "-", cat.lower()).strip("-") or "other"
-              print(safe + "|" + "|".join(sorted(set(files))))
-          PY
-
-          if [ ! -s /tmp/remediation-groups.txt ]; then
-            echo "No remediation groups found; skipping PR creation."
+          if [ -z "$(git status --porcelain remediation/)" ]; then
+            echo "No remediation changes detected; skipping PR."
             exit 0
           fi
 
-          while IFS= read -r line; do
-            cat="${line%%|*}"
-            rest="${line#*|}"
-            IFS='|' read -r -a files <<< "$rest"
-            if [ -z "$cat" ] || [ "${#files[@]}" -eq 0 ]; then
-              continue
-            fi
+          git commit -m "fix: auto-generated Terraform remediation"
+          git push origin "$BRANCH" --force
 
-            BRANCH="remediation/${cat}"
-
-            # open PR exists?
-            EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
-
-            # reset branch to main, then commit only the category files
-            git checkout -B "$BRANCH" main
-            git add -- "${files[@]}"
-            git commit -m "fix: remediation (${cat})" || { git checkout main; continue; }
-            git push origin "$BRANCH" --force
-
-            if [ -z "$EXISTING_PR" ]; then
-              printf "%s\n" \
-                "## Auto-generated Terraform Remediation (${cat})" \
-                "" \
-                "This PR contains automatically generated Terraform fixes for category **${cat}**." \
-                "" \
-                "### Review Checklist" \
-                "- [ ] Verify Terraform code is correct" \
-                "- [ ] Check for unintended changes" \
-                "- [ ] Confirm resources match the finding" \
-                "" \
-                "**Merge this PR to automatically apply fixes to AWS.**" \
-                "" \
-                "---" \
-                "Generated by Prowler + Claude AI pipeline." \
-                > /tmp/pr-body.md
-
-              gh pr create \
-                --title "Security Remediation (${cat})" \
-                --body-file /tmp/pr-body.md \
-                --base main \
-                --head "$BRANCH"
-            else
-              echo "PR #${EXISTING_PR} already exists for ${BRANCH} – updated via force-push."
-            fi
-          done < /tmp/remediation-groups.txt
-
-
+          # 기존 PR이 있으면 업데이트, 없으면 생성
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -z "$EXISTING_PR" ]; then
+            gh pr create \
+              --title "Security Remediation (Auto Generated)" \
+              --body "Auto-generated Terraform fixes from Prowler pipeline." \
+              --base main \
+              --head "$BRANCH"
+          else
+            echo "PR #${EXISTING_PR} already exists for ${BRANCH} – updated via force-push."
+          fi
