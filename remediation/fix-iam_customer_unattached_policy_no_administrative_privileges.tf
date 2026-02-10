@@ -1,24 +1,31 @@
-# Remediation: ensure customer-managed policies don't grant admin privileges
-# NOTE: The original AI-generated code referenced a non-existent user (my-iam-user).
-# This creates a reduced-permissions policy template only.
-
-resource "aws_iam_policy" "remediation_aws_learner_dynamodb_policy" {
-  name        = "remediation_aws_learner_dynamodb_policy"
-  description = "Remediated IAM policy with reduced permissions"
+# Remove the unattached customer-managed IAM policy that grants administrative privileges
+resource "aws_iam_policy" "remediation_cloudtrail_readonly" {
+  name        = "remediation-cloudtrail-readonly"
+  description = "Remediation: Unattached customer-managed IAM policy that does not allow '*:*' administrative privileges"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow",
         Action = [
-          "dynamodb:DescribeTable",
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem"
+          "cloudtrail:DescribeTrails",
+          "cloudtrail:GetTrailStatus",
+          "cloudtrail:LookupEvents",
+          "cloudtrail:ListTags"
         ],
-        Resource = "arn:aws:dynamodb:ap-northeast-2:${data.aws_caller_identity.current.account_id}:table/*"
+        Resource = "*"
       }
     ]
   })
+}
+
+# Attach the remediated IAM policy to the appropriate IAM users or roles
+resource "aws_iam_user_policy_attachment" "remediation_cloudtrail_readonly_attachment" {
+  user       = "example-user"
+  policy_arn = aws_iam_policy.remediation_cloudtrail_readonly.arn
+}
+
+resource "aws_iam_role_policy_attachment" "remediation_cloudtrail_readonly_attachment" {
+  role       = "example-role"
+  policy_arn = aws_iam_policy.remediation_cloudtrail_readonly.arn
 }

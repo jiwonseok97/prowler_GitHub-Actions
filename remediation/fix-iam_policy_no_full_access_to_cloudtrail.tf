@@ -1,7 +1,7 @@
-# Modify the existing IAM policy to remove the "cloudtrail:*" permission
-resource "aws_iam_policy" "remediation_iam_policy" {
+# Create a new IAM policy with the required permissions
+resource "aws_iam_policy" "remediation_cloudtrail_readonly" {
   name        = "remediation-cloudtrail-readonly"
-  description = "Remediated IAM policy to remove 'cloudtrail:*' permission"
+  description = "Allows read-only access to CloudTrail"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -10,23 +10,17 @@ resource "aws_iam_policy" "remediation_iam_policy" {
         Action = [
           "cloudtrail:DescribeTrails",
           "cloudtrail:GetTrailStatus",
-          "cloudtrail:LookupEvents"
+          "cloudtrail:LookupEvents",
+          "cloudtrail:ListTags"
         ],
-        # Scope CloudTrail actions to a specific trail to satisfy tfsec
-        Resource = "arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/security-cloudtrail"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "s3:GetBucketLocation",
-          "s3:GetObject",
-          "s3:ListBucket"
-        ],
-        Resource = [
-          "arn:aws:s3:::my-cloudtrail-bucket",
-          "arn:aws:s3:::my-cloudtrail-bucket/*"
-        ]
+        Resource = "*"
       }
     ]
   })
+}
+
+# Attach the new IAM policy to the existing IAM user
+resource "aws_iam_user_policy_attachment" "remediation_cloudtrail_readonly_attachment" {
+  user       = "your-iam-user-name"
+  policy_arn = aws_iam_policy.remediation_cloudtrail_readonly.arn
 }
