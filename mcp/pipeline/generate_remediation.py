@@ -1098,6 +1098,98 @@ def _replace_placeholder_ids(lines):
     return out
 
 
+def _fix_deprecated_resource_types(lines):
+    """Deprecated/invalid 리소스 타입을 올바른 타입으로 치환."""
+    # data source 이름 변경 (AWS provider v4+)
+    DEPRECATED_DATA_SOURCES = {
+        "aws_subnet_ids": "aws_subnets",
+    }
+    # 잘못된 resource 타입 → 올바른 타입
+    INVALID_RESOURCE_TYPES = {
+        "aws_instance_profile_attachment": "aws_iam_instance_profile",
+        "aws_ec2_instance_profile": "aws_iam_instance_profile",
+    }
+    out = []
+    for line in lines:
+        # data source 타입 치환
+        for old_type, new_type in DEPRECATED_DATA_SOURCES.items():
+            if f'"{old_type}"' in line:
+                line = line.replace(f'"{old_type}"', f'"{new_type}"')
+                # 참조도 치환 (data.aws_subnet_ids → data.aws_subnets)
+            if f"data.{old_type}." in line:
+                line = line.replace(f"data.{old_type}.", f"data.{new_type}.")
+        # resource 타입 치환
+        for old_type, new_type in INVALID_RESOURCE_TYPES.items():
+            if f'"{old_type}"' in line:
+                line = line.replace(f'"{old_type}"', f'"{new_type}"')
+            if f"{old_type}." in line:
+                line = line.replace(f"{old_type}.", f"{new_type}.")
+        out.append(line)
+    return out
+
+
+def _fix_set_indexing(lines):
+    """Set 타입 속성에 인덱스 접근([0])을 tolist() 호출로 수정."""
+    # vpc_security_group_ids[0] → tolist(xxx.vpc_security_group_ids)[0]
+    SET_ATTRS = {
+        "vpc_security_group_ids",
+        "security_groups",
+    }
+    out = []
+    for line in lines:
+        for attr in SET_ATTRS:
+            # data.xxx.yyy.attr[N] 패턴 수정
+            pat = re.compile(
+                rf'((?:data\.\w+\.\w+|aws_\w+\.\w+)\.{attr})\[(\d+)\]'
+            )
+            if pat.search(line):
+                line = pat.sub(r'tolist(\1)[\2]', line)
+        out.append(line)
+    return out
+
+
+def _ensure_visibility_config(lines):
+    """aws_wafv2_web_acl 리소스에 visibility_config 블록이 없으면 추가."""
+    out = []
+    in_block = False
+    brace = 0
+    has_visibility = False
+    block_indent = ""
+    for line in lines:
+        if not in_block:
+            m = re.match(
+                r'^(\s*)resource\s+"aws_wafv2_web_acl"\s+"[^"]+"\s*\{', line
+            )
+            if m:
+                in_block = True
+                brace = _brace_delta(line)
+                has_visibility = False
+                block_indent = m.group(1)
+            out.append(line)
+            continue
+
+        next_brace = brace + _brace_delta(line)
+        if re.match(r'^\s*visibility_config\s*\{', line):
+            has_visibility = True
+
+        if next_brace <= 0:
+            if not has_visibility:
+                indent = block_indent + "  "
+                out.append(f"{indent}visibility_config {{")
+                out.append(f'{indent}  cloudwatch_metrics_enabled = true')
+                out.append(f'{indent}  metric_name               = "remediation-waf-metric"')
+                out.append(f'{indent}  sampled_requests_enabled   = true')
+                out.append(f"{indent}}}")
+            out.append(line)
+            in_block = False
+            brace = 0
+            continue
+
+        out.append(line)
+        brace = next_brace
+    return out
+
+
 def _replace_placeholder_values(lines):
     """placeholder 이메일, 키페어 등을 variable 참조로 치환."""
     REPLACEMENTS = [
@@ -1167,6 +1259,10 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _remove_terraform_blocks(lines)
     lines = _convert_data_only_resources(lines)
     lines = _remove_provider_blocks(lines)
+    # deprecated/invalid 리소스 타입 수정
+    lines = _fix_deprecated_resource_types(lines)
+    # set 인덱싱 오류 수정
+    lines = _fix_set_indexing(lines)
     # deprecated S3 bucket 속성 제거 (acl, inline encryption)
     lines = _strip_deprecated_s3_bucket_attrs(lines)
     # 프레임워크 중복 data 블록 제거
@@ -1186,6 +1282,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _fix_data_cloudwatch_log_group_name_arn(lines)
     # metric_transformation 누락 보정
     lines = _ensure_metric_transformation(lines)
+    # WAFv2 visibility_config 누락 보정
+    lines = _ensure_visibility_config(lines)
     # 하드코딩된 AWS 계정 ID → data source 참조로 치환
     lines = _replace_hardcoded_account_id(lines)
     # 하드코딩된 리전 → data source 참조로 치환
@@ -1234,6 +1332,18 @@ def apply_error_fixes(tf_code, error_msg):
     if "log_group_name" in error_msg and "arn:aws:logs" in error_msg:
         return sanitize_tf_code(tf_code)
     if "Insufficient metric_transformation blocks" in error_msg:
+        return sanitize_tf_code(tf_code)
+    # Invalid resource type → sanitize가 deprecated 타입을 고쳐줌
+    if "Invalid resource type" in error_msg or "Invalid data source" in error_msg:
+        return sanitize_tf_code(tf_code)
+    # Missing required argument → sanitize 재적용 (visibility_config 등)
+    if "Missing required argument" in error_msg:
+        return sanitize_tf_code(tf_code)
+    # Insufficient blocks (visibility_config 등) → sanitize 재적용
+    if "Insufficient" in error_msg and "blocks" in error_msg:
+        return sanitize_tf_code(tf_code)
+    # Invalid index (set 인덱싱 등) → sanitize 재적용
+    if "Invalid index" in error_msg:
         return sanitize_tf_code(tf_code)
     if any(
         key in error_msg
@@ -1450,6 +1560,16 @@ Requirements:
 - For EC2 instances needing IAM roles: create an aws_iam_instance_profile resource and reference it. Do NOT assign a role name directly to iam_instance_profile
 - For IAM user policy attachments: the "user" argument must be an IAM user name (string), NOT an ARN. Do NOT use data.aws_caller_identity.current.arn as a user name
 - For aws_iam_role_policy_attachment: use correct managed policy ARNs (e.g., "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"), NOT deprecated policy names
+- For aws_sns_topic_policy: the "arn" argument is REQUIRED — set it to the SNS topic ARN (e.g., aws_sns_topic.xxx.arn)
+- For aws_kms_key_policy: the "key_id" argument is REQUIRED — set it to the KMS key ID (e.g., aws_kms_key.xxx.id)
+- For aws_backup_selection: the "iam_role_arn" argument is REQUIRED — create an IAM role for AWS Backup and reference its ARN
+- For aws_wafv2_web_acl: the "visibility_config" block is REQUIRED inside both the web ACL and each rule
+- For aws_backup_vault: do NOT use "lifecycle_rule" block (it doesn't exist). Lifecycle rules go in aws_backup_plan
+- Do NOT use the deprecated "aws_subnet_ids" data source — use "aws_subnets" instead
+- Do NOT use "aws_instance_profile_attachment" or "aws_ec2_instance_profile" resource types — they don't exist. Use "aws_iam_instance_profile" instead
+- For aws_instance: either "ami" or "launch_template" must be specified
+- For launch_template blocks inside aws_instance: either "id" or "name" must be specified
+- Do NOT index set-type attributes directly (e.g., vpc_security_group_ids[0]). Use tolist() first: tolist(data.xxx.vpc_security_group_ids)[0]
 
 Output the Terraform code:"""
 
