@@ -1,7 +1,7 @@
-# Modify the existing IAM policy to remove the overly broad "cloudtrail:*" permission
+# Modify the existing IAM policy to remove the "cloudtrail:*" permission
 resource "aws_iam_policy" "remediation_iam_policy" {
   name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
-  description = "Remediated IAM policy to remove cloudtrail:* privilege"
+  description = "Remediated IAM policy to remove 'cloudtrail:*' permission"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
