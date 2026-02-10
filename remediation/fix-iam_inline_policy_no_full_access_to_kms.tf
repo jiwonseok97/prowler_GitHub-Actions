@@ -1,7 +1,7 @@
 # Create a new IAM policy with least-privilege permissions for KMS
 resource "aws_iam_policy" "remediation_kms_policy" {
   name        = "remediation-kms-policy"
-  description = "Least-privilege KMS permissions"
+  description = "Least-privilege IAM policy for KMS access"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -23,7 +23,3 @@ resource "aws_iam_policy" "remediation_kms_policy" {
 }
 
 # Attach the new IAM policy to the existing IAM user
-resource "aws_iam_user_policy_attachment" "remediation_kms_policy_attachment" {
-  user       = "github-actions-prowler"
-  policy_arn = aws_iam_policy.remediation_kms_policy.arn
-}

@@ -29,7 +29,7 @@
     "file": "fix-iam_password_policy_minimum_length_14.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_number",

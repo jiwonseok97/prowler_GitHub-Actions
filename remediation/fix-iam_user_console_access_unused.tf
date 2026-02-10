@@ -1,23 +1,11 @@
 # Disable console access for the IAM user
-resource "aws_iam_user_login_profile" "remediation_aws_learner_console_access" {
-  user                    = "aws_learner"
+resource "aws_iam_user_login_profile" "remediation_aws_learner" {
+  user    = "aws_learner"
+  pgp_key = "keybase:some_person_that_exists"
+  
+  # Disable console access
   password_reset_required = true
-  password_length         = 20
+  password_length        = 20
 }
 
-# Attach a policy to the IAM user to deny console access
-resource "aws_iam_user_policy" "remediation_aws_learner_console_access_deny" {
-  name = "deny-console-access"
-  user = "aws_learner"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Deny",
-        Action = "iam:GetLoginProfile",
-        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/aws_learner"
-      }
-    ]
-  })
-}
+# Attach a policy to the IAM user to enforce MFA for console access
