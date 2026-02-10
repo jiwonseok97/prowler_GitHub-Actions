@@ -731,6 +731,20 @@ def _remove_duplicate_data_blocks(lines):
     return out
 
 
+def _extract_log_group_name_from_arn(value: str) -> str | None:
+    if not value or not value.startswith("arn:aws:logs:"):
+        return None
+    if ":log-group:" not in value:
+        return None
+    name = value.split(":log-group:", 1)[1]
+    # Remove known suffixes
+    for suffix in [":log-stream:", ":*"]:
+        if suffix in name:
+            name = name.split(suffix, 1)[0]
+    name = name.strip()
+    return name or None
+
+
 def _fix_log_group_name_arn(lines):
     # log_group_name에 ARN이 들어간 경우 로그 그룹 이름으로 치환
     out = []  # 출력 라인 버퍼
@@ -738,15 +752,94 @@ def _fix_log_group_name_arn(lines):
         m = re.match(r'^\s*log_group_name\s*=\s*"([^"]+)"\s*$', line)  # log_group_name 라인 감지
         if m:  # 매칭되면
             value = m.group(1)  # 값 추출
-            if value.startswith("arn:aws:logs:") and ":log-group:" in value:  # 로그 그룹 ARN이면
-                name = value.split(":log-group:", 1)[1]  # log-group 이후 부분 추출
-                name = name.split(":*")[0]  # 와일드카드 접미 제거
-                name = name.strip()  # 공백 제거
+            if value.startswith("arn:aws:logs:"):
+                name = _extract_log_group_name_from_arn(value)
                 indent = re.match(r'^(\s*)', line).group(1)  # 들여쓰기 추출
-                out.append(f'{indent}log_group_name = "{name}"')  # 이름으로 치환
+                if name:
+                    out.append(f'{indent}log_group_name = "{name}"')  # 이름으로 치환
+                else:
+                    # ARN인데 로그 그룹 이름을 추출할 수 없으면 유효한 이름 placeholder로 대체
+                    out.append(f'{indent}log_group_name = "YOUR_LOG_GROUP_NAME"')
                 continue  # 다음 라인으로
         out.append(line)  # 변경 없음
     return out  # 결과 반환
+
+
+def _fix_data_cloudwatch_log_group_name_arn(lines):
+    # data "aws_cloudwatch_log_group"의 name에 ARN이 들어간 경우 이름으로 치환
+    out = []
+    in_block = False
+    brace = 0
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^(\s*)data\s+"aws_cloudwatch_log_group"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_block = True
+                brace = _brace_delta(line)
+                out.append(line)
+                continue
+            out.append(line)
+            continue
+        # block 내부
+        m = re.match(r'^(\s*)name\s*=\s*"([^"]+)"\s*$', line)
+        if m:
+            value = m.group(2)
+            if value.startswith("arn:aws:logs:"):
+                name = _extract_log_group_name_from_arn(value)
+                indent = m.group(1)
+                if name:
+                    out.append(f'{indent}name = "{name}"')
+                else:
+                    out.append(f'{indent}name = "YOUR_LOG_GROUP_NAME"')
+                brace += _brace_delta(line)
+                if brace <= 0:
+                    in_block = False
+                continue
+        out.append(line)
+        brace += _brace_delta(line)
+        if brace <= 0:
+            in_block = False
+    return out
+
+
+def _ensure_metric_transformation(lines):
+    # aws_cloudwatch_log_metric_filter에 metric_transformation 블록이 없으면 추가
+    out = []
+    in_block = False
+    brace = 0
+    has_metric = False
+    block_indent = ""
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^(\s*)resource\s+"aws_cloudwatch_log_metric_filter"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_block = True
+                brace = _brace_delta(line)
+                has_metric = False
+                block_indent = m.group(1)
+            out.append(line)
+            continue
+
+        next_brace = brace + _brace_delta(line)
+        if re.match(r'^\s*metric_transformation\s*\{', line):
+            has_metric = True
+
+        if next_brace <= 0:
+            if not has_metric:
+                indent = block_indent + "  "
+                out.append(f"{indent}metric_transformation {{")
+                out.append(f"{indent}  name      = \"RemediationMetric\"")
+                out.append(f"{indent}  namespace = \"Remediation/Security\"")
+                out.append(f"{indent}  value     = \"1\"")
+                out.append(f"{indent}}}")
+            out.append(line)
+            in_block = False
+            brace = 0
+            continue
+
+        out.append(line)
+        brace = next_brace
+    return out
 
 
 def _sanitize_label(name: str, prefix: str | None = None) -> str:
@@ -848,6 +941,221 @@ def _normalize_block_names(lines):
     return _replace_refs(out, mapping)
 
 
+# AWS 계정 ID 패턴 (12자리 숫자, ARN 내부에서만 매칭)
+_ACCOUNT_ID_RE = re.compile(r"(?<=:)\d{12}(?=:)")
+
+
+def _replace_hardcoded_account_id(lines):
+    """ARN 문자열 내 하드코딩된 12자리 AWS 계정 ID를 data source 참조로 치환."""
+    out = []
+    in_heredoc = False
+    heredoc_marker = None
+    for line in lines:
+        if in_heredoc:
+            out.append(line)
+            if line.strip() == heredoc_marker:
+                in_heredoc = False
+                heredoc_marker = None
+            continue
+        hm = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
+        if hm:
+            in_heredoc = True
+            heredoc_marker = hm.group(1)
+            out.append(line)
+            continue
+        # 주석 라인은 건너뜀
+        stripped = line.lstrip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            out.append(line)
+            continue
+        # ARN 패턴 내 12자리 계정 ID 치환
+        if "arn:aws" in line and _ACCOUNT_ID_RE.search(line):
+            line = _ACCOUNT_ID_RE.sub(
+                "${data.aws_caller_identity.current.account_id}", line
+            )
+        out.append(line)
+    return out
+
+
+def _replace_hardcoded_region_in_arns(lines):
+    """ARN 문자열 내 하드코딩된 리전을 data source 참조로 치환."""
+    out = []
+    in_heredoc = False
+    heredoc_marker = None
+    for line in lines:
+        if in_heredoc:
+            out.append(line)
+            if line.strip() == heredoc_marker:
+                in_heredoc = False
+                heredoc_marker = None
+            continue
+        hm = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
+        if hm:
+            in_heredoc = True
+            heredoc_marker = hm.group(1)
+            out.append(line)
+            continue
+        stripped = line.lstrip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            out.append(line)
+            continue
+        if "arn:aws" in line:
+            line = re.sub(
+                r"(arn:aws[^:]*:)([a-z]{2}-[a-z]+-\d)(?=:)",
+                r"\1${data.aws_region.current.name}",
+                line,
+            )
+        out.append(line)
+    return out
+
+
+# 하드코딩된 placeholder ID 패턴
+_PLACEHOLDER_PATTERNS = [
+    # vpc-0123456789abcdef 스타일 placeholder
+    (re.compile(r'"vpc-0123456789[a-f0-9]*"'), "var.vpc_id"),
+    # subnet-0123456789abcdef 스타일 placeholder
+    (re.compile(r'"subnet-0123456789[a-f0-9]*"'), "var.subnet_id"),
+    # sg-0123456789abcdef 스타일 placeholder
+    (re.compile(r'"sg-0123456789[a-f0-9]*"'), "var.security_group_id"),
+]
+
+# 리스트 내부 placeholder (여러 개)
+_PLACEHOLDER_SUBNET_LIST_RE = re.compile(
+    r'\[\s*"subnet-0123456789[a-f0-9]*"'
+    r'(?:\s*,\s*"subnet-0123456789[a-f0-9]*")*\s*\]'
+)
+
+
+def _replace_placeholder_ids(lines):
+    """하드코딩된 placeholder VPC/subnet/SG ID를 variable 참조로 치환.
+
+    실제 AWS 리소스 ID(vpc-0565... 등)가 아닌 0123456789 패턴의
+    placeholder만 치환한다.
+    """
+    out = []
+    has_vpc_var = False
+    has_subnet_var = False
+    has_sg_var = False
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            out.append(line)
+            continue
+        # 서브넷 리스트 패턴 (["subnet-...", "subnet-..."]) → var.subnet_ids
+        if _PLACEHOLDER_SUBNET_LIST_RE.search(line):
+            line = _PLACEHOLDER_SUBNET_LIST_RE.sub("var.subnet_ids", line)
+            has_subnet_var = True
+            out.append(line)
+            continue
+        for pat, replacement in _PLACEHOLDER_PATTERNS:
+            if pat.search(line):
+                line = pat.sub(replacement, line)
+                if "vpc_id" in replacement:
+                    has_vpc_var = True
+                elif "subnet_id" in replacement:
+                    has_subnet_var = True
+                elif "security_group_id" in replacement:
+                    has_sg_var = True
+        out.append(line)
+
+    # 사용된 variable 블록 추가
+    var_blocks = []
+    if has_vpc_var:
+        var_blocks.append(
+            'variable "vpc_id" {\n'
+            '  description = "Target VPC ID"\n'
+            '  type        = string\n'
+            "}"
+        )
+    if has_subnet_var:
+        var_blocks.append(
+            'variable "subnet_id" {\n'
+            '  description = "Target subnet ID"\n'
+            '  type        = string\n'
+            '  default     = ""\n'
+            "}"
+        )
+        var_blocks.append(
+            'variable "subnet_ids" {\n'
+            '  description = "Target subnet IDs"\n'
+            '  type        = list(string)\n'
+            '  default     = []\n'
+            "}"
+        )
+    if has_sg_var:
+        var_blocks.append(
+            'variable "security_group_id" {\n'
+            '  description = "Target security group ID"\n'
+            '  type        = string\n'
+            '  default     = ""\n'
+            "}"
+        )
+    if var_blocks:
+        out.append("")
+        for vb in var_blocks:
+            out.extend(vb.splitlines())
+            out.append("")
+    return out
+
+
+def _replace_placeholder_values(lines):
+    """placeholder 이메일, 키페어 등을 variable 참조로 치환."""
+    REPLACEMENTS = [
+        (re.compile(r'"example@example\.com"'), "var.notification_email"),
+        (re.compile(r'"your-key-pair-name"'), "var.key_pair_name"),
+        (re.compile(r'"YOUR_CLOUDTRAIL_LOG_GROUP_NAME"'), "var.cloudtrail_log_group_name"),
+        (re.compile(r'"my-config-bucket"'), "var.config_bucket_name"),
+    ]
+    out = []
+    used_vars = set()
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            out.append(line)
+            continue
+        for pat, replacement in REPLACEMENTS:
+            if pat.search(line):
+                line = pat.sub(replacement, line)
+                used_vars.add(replacement)
+        out.append(line)
+
+    var_defs = {
+        "var.notification_email": (
+            'variable "notification_email" {\n'
+            '  description = "Email for alarm notifications"\n'
+            '  type        = string\n'
+            '  default     = "security@example.com"\n'
+            "}"
+        ),
+        "var.key_pair_name": (
+            'variable "key_pair_name" {\n'
+            '  description = "EC2 key pair name"\n'
+            '  type        = string\n'
+            '  default     = ""\n'
+            "}"
+        ),
+        "var.cloudtrail_log_group_name": (
+            'variable "cloudtrail_log_group_name" {\n'
+            '  description = "CloudTrail CloudWatch log group name"\n'
+            '  type        = string\n'
+            "}"
+        ),
+        "var.config_bucket_name": (
+            'variable "config_bucket_name" {\n'
+            '  description = "S3 bucket for AWS Config"\n'
+            '  type        = string\n'
+            "}"
+        ),
+    }
+    if used_vars:
+        out.append("")
+        for var_ref in sorted(used_vars):
+            if var_ref in var_defs:
+                out.extend(var_defs[var_ref].splitlines())
+                out.append("")
+    return out
+
+
 def sanitize_tf_code(code, extra_unconfig_attrs=None):
     if not code:
         return ""
@@ -874,6 +1182,18 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _strip_backtick_lines(lines)
     # ARN 형태 log_group_name 보정
     lines = _fix_log_group_name_arn(lines)
+    # data aws_cloudwatch_log_group의 name에 ARN이 들어간 경우 보정
+    lines = _fix_data_cloudwatch_log_group_name_arn(lines)
+    # metric_transformation 누락 보정
+    lines = _ensure_metric_transformation(lines)
+    # 하드코딩된 AWS 계정 ID → data source 참조로 치환
+    lines = _replace_hardcoded_account_id(lines)
+    # 하드코딩된 리전 → data source 참조로 치환
+    lines = _replace_hardcoded_region_in_arns(lines)
+    # placeholder VPC/subnet/SG ID → variable 참조로 치환
+    lines = _replace_placeholder_ids(lines)
+    # placeholder 이메일/키페어 → variable 참조로 치환
+    lines = _replace_placeholder_values(lines)
     # 미닫힌 따옴표 보정
     lines = _repair_unbalanced_quotes(lines)
     # 괄호/대괄호 균형 보정
@@ -912,6 +1232,8 @@ def apply_error_fixes(tf_code, error_msg):
         return sanitize_tf_code("\n".join(filtered))
     # log_group_name에 ARN이 들어간 경우 보정 시도
     if "log_group_name" in error_msg and "arn:aws:logs" in error_msg:
+        return sanitize_tf_code(tf_code)
+    if "Insufficient metric_transformation blocks" in error_msg:
         return sanitize_tf_code(tf_code)
     if any(
         key in error_msg

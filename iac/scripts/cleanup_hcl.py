@@ -2,7 +2,8 @@
 """Clean up AI-generated Terraform HCL files.
 
 Strips provider blocks, computed attributes, deprecated S3 properties,
-duplicate framework data sources, and non-HCL prose.
+duplicate framework data sources, non-HCL prose, hardcoded account IDs,
+hardcoded regions, and placeholder resource IDs.
 
 Usage: python3 cleanup_hcl.py <file.tf> [<file2.tf> ...]
 """
@@ -13,6 +14,29 @@ FRAMEWORK_DATA = {
     ('aws_region', 'current'),
     ('aws_partition', 'current'),
 }
+
+# AWS 계정 ID 패턴 (ARN 내부 12자리)
+_ACCOUNT_ID_RE = re.compile(r"(?<=:)\d{12}(?=:)")
+
+# placeholder VPC/subnet/SG ID 패턴
+_PLACEHOLDER_PATTERNS = [
+    (re.compile(r'"vpc-0123456789[a-f0-9]*"'), "var.vpc_id"),
+    (re.compile(r'"subnet-0123456789[a-f0-9]*"'), "var.subnet_id"),
+    (re.compile(r'"sg-0123456789[a-f0-9]*"'), "var.security_group_id"),
+]
+
+_PLACEHOLDER_SUBNET_LIST_RE = re.compile(
+    r'\[\s*"subnet-0123456789[a-f0-9]*"'
+    r'(?:\s*,\s*"subnet-0123456789[a-f0-9]*")*\s*\]'
+)
+
+_PLACEHOLDER_VALUES = [
+    (re.compile(r'"example@example\.com"'), "var.notification_email"),
+    (re.compile(r'"your-key-pair-name"'), "var.key_pair_name"),
+    (re.compile(r'"YOUR_CLOUDTRAIL_LOG_GROUP_NAME"'), "var.cloudtrail_log_group_name"),
+    (re.compile(r'"my-config-bucket"'), "var.config_bucket_name"),
+]
+
 
 def cleanup(path):
     lines = path.read_text().splitlines()
@@ -132,7 +156,38 @@ def cleanup(path):
             continue
         out.append(line)
 
-    path.write_text("\n".join(out) + "\n")
+    # --- 후처리: 하드코딩 값 치환 ---
+    result = []
+    for line in out:
+        stripped = line.lstrip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            result.append(line)
+            continue
+        # ARN 내 하드코딩된 계정 ID 치환
+        if "arn:aws" in line and _ACCOUNT_ID_RE.search(line):
+            line = _ACCOUNT_ID_RE.sub(
+                "${data.aws_caller_identity.current.account_id}", line
+            )
+        # ARN 내 하드코딩된 리전 치환
+        if "arn:aws" in line:
+            line = re.sub(
+                r"(arn:aws[^:]*:)([a-z]{2}-[a-z]+-\d)(?=:)",
+                r"\1${data.aws_region.current.name}",
+                line,
+            )
+        # placeholder VPC/subnet/SG ID 치환
+        if _PLACEHOLDER_SUBNET_LIST_RE.search(line):
+            line = _PLACEHOLDER_SUBNET_LIST_RE.sub("var.subnet_ids", line)
+        for pat, replacement in _PLACEHOLDER_PATTERNS:
+            if pat.search(line):
+                line = pat.sub(replacement, line)
+        # placeholder 이메일/키페어 치환
+        for pat, replacement in _PLACEHOLDER_VALUES:
+            if pat.search(line):
+                line = pat.sub(replacement, line)
+        result.append(line)
+
+    path.write_text("\n".join(result) + "\n")
 
 if __name__ == "__main__":
     for arg in sys.argv[1:]:
