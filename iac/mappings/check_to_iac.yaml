@@ -5,3 +5,4 @@ account_maintain_current_contact_details: iac/terraform/snippets/account_alterna
 account_security_contact_information_is_registered: iac/terraform/snippets/account_alternate_contact_security.tf
 # Example: Firewall Manager
 fms_policy_compliant: iac/terraform/snippets/fms_policy_stub.tf
+config_recorder_all_regions_enabled: iac/terraform/snippets/config_recorder_all_regions_enabled.tf

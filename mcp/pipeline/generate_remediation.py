@@ -842,6 +842,156 @@ def _ensure_metric_transformation(lines):
     return out
 
 
+def _lift_resources_from_data_blocks(lines):
+    # data 블록 내부에 중첩된 resource 블록을 최상위로 이동
+    out = []
+    lifted = []
+    in_data = False
+    data_brace = 0
+    in_lift = False
+    lift_brace = 0
+    for line in lines:
+        if in_lift:
+            lifted.append(line)
+            lift_brace += _brace_delta(line)
+            if lift_brace <= 0:
+                in_lift = False
+            continue
+        if not in_data:
+            m = re.match(r'^\s*data\s+"[^"]+"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_data = True
+                data_brace = _brace_delta(line)
+                out.append(line)
+                if data_brace <= 0:
+                    in_data = False
+                continue
+            out.append(line)
+            continue
+        # data 블록 내부
+        if re.match(r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{', line):
+            in_lift = True
+            lift_brace = _brace_delta(line)
+            lifted.append(line)
+            if lift_brace <= 0:
+                in_lift = False
+            continue
+        out.append(line)
+        data_brace += _brace_delta(line)
+        if data_brace <= 0:
+            in_data = False
+    if lifted:
+        out.append("")
+        out.extend(lifted)
+    return out
+
+
+def _ensure_sns_topic_policy_arn(lines):
+    # aws_sns_topic_policy에 arn이 없으면 자동 삽입
+    sns_resource = None
+    sns_data = None
+    for line in lines:
+        m = re.match(r'^\s*resource\s+"aws_sns_topic"\s+"([^"]+)"\s*\{', line)
+        if m:
+            sns_resource = m.group(1)
+            break
+    if not sns_resource:
+        for line in lines:
+            m = re.match(r'^\s*data\s+"aws_sns_topic"\s+"([^"]+)"\s*\{', line)
+            if m:
+                sns_data = m.group(1)
+                break
+    if sns_resource:
+        arn_expr = f"aws_sns_topic.{sns_resource}.arn"
+    elif sns_data:
+        arn_expr = f"data.aws_sns_topic.{sns_data}.arn"
+    else:
+        arn_expr = "var.sns_topic_arn"
+
+    out = []
+    in_block = False
+    brace = 0
+    has_arn = False
+    block_indent = ""
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^\s*resource\s+"aws_sns_topic_policy"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_block = True
+                brace = _brace_delta(line)
+                has_arn = False
+                block_indent = re.match(r'^(\s*)', line).group(1)
+            out.append(line)
+            continue
+        next_brace = brace + _brace_delta(line)
+        if re.match(r'^\s*arn\s*=', line):
+            has_arn = True
+        if next_brace <= 0:
+            if not has_arn:
+                indent = block_indent + "  "
+                out.append(f"{indent}arn = {arn_expr}")
+            out.append(line)
+            in_block = False
+            brace = 0
+            continue
+        out.append(line)
+        brace = next_brace
+    return out
+
+
+def _ensure_kms_key_policy_key_id(lines):
+    # aws_kms_key_policy에 key_id가 없으면 자동 삽입
+    kms_resource = None
+    kms_data = None
+    for line in lines:
+        m = re.match(r'^\s*resource\s+"aws_kms_key"\s+"([^"]+)"\s*\{', line)
+        if m:
+            kms_resource = m.group(1)
+            break
+    if not kms_resource:
+        for line in lines:
+            m = re.match(r'^\s*data\s+"aws_kms_key"\s+"([^"]+)"\s*\{', line)
+            if m:
+                kms_data = m.group(1)
+                break
+    if kms_resource:
+        key_expr = f"aws_kms_key.{kms_resource}.key_id"
+    elif kms_data:
+        key_expr = f"data.aws_kms_key.{kms_data}.key_id"
+    else:
+        key_expr = "var.kms_key_id"
+
+    out = []
+    in_block = False
+    brace = 0
+    has_key = False
+    block_indent = ""
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^\s*resource\s+"aws_kms_key_policy"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_block = True
+                brace = _brace_delta(line)
+                has_key = False
+                block_indent = re.match(r'^(\s*)', line).group(1)
+            out.append(line)
+            continue
+        next_brace = brace + _brace_delta(line)
+        if re.match(r'^\s*key_id\s*=', line):
+            has_key = True
+        if next_brace <= 0:
+            if not has_key:
+                indent = block_indent + "  "
+                out.append(f"{indent}key_id = {key_expr}")
+            out.append(line)
+            in_block = False
+            brace = 0
+            continue
+        out.append(line)
+        brace = next_brace
+    return out
+
+
 def _sanitize_label(name: str, prefix: str | None = None) -> str:
     # 라벨에 허용되지 않는 문자를 '_'로 치환
     label = re.sub(r"[^A-Za-z0-9_]", "_", name or "")
@@ -1190,6 +1340,192 @@ def _ensure_visibility_config(lines):
     return out
 
 
+def _ensure_sns_topic_policy_arn(lines):
+    """aws_sns_topic_policy 리소스에 필수 arn 속성이 없으면 자동 추가."""
+    # 코드 내 aws_sns_topic 리소스 이름 수집
+    topic_names = []
+    for line in lines:
+        m = re.match(r'^\s*resource\s+"aws_sns_topic"\s+"([^"]+)"\s*\{', line)
+        if m:
+            topic_names.append(m.group(1))
+
+    out = []
+    in_policy = False
+    policy_brace = 0
+    has_arn = False
+    insert_idx = -1
+
+    for line in lines:
+        if not in_policy:
+            m = re.match(
+                r'^\s*resource\s+"aws_sns_topic_policy"\s+"([^"]+)"\s*\{', line
+            )
+            if m:
+                in_policy = True
+                policy_brace = _brace_delta(line)
+                has_arn = False
+                insert_idx = len(out)
+                out.append(line)
+                if policy_brace <= 0:
+                    in_policy = False
+                continue
+            out.append(line)
+            continue
+
+        if re.match(r'^\s*arn\s*=', line):
+            has_arn = True
+
+        policy_brace += _brace_delta(line)
+        out.append(line)
+
+        if policy_brace <= 0:
+            in_policy = False
+            if not has_arn and insert_idx >= 0:
+                if topic_names:
+                    arn_ref = f"aws_sns_topic.{topic_names[0]}.arn"
+                else:
+                    arn_ref = (
+                        '"arn:aws:sns:${data.aws_region.current.name}'
+                        ':${data.aws_caller_identity.current.account_id}'
+                        ':remediation-topic"'
+                    )
+                out.insert(insert_idx + 1, f"  arn = {arn_ref}")
+            insert_idx = -1
+
+    return out
+
+
+def _ensure_kms_key_policy_key_id(lines):
+    """aws_kms_key_policy 리소스에 필수 key_id 속성이 없으면 자동 추가."""
+    key_names = []
+    for line in lines:
+        m = re.match(r'^\s*resource\s+"aws_kms_key"\s+"([^"]+)"\s*\{', line)
+        if m:
+            key_names.append(m.group(1))
+
+    out = []
+    in_policy = False
+    policy_brace = 0
+    has_key_id = False
+    insert_idx = -1
+
+    for line in lines:
+        if not in_policy:
+            m = re.match(
+                r'^\s*resource\s+"aws_kms_key_policy"\s+"([^"]+)"\s*\{', line
+            )
+            if m:
+                in_policy = True
+                policy_brace = _brace_delta(line)
+                has_key_id = False
+                insert_idx = len(out)
+                out.append(line)
+                if policy_brace <= 0:
+                    in_policy = False
+                continue
+            out.append(line)
+            continue
+
+        if re.match(r'^\s*key_id\s*=', line):
+            has_key_id = True
+
+        policy_brace += _brace_delta(line)
+        out.append(line)
+
+        if policy_brace <= 0:
+            in_policy = False
+            if not has_key_id and insert_idx >= 0:
+                if key_names:
+                    key_ref = f"aws_kms_key.{key_names[0]}.id"
+                else:
+                    key_ref = '"alias/remediation-key"'
+                out.insert(insert_idx + 1, f"  key_id = {key_ref}")
+            insert_idx = -1
+
+    return out
+
+
+def _ensure_cloudwatch_alarm_required_attrs(lines):
+    """aws_cloudwatch_metric_alarm에 evaluation_periods 누락 시 기본값 추가."""
+    out = []
+    in_alarm = False
+    alarm_brace = 0
+    has_eval_periods = False
+    insert_idx = -1
+
+    for line in lines:
+        if not in_alarm:
+            m = re.match(
+                r'^\s*resource\s+"aws_cloudwatch_metric_alarm"\s+"([^"]+)"\s*\{',
+                line,
+            )
+            if m:
+                in_alarm = True
+                alarm_brace = _brace_delta(line)
+                has_eval_periods = False
+                insert_idx = len(out)
+                out.append(line)
+                if alarm_brace <= 0:
+                    in_alarm = False
+                continue
+            out.append(line)
+            continue
+
+        if re.match(r'^\s*evaluation_periods\s*=', line):
+            has_eval_periods = True
+
+        alarm_brace += _brace_delta(line)
+        out.append(line)
+
+        if alarm_brace <= 0:
+            in_alarm = False
+            if not has_eval_periods and insert_idx >= 0:
+                out.insert(insert_idx + 1, "  evaluation_periods = 1")
+            insert_idx = -1
+
+    return out
+
+
+def _extract_nested_resource_from_data(lines):
+    """data 블록 내부에 잘못 중첩된 resource 블록을 추출하여 최상위로 이동."""
+    out = []
+    in_data = False
+    data_brace = 0
+
+    for line in lines:
+        if not in_data:
+            m = re.match(r'^\s*data\s+"[^"]+"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_data = True
+                data_brace = _brace_delta(line)
+                out.append(line)
+                if data_brace <= 0:
+                    in_data = False
+                continue
+            out.append(line)
+            continue
+
+        # data 블록 내부에서 resource/data 시작 감지 → 중첩 오류
+        nested_m = re.match(
+            r'^\s*(resource|data)\s+"[^"]+"\s+"[^"]+"\s*\{', line
+        )
+        if nested_m and data_brace > 0:
+            # data 블록 강제 종료 후 중첩된 블록을 최상위로 추출
+            out.append("}")
+            out.append("")
+            in_data = False
+            data_brace = 0
+            out.append(line)
+            continue
+
+        data_brace += _brace_delta(line)
+        out.append(line)
+        if data_brace <= 0:
+            in_data = False
+
+    return out
+
+
 def _replace_placeholder_values(lines):
     """placeholder 이메일, 키페어 등을 variable 참조로 치환."""
     REPLACEMENTS = [
@@ -1267,6 +1603,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _strip_deprecated_s3_bucket_attrs(lines)
     # 프레임워크 중복 data 블록 제거
     lines = _remove_duplicate_data_blocks(lines)
+    # data 블록 내부에 중첩된 resource 블록 이동
+    lines = _lift_resources_from_data_blocks(lines)
     # provider 스키마 기반 computed-only 속성 제거
     lines = _strip_schema_computed_attrs(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
@@ -1282,6 +1620,10 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _fix_data_cloudwatch_log_group_name_arn(lines)
     # metric_transformation 누락 보정
     lines = _ensure_metric_transformation(lines)
+    # aws_sns_topic_policy arn 누락 보정
+    lines = _ensure_sns_topic_policy_arn(lines)
+    # aws_kms_key_policy key_id 누락 보정
+    lines = _ensure_kms_key_policy_key_id(lines)
     # WAFv2 visibility_config 누락 보정
     lines = _ensure_visibility_config(lines)
     # 하드코딩된 AWS 계정 ID → data source 참조로 치환
