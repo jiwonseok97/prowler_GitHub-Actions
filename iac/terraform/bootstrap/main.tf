@@ -97,8 +97,30 @@ resource "aws_iam_role_policy" "remediation_iam" {
           "iam:ListPolicyVersions",
           "iam:CreatePolicyVersion",
           "iam:DeletePolicyVersion",
+          "iam:ListEntitiesForPolicy",
         ]
-        Resource = "arn:aws:iam::${var.account_id}:policy/remediation_*"
+        Resource = [
+          "arn:aws:iam::${var.account_id}:policy/remediation_*",
+          "arn:aws:iam::${var.account_id}:policy/remediation-*",
+        ]
+      },
+      {
+        Sid    = "UserManagement"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachUserPolicy",
+          "iam:DetachUserPolicy",
+          "iam:PutUserPolicy",
+          "iam:DeleteUserPolicy",
+          "iam:GetUserPolicy",
+          "iam:ListUserPolicies",
+          "iam:ListAttachedUserPolicies",
+          "iam:CreateLoginProfile",
+          "iam:DeleteLoginProfile",
+          "iam:GetLoginProfile",
+          "iam:UpdateLoginProfile",
+        ]
+        Resource = "arn:aws:iam::${var.account_id}:user/*"
       },
       {
         Sid    = "InstanceProfileManagement"

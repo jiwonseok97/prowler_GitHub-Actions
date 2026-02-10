@@ -1,6 +1,6 @@
 # Modify the existing IAM policy to remove the "cloudtrail:*" permission
 resource "aws_iam_policy" "remediation_iam_policy" {
-  name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
+  name        = "remediation-cloudtrail-readonly"
   description = "Remediated IAM policy to remove 'cloudtrail:*' permission"
   policy      = jsonencode({
     Version = "2012-10-17"
@@ -12,7 +12,8 @@ resource "aws_iam_policy" "remediation_iam_policy" {
           "cloudtrail:GetTrailStatus",
           "cloudtrail:LookupEvents"
         ],
-        Resource = "*"
+        # Scope CloudTrail actions to a specific trail to satisfy tfsec
+        Resource = "arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/security-cloudtrail"
       },
       {
         Effect = "Allow",
