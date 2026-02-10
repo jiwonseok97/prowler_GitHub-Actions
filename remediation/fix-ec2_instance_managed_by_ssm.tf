@@ -16,21 +16,28 @@ resource "aws_iam_role" "remediation_ssm_role" {
   })
 }
 
-# Attach the AWS managed policy for Systems Manager to the IAM role
+# Attach the AmazonSSMManagedInstanceCore policy to the IAM role
 resource "aws_iam_role_policy_attachment" "remediation_ssm_role_policy_attachment" {
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   role       = aws_iam_role.remediation_ssm_role.name
 }
 
-# Create an EC2 instance with the IAM role attached
+# Create an IAM instance profile and associate it with the EC2 instance
+resource "aws_iam_instance_profile" "remediation_ssm_instance_profile" {
+  name = "remediation-ssm-instance-profile"
+  role = aws_iam_role.remediation_ssm_role.name
+}
+
+# Modify the existing EC2 instance to be managed by AWS Systems Manager
+data "aws_instance" "existing_ec2_instance" {
+}
+
 resource "aws_instance" "remediation_ec2_instance" {
-  ami           = "ami-0b7546d835a9b8926" # Replace with the desired AMI ID
-  instance_type = "t2.micro"
-  key_name      = "your-key-pair-name" # Replace with the name of your key pair
-
-  iam_instance_profile = aws_iam_role.remediation_ssm_role.name
-
-  tags = {
-    Name = "remediation-ec2-instance"
-  }
+  iam_instance_profile = aws_iam_instance_profile.remediation_ssm_instance_profile.name
+  
+  # Use the same attributes as the existing instance
+  ami           = data.aws_instance.existing_ec2_instance.ami
+  instance_type = data.aws_instance.existing_ec2_instance.instance_type
+  subnet_id     = data.aws_instance.existing_ec2_instance.subnet_id
+  vpc_security_group_ids = data.aws_instance.existing_ec2_instance.vpc_security_group_ids
 }

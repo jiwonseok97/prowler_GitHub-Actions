@@ -6,25 +6,19 @@ resource "aws_vpc_endpoint" "remediation_ec2_endpoint" {
   private_dns_enabled = true
 
   security_group_ids = [
-    aws_security_group.remediation_ec2_endpoint_sg.id
+    # Add the appropriate security group IDs for the VPC endpoint
+    "sg-0123456789abcdef",
+    "sg-fedcba9876543210",
   ]
 
   subnet_ids = [
-    # Add the subnet IDs where you want to create the VPC endpoint
-    "subnet-0123456789abcdef1",
-    "subnet-0123456789abcdef2",
-    "subnet-0123456789abcdef3"
+    # Add the appropriate subnet IDs for the VPC endpoint
+    "subnet-0123456789abcdef",
+    "subnet-fedcba9876543210",
   ]
 }
 
-# Create a security group for the VPC endpoint
-resource "aws_security_group" "remediation_ec2_endpoint_sg" {
-  name        = "remediation-ec2-endpoint-sg"
-  description = "Security group for the EC2 VPC endpoint"
-  vpc_id      = "vpc-0565167ce4f7cc871"
-}
-
-# Add a restrictive policy to the VPC endpoint
+# Apply a restrictive endpoint policy to the VPC endpoint
 resource "aws_vpc_endpoint_policy" "remediation_ec2_endpoint_policy" {
   vpc_endpoint_id = aws_vpc_endpoint.remediation_ec2_endpoint.id
 
@@ -35,7 +29,7 @@ resource "aws_vpc_endpoint_policy" "remediation_ec2_endpoint_policy" {
         Effect = "Allow",
         Principal = "*",
         Action = [
-          "ec2:Describe*"
+          "ec2:Describe*",
         ],
         Resource = "*"
       }

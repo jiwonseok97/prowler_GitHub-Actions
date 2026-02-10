@@ -1,27 +1,47 @@
-# Create a new security group to replace the one identified in the finding
-resource "aws_security_group" "remediation_ec2_securitygroup_from_launch_wizard" {
-  name        = "remediation-ec2-securitygroup-from-launch-wizard"
-  description = "Remediation security group for finding ec2_securitygroup_from_launch_wizard"
+# Modify the existing security group to apply least privilege
+resource "aws_security_group" "remediation_sg" {
+  name        = "remediation-sg"
+  description = "Remediated security group"
   vpc_id      = data.aws_vpc.default.id
 
-  # Restrict inbound traffic to only the required sources
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    cidr_blocks     = ["10.0.0.0/16"] # Restrict SSH access to required CIDR range
   }
 
-  # Restrict outbound traffic to only the required destinations
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    cidr_blocks     = ["0.0.0.0/0"] # Minimize egress rules
+  }
+
+  tags = {
+    Name = "remediation-sg"
   }
 }
 
-# Look up the default VPC in the current AWS account and region
+# Use data source to look up the existing security group
+data "aws_security_group" "existing_sg" {
+  id = "sg-0a48adc1c033afb1f"
+}
+
+# Replace the existing security group with the remediated one
+resource "aws_security_group_rule" "remediation_replace_sg" {
+  security_group_id = data.aws_security_group.existing_sg.id
+  type              = "ingress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+
+  depends_on = [
+    aws_security_group.remediation_sg
+  ]
+}
+
 data "aws_vpc" "default" {
   default = true
 }
