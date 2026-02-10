@@ -1,65 +1,56 @@
-# Create a new CloudWatch log group with a shorter retention period
-resource "aws_cloudwatch_log_group" "remediation_log_group" {
+# Create a new CloudWatch log group with a more restrictive retention policy
+resource "aws_cloudwatch_log_group" "remediation_eks_cluster_logs" {
   name              = "/aws/eks/0201_test/cluster"
   retention_in_days = 30
 }
 
-# Create a new IAM policy to audit and mask sensitive patterns in the log group
-resource "aws_iam_policy" "remediation_log_protection_policy" {
-  name        = "remediation-log-protection-policy"
-  description = "Audit and mask sensitive patterns in the CloudWatch log group"
-  policy      = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "logs:Describe*",
-          "logs:Get*",
-          "logs:List*",
-          "logs:StartQuery",
-          "logs:StopQuery",
-          "logs:TestMetricFilter",
-          "logs:FilterLogEvents"
-        ],
-        Resource = aws_cloudwatch_log_group.remediation_log_group.arn
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "logs:Unmask"
-        ],
-        Resource = aws_cloudwatch_log_group.remediation_log_group.arn,
-        Condition = {
-          StringEquals = {
-            "logs:RequestedLogFormat" = "json"
-          }
-        }
-      }
+# Create an IAM policy to mask sensitive data in CloudWatch logs
+data "aws_iam_policy_document" "remediation_cloudwatch_logs_masking_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:Describe*",
+      "logs:Get*",
+      "logs:List*",
+      "logs:StartQuery",
+      "logs:StopQuery",
+      "logs:Tail",
+      "logs:TestMetricFilter",
+      "logs:FilterLogEvents",
     ]
-  })
+    resources = [
+      aws_cloudwatch_log_group.remediation_eks_cluster_logs.arn,
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:Unmask",
+    ]
+    resources = [
+      aws_cloudwatch_log_group.remediation_eks_cluster_logs.arn,
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "logs:RequestedLogFormat"
+      values   = ["json"]
+    }
+  }
 }
 
-# Create a new IAM role to restrict access to the log group
-resource "aws_iam_role" "remediation_log_reader_role" {
-  name = "remediation-log-reader-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole",
-        Effect = "Allow",
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      }
-    ]
-  })
+resource "aws_iam_policy" "remediation_cloudwatch_logs_masking_policy" {
+  name        = "remediation-cloudwatch-logs-masking-policy"
+  description = "Allows masking of sensitive data in CloudWatch logs"
+  policy      = jsonencode(data.aws_iam_policy_document.remediation_cloudwatch_logs_masking_policy.json)
 }
 
-# Attach the log protection policy to the new IAM role
-resource "aws_iam_role_policy_attachment" "remediation_log_protection_policy_attachment" {
-  policy_arn = aws_iam_policy.remediation_log_protection_policy.arn
-  role       = aws_iam_role.remediation_log_reader_role.name
+# Attach the masking policy to the IAM role used by the EKS cluster
+data "aws_iam_role" "eks_cluster_role" {
+  name = "eks-cluster-role"
+}
+
+resource "aws_iam_role_policy_attachment" "remediation_eks_cluster_role_cloudwatch_logs_masking_policy" {
+  policy_arn = aws_iam_policy.remediation_cloudwatch_logs_masking_policy.arn
+  role       = data.aws_iam_role.eks_cluster_role.name
 }
