@@ -1,7 +1,7 @@
-# Create a new IAM policy with the required permissions
-resource "aws_iam_policy" "remediation_cloudtrail_readonly" {
-  name        = "remediation-cloudtrail-readonly"
-  description = "Allows read-only access to CloudTrail"
+# Modify the existing IAM policy to remove the "cloudtrail:*" permission
+resource "aws_iam_policy" "remediation_iam_policy" {
+  name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
+  description = "Remediated IAM policy to remove 'cloudtrail:*' permission"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -10,17 +10,28 @@ resource "aws_iam_policy" "remediation_cloudtrail_readonly" {
         Action = [
           "cloudtrail:DescribeTrails",
           "cloudtrail:GetTrailStatus",
-          "cloudtrail:LookupEvents",
-          "cloudtrail:ListTags"
+          "cloudtrail:LookupEvents"
         ],
         Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetBucketLocation",
+          "s3:GetObject",
+          "s3:ListBucket"
+        ],
+        Resource = [
+          "arn:aws:s3:::my-cloudtrail-bucket",
+          "arn:aws:s3:::my-cloudtrail-bucket/*"
+        ]
       }
     ]
   })
 }
 
-# Attach the new IAM policy to the existing IAM user
-resource "aws_iam_user_policy_attachment" "remediation_cloudtrail_readonly_attachment" {
-  user       = "your-iam-user-name"
-  policy_arn = aws_iam_policy.remediation_cloudtrail_readonly.arn
+# Attach the remediated IAM policy to the existing IAM role
+resource "aws_iam_role_policy_attachment" "remediation_iam_role_policy_attachment" {
+  policy_arn = aws_iam_policy.remediation_iam_policy.arn
+  role       = "GitHubActionsProwlerRole"
 }

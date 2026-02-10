@@ -1,27 +1,23 @@
-# IAM remediation baseline snippet (targets provided user/role)
-# NOTE: This applies account-level password policy (real change)
-
-# Target IAM principal references (for validation and future use)
-data "aws_iam_user" "target_user" {
-  user_name = "github-actions-prowler"
+# Disable console access for the IAM user
+resource "aws_iam_user_login_profile" "remediation_aws_learner_console_access" {
+  user                    = "aws_learner"
+  password_reset_required = true
+  password_length         = 20
 }
 
-data "aws_iam_role" "target_role" {
-  name = "GitHubActionsProwlerRole"
-}
+# Attach a policy to the IAM user to deny console access
+resource "aws_iam_user_policy" "remediation_aws_learner_console_access_deny" {
+  name = "deny-console-access"
+  user = "aws_learner"
 
-# NOTE: IAM permissions for GitHubActionsProwlerRole are managed in
-# iac/terraform/bootstrap/ — do not add inline policies here.
-
-# Enforce strict account password policy
-resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
-  minimum_password_length        = 14
-  require_uppercase_characters   = true
-  require_lowercase_characters   = true
-  require_numbers                = true
-  require_symbols                = true
-  allow_users_to_change_password = true
-  hard_expiry                    = false
-  password_reuse_prevention      = 24
-  max_password_age               = 90
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Deny",
+        Action = "iam:GetLoginProfile",
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/aws_learner"
+      }
+    ]
+  })
 }

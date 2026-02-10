@@ -21,7 +21,7 @@
     "file": "fix-iam_password_policy_expires_passwords_within_90_days_or_less.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_minimum_length_14",
@@ -29,7 +29,7 @@
     "file": "fix-iam_password_policy_minimum_length_14.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_password_policy_number",
@@ -93,6 +93,6 @@
     "file": "fix-iam_user_console_access_unused.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   }
 ]
