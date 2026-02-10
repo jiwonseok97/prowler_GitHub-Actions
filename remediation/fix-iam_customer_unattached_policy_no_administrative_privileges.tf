@@ -1,31 +1,42 @@
-# Remove the unattached customer-managed IAM policy that grants administrative privileges
-resource "aws_iam_policy" "remediation_cloudtrail_readonly" {
-  name        = "remediation-cloudtrail-readonly"
-  description = "Remediation: Unattached customer-managed IAM policy that does not allow '*:*' administrative privileges"
+# Create a new IAM policy with limited permissions
+resource "aws_iam_policy" "remediation_limited_policy" {
+  name        = "remediation_limited_policy"
+  description = "Limited IAM policy without administrative privileges"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow",
         Action = [
-          "cloudtrail:DescribeTrails",
-          "cloudtrail:GetTrailStatus",
-          "cloudtrail:LookupEvents",
-          "cloudtrail:ListTags"
+          "dynamodb:DescribeTable",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem"
         ],
-        Resource = "*"
+        Resource = "arn:aws:dynamodb:ap-northeast-2:${data.aws_caller_identity.current.account_id}:table/my-table"
       }
     ]
   })
 }
 
-# Attach the remediated IAM policy to the appropriate IAM users or roles
-resource "aws_iam_user_policy_attachment" "remediation_cloudtrail_readonly_attachment" {
-  user       = "example-user"
-  policy_arn = aws_iam_policy.remediation_cloudtrail_readonly.arn
+# Attach the new limited policy to the existing IAM user
+resource "aws_iam_user_policy_attachment" "remediation_limited_policy_attachment" {
+  user       = "my-iam-user"
+  policy_arn = aws_iam_policy.remediation_limited_policy.arn
 }
 
-resource "aws_iam_role_policy_attachment" "remediation_cloudtrail_readonly_attachment" {
-  role       = "example-role"
-  policy_arn = aws_iam_policy.remediation_cloudtrail_readonly.arn
+# Remove the existing unattached administrative policy
+resource "aws_iam_policy" "remediation_remove_unattached_policy" {
+  name   = "remediation_remove_unattached_policy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Deny",
+        Action   = "*",
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/aws_learner_dynamodb_policy"
+      }
+    ]
+  })
 }

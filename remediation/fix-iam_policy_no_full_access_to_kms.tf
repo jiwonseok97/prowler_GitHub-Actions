@@ -1,32 +1,39 @@
-# Modify the existing IAM policy to remove the kms:* privilege
-resource "aws_iam_policy" "remediation_cloudtrail_readonly" {
-  name        = "remediation-cloudtrail-readonly"
-  description = "Remediated IAM policy to remove kms:* privilege"
+# Modify the existing IAM policy to remove the 'kms:*' privilege
+resource "aws_iam_policy" "remediation_iam_policy" {
+  name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
+  description = "Custom IAM policy with reduced KMS privileges"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow",
         Action = [
-          "cloudtrail:DescribeTrails",
-          "cloudtrail:GetTrailStatus",
-          "cloudtrail:LookupEvents",
-          "cloudtrail:ListTags",
+          "kms:Encrypt",
           "kms:Decrypt",
-          "kms:DescribeKey",
-          "kms:GetKeyPolicy",
-          "kms:GetKeyRotationStatus",
-          "kms:ListAliases",
-          "kms:ListKeys"
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
         ],
-        Resource = "*"
+        Resource = [
+          "arn:aws:kms:ap-northeast-2:${data.aws_caller_identity.current.account_id}:key/*"
+        ]
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ],
+        Resource = [
+          "arn:aws:s3:::my-bucket/*"
+        ]
       }
     ]
   })
 }
 
-# Attach the remediated IAM policy to the existing user
-resource "aws_iam_user_policy_attachment" "remediation_cloudtrail_readonly" {
-  user       = "your-iam-user-name"
-  policy_arn = aws_iam_policy.remediation_cloudtrail_readonly.arn
+# Attach the modified IAM policy to the existing GitHubActionsProwlerRole
+resource "aws_iam_role_policy_attachment" "remediation_iam_role_policy_attachment" {
+  policy_arn = aws_iam_policy.remediation_iam_policy.arn
+  role       = "GitHubActionsProwlerRole"
 }
