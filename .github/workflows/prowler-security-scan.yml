@@ -290,7 +290,8 @@ jobs:
             BRANCH="remediation/$CATEGORY"
             git checkout -B "$BRANCH" main
 
-            # 기존 remediation 파일 정리 후 해당 카테고리 파일만 복사
+            # main에서 상속된 다른 카테고리 remediation 파일 제거
+            git rm -f remediation/*.tf remediation/manifest.json 2>/dev/null || true
             mkdir -p remediation
             for fname in $CAT_FILES; do
               if [ -f "$TMPGEN/$fname" ]; then
