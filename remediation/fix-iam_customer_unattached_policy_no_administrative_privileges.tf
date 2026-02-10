@@ -19,24 +19,3 @@ resource "aws_iam_policy" "remediation_limited_policy" {
     ]
   })
 }
-
-# Attach the new limited policy to the existing IAM user
-resource "aws_iam_user_policy_attachment" "remediation_limited_policy_attachment" {
-  user       = "my-iam-user"
-  policy_arn = aws_iam_policy.remediation_limited_policy.arn
-}
-
-# Remove the existing unattached administrative policy
-resource "aws_iam_policy" "remediation_remove_unattached_policy" {
-  name   = "remediation_remove_unattached_policy"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Deny",
-        Action   = "*",
-        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/aws_learner_dynamodb_policy"
-      }
-    ]
-  })
-}

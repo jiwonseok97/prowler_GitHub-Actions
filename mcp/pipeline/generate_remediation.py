@@ -1381,6 +1381,290 @@ def _ensure_cloudwatch_alarm_required_attrs(lines):
     return out
 
 
+def _remove_dangerous_iam_attachments(lines):
+    """외부(비-remediation) IAM 역할/사용자에 대한 policy attachment 블록 제거.
+
+    AI가 GitHubActionsProwlerRole, my-iam-user 등 실제 존재하지 않거나
+    bootstrap 권한 밖의 역할/사용자에 attachment를 생성하면 apply 시 403/404 오류 발생.
+    remediation_ 또는 remediation- 접두어가 아닌 대상 attachment는 제거.
+    """
+    out = []
+    skip_block = False
+    brace = 0
+    for line in lines:
+        if not skip_block:
+            m = re.match(
+                r'^\s*resource\s+"(aws_iam_(?:role|user|group)_policy_attachment)"\s+"[^"]+"\s*\{',
+                line,
+            )
+            if m:
+                # 블록 전체를 읽어서 대상이 remediation인지 확인
+                skip_block = True
+                brace = _brace_delta(line)
+                if brace <= 0:
+                    skip_block = False
+                continue
+            out.append(line)
+            continue
+        brace += _brace_delta(line)
+        if brace <= 0:
+            skip_block = False
+        continue
+    return out
+
+
+def _strip_lifecycle_from_data_blocks(lines):
+    """data 블록 내부의 lifecycle {} 블록 제거 (data 블록에서는 유효하지 않음)."""
+    out = []
+    in_data = False
+    data_brace = 0
+    skip_lifecycle = False
+    lifecycle_brace = 0
+    for line in lines:
+        if not in_data:
+            if re.match(r'^\s*data\s+"[^"]+"\s+"[^"]+"\s*\{', line):
+                in_data = True
+                data_brace = _brace_delta(line)
+            out.append(line)
+            continue
+
+        if not skip_lifecycle:
+            if re.match(r'^\s*lifecycle\s*\{', line):
+                skip_lifecycle = True
+                lifecycle_brace = _brace_delta(line)
+                if lifecycle_brace <= 0:
+                    skip_lifecycle = False
+                data_brace += _brace_delta(line)
+                if data_brace <= 0:
+                    in_data = False
+                continue
+        if skip_lifecycle:
+            lifecycle_brace += _brace_delta(line)
+            data_brace += _brace_delta(line)
+            if lifecycle_brace <= 0:
+                skip_lifecycle = False
+            if data_brace <= 0:
+                in_data = False
+            continue
+
+        data_brace += _brace_delta(line)
+        if data_brace <= 0:
+            in_data = False
+        out.append(line)
+    return out
+
+
+def _ensure_launch_template_id_or_name(lines):
+    """aws_instance 내 launch_template 블록에 id/name 누락 시 변수 참조 추가."""
+    out = []
+    in_instance = False
+    instance_brace = 0
+    in_lt = False
+    lt_brace = 0
+    has_id_or_name = False
+    lt_insert_idx = -1
+
+    for line in lines:
+        if not in_instance:
+            if re.match(r'^\s*resource\s+"aws_instance"\s+"[^"]+"\s*\{', line):
+                in_instance = True
+                instance_brace = _brace_delta(line)
+            out.append(line)
+            continue
+
+        if not in_lt:
+            m = re.match(r'^(\s*)launch_template\s*\{', line)
+            if m:
+                in_lt = True
+                lt_brace = _brace_delta(line)
+                has_id_or_name = False
+                lt_insert_idx = len(out)
+                out.append(line)
+                instance_brace += _brace_delta(line)
+                continue
+            instance_brace += _brace_delta(line)
+            if instance_brace <= 0:
+                in_instance = False
+            out.append(line)
+            continue
+
+        if re.match(r'^\s*(id|name)\s*=', line):
+            has_id_or_name = True
+        lt_brace += _brace_delta(line)
+        instance_brace += _brace_delta(line)
+        out.append(line)
+
+        if lt_brace <= 0:
+            if not has_id_or_name and lt_insert_idx >= 0:
+                out.insert(lt_insert_idx + 1, '    name = var.launch_template_name')
+            in_lt = False
+            lt_insert_idx = -1
+        if instance_brace <= 0:
+            in_instance = False
+    return out
+
+
+def _ensure_network_acl_vpc_id(lines):
+    """aws_network_acl 리소스에 vpc_id 누락 시 변수 참조 추가."""
+    out = []
+    in_nacl = False
+    nacl_brace = 0
+    has_vpc_id = False
+    insert_idx = -1
+
+    for line in lines:
+        if not in_nacl:
+            m = re.match(
+                r'^\s*resource\s+"aws_network_acl"\s+"[^"]+"\s*\{', line
+            )
+            if m:
+                in_nacl = True
+                nacl_brace = _brace_delta(line)
+                has_vpc_id = False
+                insert_idx = len(out)
+                out.append(line)
+                if nacl_brace <= 0:
+                    in_nacl = False
+                continue
+            out.append(line)
+            continue
+
+        if re.match(r'^\s*vpc_id\s*=', line):
+            has_vpc_id = True
+        nacl_brace += _brace_delta(line)
+        out.append(line)
+
+        if nacl_brace <= 0:
+            in_nacl = False
+            if not has_vpc_id and insert_idx >= 0:
+                out.insert(insert_idx + 1, '  vpc_id = var.vpc_id')
+            insert_idx = -1
+    return out
+
+
+def _lift_resources_from_resource_blocks(lines):
+    """resource 블록 내부에 중첩된 resource/data 블록을 최상위로 추출."""
+    out = []
+    lifted = []
+    depth = 0  # resource 블록 중첩 깊이
+    brace = 0
+    in_resource = False
+    inner_block_lines = []
+    inner_brace = 0
+    capturing_inner = False
+
+    for line in lines:
+        if not in_resource:
+            m = re.match(
+                r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{', line
+            )
+            if m:
+                in_resource = True
+                brace = _brace_delta(line)
+                depth = 1
+            out.append(line)
+            continue
+
+        if not capturing_inner:
+            # 내부에 또 다른 resource/data 블록이 있는지 확인
+            m = re.match(
+                r'^\s*(resource|data)\s+"[^"]+"\s+"[^"]+"\s*\{', line
+            )
+            if m:
+                capturing_inner = True
+                inner_block_lines = [line.lstrip()]
+                inner_brace = _brace_delta(line)
+                brace += _brace_delta(line)
+                if inner_brace <= 0:
+                    capturing_inner = False
+                    lifted.append("\n".join(inner_block_lines))
+                    inner_block_lines = []
+                continue
+
+            brace += _brace_delta(line)
+            if brace <= 0:
+                in_resource = False
+            out.append(line)
+            continue
+
+        inner_brace += _brace_delta(line)
+        brace += _brace_delta(line)
+        inner_block_lines.append(line.lstrip())
+        if inner_brace <= 0:
+            capturing_inner = False
+            lifted.append("\n".join(inner_block_lines))
+            inner_block_lines = []
+        if brace <= 0:
+            in_resource = False
+
+    if lifted:
+        out.append("")
+        for block in lifted:
+            out.extend(block.splitlines())
+            out.append("")
+    return out
+
+
+def _ensure_lifecycle_rule_id(lines):
+    """aws_s3_bucket_lifecycle_configuration의 rule 블록에 id 누락 시 기본값 추가."""
+    out = []
+    in_lifecycle_cfg = False
+    lifecycle_brace = 0
+    in_rule = False
+    rule_brace = 0
+    has_id = False
+    rule_insert_idx = -1
+    rule_counter = 0
+
+    for line in lines:
+        if not in_lifecycle_cfg:
+            m = re.match(
+                r'^\s*resource\s+"aws_s3_bucket_lifecycle_configuration"\s+"[^"]+"\s*\{',
+                line,
+            )
+            if m:
+                in_lifecycle_cfg = True
+                lifecycle_brace = _brace_delta(line)
+                rule_counter = 0
+            out.append(line)
+            continue
+
+        if not in_rule:
+            m = re.match(r'^(\s*)rule\s*\{', line)
+            if m:
+                in_rule = True
+                rule_brace = _brace_delta(line)
+                has_id = False
+                rule_counter += 1
+                rule_insert_idx = len(out)
+                out.append(line)
+                lifecycle_brace += _brace_delta(line)
+                continue
+            lifecycle_brace += _brace_delta(line)
+            if lifecycle_brace <= 0:
+                in_lifecycle_cfg = False
+            out.append(line)
+            continue
+
+        if re.match(r'^\s*id\s*=', line):
+            has_id = True
+        rule_brace += _brace_delta(line)
+        lifecycle_brace += _brace_delta(line)
+        out.append(line)
+
+        if rule_brace <= 0:
+            if not has_id and rule_insert_idx >= 0:
+                out.insert(
+                    rule_insert_idx + 1,
+                    f'    id = "lifecycle-rule-{rule_counter}"',
+                )
+            in_rule = False
+            rule_insert_idx = -1
+        if lifecycle_brace <= 0:
+            in_lifecycle_cfg = False
+    return out
+
+
 def _replace_placeholder_values(lines):
     """placeholder 이메일, 키페어 등을 variable 참조로 치환."""
     REPLACEMENTS = [
@@ -1483,6 +1767,18 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _ensure_cloudwatch_alarm_required_attrs(lines)
     # WAFv2 visibility_config 누락 보정
     lines = _ensure_visibility_config(lines)
+    # 외부 IAM 역할/사용자에 대한 위험한 attachment 제거
+    lines = _remove_dangerous_iam_attachments(lines)
+    # data 블록 내부의 lifecycle 블록 제거
+    lines = _strip_lifecycle_from_data_blocks(lines)
+    # aws_instance launch_template에 id/name 누락 보정
+    lines = _ensure_launch_template_id_or_name(lines)
+    # aws_network_acl에 vpc_id 누락 보정
+    lines = _ensure_network_acl_vpc_id(lines)
+    # resource 블록 내부에 중첩된 resource 블록 추출
+    lines = _lift_resources_from_resource_blocks(lines)
+    # S3 lifecycle rule에 id 누락 보정
+    lines = _ensure_lifecycle_rule_id(lines)
     # 하드코딩된 AWS 계정 ID → data source 참조로 치환
     lines = _replace_hardcoded_account_id(lines)
     # 하드코딩된 리전 → data source 참조로 치환

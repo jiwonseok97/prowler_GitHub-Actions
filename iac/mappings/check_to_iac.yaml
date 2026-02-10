@@ -6,3 +6,7 @@ account_security_contact_information_is_registered: iac/terraform/snippets/accou
 # Example: Firewall Manager
 fms_policy_compliant: iac/terraform/snippets/fms_policy_stub.tf
 config_recorder_all_regions_enabled: iac/terraform/snippets/config_recorder_all_regions_enabled.tf
+# Network Firewall
+networkfirewall_in_all_vpc: iac/terraform/snippets/networkfirewall.tf
+# Organizations AI opt-out
+organizations_opt_out_ai_services_policy: iac/terraform/snippets/organizations_ai_opt_out.tf

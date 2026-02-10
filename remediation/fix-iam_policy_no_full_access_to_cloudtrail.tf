@@ -29,9 +29,3 @@ resource "aws_iam_policy" "remediation_iam_policy" {
     ]
   })
 }
-
-# Attach the remediated IAM policy to the existing IAM role
-resource "aws_iam_role_policy_attachment" "remediation_iam_role_policy_attachment" {
-  policy_arn = aws_iam_policy.remediation_iam_policy.arn
-  role       = "GitHubActionsProwlerRole"
-}
