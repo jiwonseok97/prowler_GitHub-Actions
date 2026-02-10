@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   # -------------------------------------------------------
-  # Plan: PR 열릴 때 실행 → plan 결과를 PR. 코멘트로 게시
+  # Plan: PR 열릴 때 실행 → plan 결과를 PR 코멘트로 게시
   # -------------------------------------------------------
   plan:
     if: github.event.pull_request.merged != true && github.event.action != 'closed'
@@ -42,6 +42,11 @@ jobs:
         with:
           terraform_version: 1.6.0
 
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}  
+
       - name: Install IaC quality tools (tflint + tfsec)
         run: |
           curl -sSL -o /usr/local/bin/tfsec https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64
@@ -51,13 +56,26 @@ jobs:
           mv /tmp/tflint /usr/local/bin/tflint
           tflint --init
 
-      - name: Collect changed remediation files
+      - name: Collect changed files and group by category
         id: changed
         run: |
           files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
-      - name: Terraform Plan (per file)
+          # Extract unique categories from changed files
+          # fix-iam_password_policy_xxx.tf → iam
+          # fix-cloudwatch_log_group_xxx.tf → cloudwatch
+          categories=""
+          for file in $files; do
+            base=$(basename "$file" .tf | sed 's/^fix-//')
+            cat=$(echo "$base" | sed 's/_.*//')
+            if ! echo "$categories" | grep -qw "$cat"; then
+              categories="$categories $cat"
+            fi
+          done
+          echo "categories=$(echo $categories | xargs)" >> $GITHUB_OUTPUT
+
+      - name: Terraform Plan (per category)
         id: plan
         continue-on-error: true
         run: |
@@ -66,162 +84,42 @@ jobs:
           : > /tmp/tfgate.txt
           exitcode=0
 
-          if [ -z "${{ steps.changed.outputs.files }}" ]; then
-            echo "No remediation files changed." >> /tmp/tfplan.txt
+          if [ -z "${{ steps.changed.outputs.categories }}" ]; then
+            echo "No remediation categories changed." >> /tmp/tfplan.txt
           else
-            for file in ${{ steps.changed.outputs.files }}; do
-              echo "### $file" >> /tmp/tfplan.txt
-              echo "### $file" >> /tmp/tfgate.txt
-              if [ ! -f "$file" ]; then
-                echo "(skip missing file: $file)" >> /tmp/tfplan.txt
-                echo "(skip missing file: $file)" >> /tmp/tfgate.txt
+            for category in ${{ steps.changed.outputs.categories }}; do
+              echo "## Category: $category" >> /tmp/tfplan.txt
+              echo "## Category: $category" >> /tmp/tfgate.txt
+              work=$(mktemp -d)
+              state_key="remediation/${category}.tfstate"
+
+              # Copy ALL files for this category (not just changed ones)
+              file_count=0
+              for f in remediation/fix-${category}_*.tf; do
+                [ -f "$f" ] || continue
+                cp "$f" "$work/"
+                file_count=$((file_count+1))
+              done
+
+              if [ "$file_count" -eq 0 ]; then
+                echo "SKIP $category: no files found" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
+                exitcode=1
                 continue
               fi
-              work=$(mktemp -d)
-              cp "$file" "$work/main.tf"
-              base=$(basename "$file" .tf)
-              state_key="remediation/pr-${{ github.event.pull_request.number }}/${base}.tfstate"
 
-              python3 - "$work/main.tf" <<'PY'
-          import re, sys, pathlib
-          path = pathlib.Path(sys.argv[1])
-          lines = path.read_text().splitlines()
-          out = []
-          in_provider = False
-          in_import = False
-          in_heredoc = False
-          heredoc_marker = None
-          brace = 0
-          import_brace = 0
-          comment_tail = False
-          # S3 deprecated 속성 제거용
-          in_s3_bucket = False
-          s3_brace = 0
-          in_dep_block = False
-          dep_brace = 0
-          # 중복 data 블록 제거용
-          FRAMEWORK_DATA = {
-              ('aws_caller_identity', 'current'),
-              ('aws_region', 'current'),
-              ('aws_partition', 'current'),
-          }
-          skip_data = False
-          data_brace = 0
+              echo "  Files: $file_count" >> /tmp/tfplan.txt
 
-          for line in lines:
-              # heredoc 내부: 내용 그대로 유지
-              if in_heredoc:
-                  out.append(line)
-                  if line.strip() == heredoc_marker:
-                      in_heredoc = False
-                      heredoc_marker = None
-                  continue
-              # heredoc 시작 감지
-              hm = re.search(r'<<-?\s*([A-Za-z0-9_]+)\s*$', line)
-              if hm and not in_provider:
-                  in_heredoc = True
-                  heredoc_marker = hm.group(1)
-                  out.append(line)
-                  continue
-              # 중복 data 블록 스킵
-              if skip_data:
-                  data_brace += line.count('{') - line.count('}')
-                  if data_brace <= 0:
-                      skip_data = False
-                  continue
-              dm = re.match(r'^\s*data\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
-              if dm and (dm.group(1), dm.group(2)) in FRAMEWORK_DATA:
-                  skip_data = True
-                  data_brace = line.count('{') - line.count('}')
-                  if data_brace <= 0:
-                      skip_data = False
-                  continue
-              # HCL 시작 패턴 (comment_tail 리셋용)
-              HCL_START = re.compile(r'^\s*(#|//|resource\b|data\b|provider\b|variable\b|locals\b|terraform\b|output\b|module\b|\})')
-              if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
-                  comment_tail = True
-              if comment_tail:
-                  if HCL_START.match(line):
-                      comment_tail = False
-                  else:
-                      out.append('# ' + line)
-                      continue
-              if re.match(r'^\s*\d+\.\s', line):
-                  out.append('# ' + line)
-                  continue
-              if not in_provider and re.match(r'^\s*provider\s+"aws"\s*\{', line):
-                  in_provider = True
-                  brace += line.count('{') - line.count('}')
-                  if brace <= 0:
-                      in_provider = False
-                  continue
-              if in_provider:
-                  brace += line.count('{') - line.count('}')
-                  if brace <= 0:
-                      in_provider = False
-                  continue
-              # Track import blocks (do not strip id= inside them)
-              if not in_import and re.match(r'^\s*import\s*\{', line):
-                  in_import = True
-                  import_brace = line.count('{') - line.count('}')
-                  out.append(line)
-                  if import_brace <= 0:
-                      in_import = False
-                  continue
-              if in_import:
-                  import_brace += line.count('{') - line.count('}')
-                  out.append(line)
-                  if import_brace <= 0:
-                      in_import = False
-                  continue
-              # Strip provider alias references inside resource/data blocks
-              if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
-                  continue
-              # Strip computed/read-only attributes that AI incorrectly sets
-              if re.match(r'^\s*(arn|id|owner_id|unique_id|creation_date)\s*=', line):
-                  continue
-              # S3 bucket deprecated 속성 제거
-              if not in_s3_bucket and re.match(r'^\s*resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{', line):
-                  in_s3_bucket = True
-                  s3_brace = line.count('{') - line.count('}')
-                  out.append(line)
-                  continue
-              if in_s3_bucket:
-                  if in_dep_block:
-                      dep_brace += line.count('{') - line.count('}')
-                      s3_brace += line.count('{') - line.count('}')
-                      if dep_brace <= 0:
-                          in_dep_block = False
-                      if s3_brace <= 0:
-                          in_s3_bucket = False
-                      continue
-                  if re.match(r'^\s*acl\s*=', line):
-                      s3_brace += line.count('{') - line.count('}')
-                      if s3_brace <= 0:
-                          in_s3_bucket = False
-                      continue
-                  if re.match(r'^\s*server_side_encryption_configuration\s*\{', line):
-                      in_dep_block = True
-                      dep_brace = line.count('{') - line.count('}')
-                      s3_brace += line.count('{') - line.count('}')
-                      if dep_brace <= 0:
-                          in_dep_block = False
-                      if s3_brace <= 0:
-                          in_s3_bucket = False
-                      continue
-                  s3_brace += line.count('{') - line.count('}')
-                  out.append(line)
-                  if s3_brace <= 0:
-                      in_s3_bucket = False
-                  continue
-              out.append(line)
+              # Run cleanup on each file
+              for tf in "$work"/*.tf; do
+                python3 iac/scripts/cleanup_hcl.py "$tf"
+              done
 
-          path.write_text("\n".join(out) + "\n")
-          PY
+              # Deduplicate resource/data blocks across files
+              python3 iac/scripts/dedup_resources.py "$work"
 
-              # 리소스 블록이 없으면 실제 적용 불가 → 실패 처리
-              if ! grep -Eq '^\s*resource\s+"' "$work/main.tf"; then
-                echo "SKIP $file: no resource blocks after cleanup" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
+              # Check if any resource blocks remain
+              if ! grep -rEq '^\s*resource\s+"' "$work"/*.tf 2>/dev/null; then
+                echo "SKIP $category: no resource blocks after cleanup" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
                 exitcode=1
                 continue
               fi
@@ -244,14 +142,12 @@ jobs:
           }
           EOF
 
-              # 공통 data source (중복 방지)
               cat > "$work/data.tf" <<'EOF'
           data "aws_caller_identity" "current" {}
           data "aws_region" "current" {}
           data "aws_partition" "current" {}
           EOF
 
-              # tflint: scaffolding 파일 관련 경고 비활성화
               cat > "$work/.tflint.hcl" <<'EOF'
           rule "terraform_unused_declarations" {
             enabled = false
@@ -266,25 +162,39 @@ jobs:
 
               terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfplan.txt
               if ! (cd "$work" && tflint -f compact 2>&1 | tee -a /tmp/tfgate.txt); then
-                echo "SKIP $file: tflint failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
+                echo "SKIP $category: tflint failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
                 exitcode=1
                 continue
               fi
               if ! tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfgate.txt; then
-                echo "SKIP $file: tfsec failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
+                echo "SKIP $category: tfsec failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
                 exitcode=1
                 continue
               fi
               if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfplan.txt /tmp/tfgate.txt; then
-                echo "SKIP $file: validate failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
+                echo "SKIP $category: validate failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
                 exitcode=1
                 continue
               fi
-              terraform -chdir="$work" plan -no-color | tee -a /tmp/tfplan.txt
-              if [ ${PIPESTATUS[0]} -ne 0 ]; then exitcode=1; fi
-            done
+              terraform -chdir="$work" plan -no-color -out=tfplan.binary | tee -a /tmp/tfplan.txt
+             
+              terraform -chdir="$work" show -json tfplan.binary > "$work/plan.json"
+              infracost breakdown --path "$work/plan.json" \
+                --format json \
+                --out-file "/tmp/infracost-${category}.json" 2>&1 | tee -a /tmp/tfplan.txt
+                            if [ ${PIPESTATUS[0]} -ne 0 ]; then exitcode=1; fi
+                          done
+                        fi
+                        
+          # Merge all infracost outputs
+          cost_files=""
+          for f in /tmp/infracost-*.json; do
+            [ -f "$f" ] && cost_files="$cost_files --path $f"
+          done
+          if [ -n "$cost_files" ]; then
+            infracost output --format json $cost_files --out-file /tmp/infracost-total.json
+            infracost output --format table $cost_files --out-file /tmp/infracost-table.txt
           fi
-
           echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
 
       - name: Post Plan to PR comment
@@ -293,19 +203,29 @@ jobs:
           PLAN_OUTPUT: ${{ steps.plan.outputs.exitcode }}
         with:
           script: |
-            const fs = require('fs');
+           const fs = require('fs');
             let plan = fs.readFileSync('/tmp/tfplan.txt', 'utf8');
+            if (plan.length > 50000) {
+              plan = plan.substring(0, 50000) + '\n\n... (truncated)';
+            }
 
-            // 65535자 제한 대비 truncate
-            if (plan.length > 60000) {
-              plan = plan.substring(0, 60000) + '\n\n... (truncated)';
+            // Infracost 비용 정보 읽기
+            let costSection = '';
+            try {
+              const costTable = fs.readFileSync('/tmp/infracost-table.txt', 'utf8');
+              const costJson = JSON.parse(fs.readFileSync('/tmp/infracost-total.json', 'utf8'));
+              const monthly = costJson.totalMonthlyCost || '0';
+              const emoji = parseFloat(monthly) > 10 ? '🔴' : parseFloat(monthly) > 0 ? '🟡' : '🟢';
+              costSection = `\n### ${emoji} 예상 월 비용: $${monthly}\n\n<details>\n<summary>비용 상세 보기 (클릭)</summary>\n\n\`\`\`\n${costTable}\n\`\`\`\n\n</details>\n`;
+            } catch (e) {
+              costSection = '\n### 💰 비용 정보 없음 (Infracost 실행 실패)\n';
             }
 
             const exitcode = process.env.PLAN_OUTPUT;
             const status = exitcode === '0' ? '✅ Plan Succeeded' : '❌ Plan Failed';
 
             const body = `### Terraform Plan Result - ${status}
-
+            ${costSection}
             <details>
             <summary>Plan 상세 보기 (클릭)</summary>
 
@@ -315,10 +235,9 @@ jobs:
 
             </details>
 
-            > 💡 이 PR을 머지하면 위 리소스가 AWS에 자동 적용됩니다.
+            > 💡 이 PR을 머지하면 위 리소스가 AWS에 자동 적용됩니다.`;
             > ⚠️ 비용 발생 리소스가 있는지 반드시 확인하세요.`;
 
-            // 기존 bot 코멘트 찾아서 업데이트 (중복 방지)
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -354,6 +273,13 @@ jobs:
         with:
           name: remediation-quality-gates
           path: /tmp/tfgate.txt
+      
+      - name: Upload cost estimate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation-cost-estimate
+          path: /tmp/infracost-*.json
 
   # -------------------------------------------------------
   # Apply: PR 머지 후 실행 → 실제 AWS 적용
@@ -388,177 +314,67 @@ jobs:
           mv /tmp/tflint /usr/local/bin/tflint
           tflint --init
 
-      - name: Collect changed remediation files
+      - name: Collect changed files and group by category
         id: changed
         run: |
           files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
-      - name: Terraform Apply (per file)
+          categories=""
+          for file in $files; do
+            base=$(basename "$file" .tf | sed 's/^fix-//')
+            cat=$(echo "$base" | sed 's/_.*//')
+            if ! echo "$categories" | grep -qw "$cat"; then
+              categories="$categories $cat"
+            fi
+          done
+          echo "categories=$(echo $categories | xargs)" >> $GITHUB_OUTPUT
+
+      - name: Terraform Apply (per category)
         run: |
           set -euo pipefail
           : > /tmp/tfapply.txt
           applied=0
           skipped=0
           failed=0
-          if [ -z "${{ steps.changed.outputs.files }}" ]; then
-            echo "No remediation files changed."
+
+          if [ -z "${{ steps.changed.outputs.categories }}" ]; then
+            echo "No remediation categories changed."
             exit 0
           fi
 
-          for file in ${{ steps.changed.outputs.files }}; do
-            echo "### $file" >> /tmp/tfapply.txt
-            if [ ! -f "$file" ]; then
-              echo "Skip missing file: $file"
-              echo "Skip missing file: $file" >> /tmp/tfapply.txt
+          for category in ${{ steps.changed.outputs.categories }}; do
+            echo "## Category: $category" >> /tmp/tfapply.txt
+            work=$(mktemp -d)
+            state_key="remediation/${category}.tfstate"
+
+            # Copy ALL files for this category
+            file_count=0
+            for f in remediation/fix-${category}_*.tf; do
+              [ -f "$f" ] || continue
+              cp "$f" "$work/"
+              file_count=$((file_count+1))
+            done
+
+            if [ "$file_count" -eq 0 ]; then
+              echo "SKIP $category: no files found" | tee -a /tmp/tfapply.txt
               skipped=$((skipped+1))
               continue
             fi
-            work=$(mktemp -d)
-            cp "$file" "$work/main.tf"
-            base=$(basename "$file" .tf)
-            state_key="remediation/pr-${{ github.event.pull_request.number }}/${base}.tfstate"
 
-            python3 - "$work/main.tf" <<'PY'
-          import re, sys, pathlib
-          path = pathlib.Path(sys.argv[1])
-          lines = path.read_text().splitlines()
-          out = []
-          in_provider = False
-          in_import = False
-          in_heredoc = False
-          heredoc_marker = None
-          brace = 0
-          import_brace = 0
-          comment_tail = False
-          # S3 deprecated 속성 제거용
-          in_s3_bucket = False
-          s3_brace = 0
-          in_dep_block = False
-          dep_brace = 0
-          # 중복 data 블록 제거용
-          FRAMEWORK_DATA = {
-              ('aws_caller_identity', 'current'),
-              ('aws_region', 'current'),
-              ('aws_partition', 'current'),
-          }
-          skip_data = False
-          data_brace = 0
+            echo "  Files: $file_count" >> /tmp/tfapply.txt
 
-          for line in lines:
-              # heredoc 내부: 내용 그대로 유지
-              if in_heredoc:
-                  out.append(line)
-                  if line.strip() == heredoc_marker:
-                      in_heredoc = False
-                      heredoc_marker = None
-                  continue
-              # heredoc 시작 감지
-              hm = re.search(r'<<-?\s*([A-Za-z0-9_]+)\s*$', line)
-              if hm and not in_provider:
-                  in_heredoc = True
-                  heredoc_marker = hm.group(1)
-                  out.append(line)
-                  continue
-              # 중복 data 블록 스킵
-              if skip_data:
-                  data_brace += line.count('{') - line.count('}')
-                  if data_brace <= 0:
-                      skip_data = False
-                  continue
-              dm = re.match(r'^\s*data\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
-              if dm and (dm.group(1), dm.group(2)) in FRAMEWORK_DATA:
-                  skip_data = True
-                  data_brace = line.count('{') - line.count('}')
-                  if data_brace <= 0:
-                      skip_data = False
-                  continue
-              # HCL 시작 패턴 (comment_tail 리셋용)
-              HCL_START = re.compile(r'^\s*(#|//|resource\b|data\b|provider\b|variable\b|locals\b|terraform\b|output\b|module\b|\})')
-              if not comment_tail and re.match(r'^\s*(This|The)\s+.*Terraform code', line):
-                  comment_tail = True
-              if comment_tail:
-                  if HCL_START.match(line):
-                      comment_tail = False
-                  else:
-                      out.append('# ' + line)
-                      continue
-              if re.match(r'^\s*\d+\.\s', line):
-                  out.append('# ' + line)
-                  continue
-              if not in_provider and re.match(r'^\s*provider\s+"aws"\s*\{', line):
-                  in_provider = True
-                  brace += line.count('{') - line.count('}')
-                  if brace <= 0:
-                      in_provider = False
-                  continue
-              if in_provider:
-                  brace += line.count('{') - line.count('}')
-                  if brace <= 0:
-                      in_provider = False
-                  continue
-              # Track import blocks (do not strip id= inside them)
-              if not in_import and re.match(r'^\s*import\s*\{', line):
-                  in_import = True
-                  import_brace = line.count('{') - line.count('}')
-                  out.append(line)
-                  if import_brace <= 0:
-                      in_import = False
-                  continue
-              if in_import:
-                  import_brace += line.count('{') - line.count('}')
-                  out.append(line)
-                  if import_brace <= 0:
-                      in_import = False
-                  continue
-              # Strip provider alias references inside resource/data blocks
-              if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
-                  continue
-              # Strip computed/read-only attributes that AI incorrectly sets
-              if re.match(r'^\s*(arn|id|owner_id|unique_id|creation_date)\s*=', line):
-                  continue
-              # S3 bucket deprecated 속성 제거
-              if not in_s3_bucket and re.match(r'^\s*resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{', line):
-                  in_s3_bucket = True
-                  s3_brace = line.count('{') - line.count('}')
-                  out.append(line)
-                  continue
-              if in_s3_bucket:
-                  if in_dep_block:
-                      dep_brace += line.count('{') - line.count('}')
-                      s3_brace += line.count('{') - line.count('}')
-                      if dep_brace <= 0:
-                          in_dep_block = False
-                      if s3_brace <= 0:
-                          in_s3_bucket = False
-                      continue
-                  if re.match(r'^\s*acl\s*=', line):
-                      s3_brace += line.count('{') - line.count('}')
-                      if s3_brace <= 0:
-                          in_s3_bucket = False
-                      continue
-                  if re.match(r'^\s*server_side_encryption_configuration\s*\{', line):
-                      in_dep_block = True
-                      dep_brace = line.count('{') - line.count('}')
-                      s3_brace += line.count('{') - line.count('}')
-                      if dep_brace <= 0:
-                          in_dep_block = False
-                      if s3_brace <= 0:
-                          in_s3_bucket = False
-                      continue
-                  s3_brace += line.count('{') - line.count('}')
-                  out.append(line)
-                  if s3_brace <= 0:
-                      in_s3_bucket = False
-                  continue
-              out.append(line)
+            # Run cleanup on each file
+            for tf in "$work"/*.tf; do
+              python3 iac/scripts/cleanup_hcl.py "$tf"
+            done
 
-          path.write_text("\n".join(out) + "\n")
-          PY
+            # Deduplicate resource/data blocks across files
+            python3 iac/scripts/dedup_resources.py "$work"
 
-            # 리소스 블록이 없으면 실제 적용 불가 → 실패 처리
-            if ! grep -Eq '^\s*resource\s+"' "$work/main.tf"; then
-              echo "SKIP $file: no resource blocks after cleanup" | tee -a /tmp/tfapply.txt
+            # Check if any resource blocks remain
+            if ! grep -rEq '^\s*resource\s+"' "$work"/*.tf 2>/dev/null; then
+              echo "SKIP $category: no resource blocks after cleanup" | tee -a /tmp/tfapply.txt
               skipped=$((skipped+1))
               failed=1
               continue
@@ -582,14 +398,12 @@ jobs:
           }
           EOF
 
-            # 공통 data source (중복 방지)
             cat > "$work/data.tf" <<'EOF'
           data "aws_caller_identity" "current" {}
           data "aws_region" "current" {}
           data "aws_partition" "current" {}
           EOF
 
-            # tflint: scaffolding 파일 관련 경고 비활성화
             cat > "$work/.tflint.hcl" <<'EOF'
           rule "terraform_unused_declarations" {
             enabled = false
@@ -604,27 +418,27 @@ jobs:
 
             terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfapply.txt
             if ! (cd "$work" && tflint -f compact 2>&1 | tee -a /tmp/tfapply.txt); then
-              echo "SKIP $file: tflint failed" | tee -a /tmp/tfapply.txt
+              echo "SKIP $category: tflint failed" | tee -a /tmp/tfapply.txt
               failed=1
               continue
             fi
             if ! tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfapply.txt; then
-              echo "SKIP $file: tfsec failed" | tee -a /tmp/tfapply.txt
+              echo "SKIP $category: tfsec failed" | tee -a /tmp/tfapply.txt
               failed=1
               continue
             fi
             if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfapply.txt; then
-              echo "SKIP $file: validate failed" | tee -a /tmp/tfapply.txt
+              echo "SKIP $category: validate failed" | tee -a /tmp/tfapply.txt
               failed=1
               continue
             fi
             if ! terraform -chdir="$work" plan -out=tfplan 2>&1 | tee -a /tmp/tfapply.txt; then
-              echo "SKIP $file: plan failed" | tee -a /tmp/tfapply.txt
+              echo "SKIP $category: plan failed" | tee -a /tmp/tfapply.txt
               failed=1
               continue
             fi
             if ! terraform -chdir="$work" apply -auto-approve tfplan 2>&1 | tee -a /tmp/tfapply.txt; then
-              echo "SKIP $file: apply failed" | tee -a /tmp/tfapply.txt
+              echo "SKIP $category: apply failed" | tee -a /tmp/tfapply.txt
               failed=1
               continue
             fi
@@ -633,11 +447,11 @@ jobs:
 
           echo "applied=$applied skipped=$skipped failed=$failed" >> /tmp/tfapply.txt
           if [ "$applied" -eq 0 ]; then
-            echo "No resources applied. Failing job." | tee -a /tmp/tfapply.txt
+            echo "No categories applied. Failing job." | tee -a /tmp/tfapply.txt
             exit 1
           fi
           if [ "$failed" -ne 0 ]; then
-            echo "One or more files failed. Failing job." | tee -a /tmp/tfapply.txt
+            echo "One or more categories failed. Failing job." | tee -a /tmp/tfapply.txt
             exit 1
           fi
 

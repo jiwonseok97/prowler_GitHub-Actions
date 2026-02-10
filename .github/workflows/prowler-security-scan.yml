@@ -1,7 +1,7 @@
 ﻿name: ProwlerSecurityScan
 
 on:
-  # PR에서는 보안 점검 + 리포트 생성까지만 수행
+  # PR에서는 보안 점검/ 리포트 생성
   pull_request:
   # main 브랜치에 머지되면 remediation + PR 자동 생성까지 수행
   push:
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # OIDC role assume을 위해 필요
+      id-token: write   # OIDC role assume
 
     steps:
       # 레포 코드 체크아웃
@@ -289,7 +289,6 @@ jobs:
 
             # 기존 remediation 파일 정리 후 해당 카테고리 파일만 복사
             mkdir -p remediation
-            find remediation -type f ! -name '.gitkeep' -delete
             for fname in $CAT_FILES; do
               if [ -f "$TMPGEN/$fname" ]; then
                 cp "$TMPGEN/$fname" "remediation/$fname"
