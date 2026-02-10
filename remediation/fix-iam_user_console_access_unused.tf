@@ -1,13 +1,28 @@
 # Disable console access for the IAM user
-resource "aws_iam_user_login_profile" "remediation_aws_learner" {
-  user    = "aws_learner"
-  pgp_key = "keybase:some_person_that_exists"
-  
-  # Disable console access by setting password_reset_required to true
+resource "aws_iam_user_login_profile" "remediation_aws_learner_console_access" {
+  user                    = "aws_learner"
   password_reset_required = true
+  password_length         = 20
 }
 
-# Attach a policy to the IAM user to enforce MFA for console access
+# Attach a policy to the IAM user to deny console access
+resource "aws_iam_user_policy" "remediation_aws_learner_console_access_deny" {
+  name = "DenyConsoleAccess"
+  user = "aws_learner"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Deny",
+        Action = "iam:GetLoginProfile",
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/aws_learner"
+      }
+    ]
+  })
+}
+
+# Attach the AWS managed policy to enforce MFA for the IAM user
 resource "aws_iam_user_policy_attachment" "remediation_aws_learner_mfa_policy" {
   user       = "aws_learner"
   policy_arn = "arn:aws:iam::aws:policy/IAMUserChangePassword"

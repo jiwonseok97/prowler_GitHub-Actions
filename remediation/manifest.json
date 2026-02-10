@@ -85,7 +85,7 @@
     "file": "fix-iam_policy_no_full_access_to_kms.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_user_console_access_unused",

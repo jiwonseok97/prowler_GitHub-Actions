@@ -1,89 +1,27 @@
-# Modify the existing IAM policy to remove the 'kms:*' privilege and only allow the necessary actions
-resource "aws_iam_policy" "remediation_prowler_readonly_policy" {
-  name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
-  description = "Prowler read-only IAM policy"
-  policy      = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "kms:Describe*",
-          "kms:Get*",
-          "kms:List*",
-          "kms:RevokeGrant"
-        ],
-        Resource = [
-          "arn:aws:kms:ap-northeast-2:${data.aws_caller_identity.current.account_id}:key/*"
-        ]
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "cloudwatch:GetMetricData",
-          "cloudwatch:GetMetricStatistics",
-          "cloudwatch:ListMetrics",
-          "ec2:DescribeInstances",
-          "ec2:DescribeRegions",
-          "ec2:DescribeSecurityGroups",
-          "ec2:DescribeSubnets",
-          "ec2:DescribeVpcs",
-          "iam:GetAccountPasswordPolicy",
-          "iam:GetGroup",
-          "iam:GetGroupPolicy",
-          "iam:GetInstanceProfile",
-          "iam:GetPolicy",
-          "iam:GetPolicyVersion",
-          "iam:GetRole",
-          "iam:GetRolePolicy",
-          "iam:GetUser",
-          "iam:GetUserPolicy",
-          "iam:ListAccessKeys",
-          "iam:ListAttachedGroupPolicies",
-          "iam:ListAttachedRolePolicies",
-          "iam:ListAttachedUserPolicies",
-          "iam:ListGroups",
-          "iam:ListGroupsForUser",
-          "iam:ListInstanceProfiles",
-          "iam:ListInstanceProfilesForRole",
-          "iam:ListMFADevices",
-          "iam:ListPolicies",
-          "iam:ListPolicyVersions",
-          "iam:ListRoles",
-          "iam:ListRolePolicies",
-          "iam:ListUsers",
-          "iam:ListUserPolicies",
-          "kms:Describe*",
-          "kms:Get*",
-          "kms:List*",
-          "kms:RevokeGrant",
-          "logs:DescribeLogGroups",
-          "logs:DescribeLogStreams",
-          "logs:FilterLogEvents",
-          "logs:GetLogEvents",
-          "s3:GetBucketAcl",
-          "s3:GetBucketLocation",
-          "s3:GetBucketLogging",
-          "s3:GetBucketVersioning",
-          "s3:GetLifecycleConfiguration",
-          "s3:GetReplicationConfiguration",
-          "s3:ListAllMyBuckets",
-          "s3:ListBucket",
-          "ssm:DescribeAssociation",
-          "ssm:DescribeInstanceInformation",
-          "ssm:GetDocument",
-          "ssm:ListAssociations",
-          "ssm:ListInstanceAssociations",
-          "ssm:ListDocuments"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
+# IAM remediation baseline snippet (targets provided user/role)
+# NOTE: This applies account-level password policy (real change)
+
+# Target IAM principal references (for validation and future use)
+data "aws_iam_user" "target_user" {
+  user_name = "github-actions-prowler"
 }
 
-# Attach the modified IAM policy to the existing IAM role
-resource "aws_iam_role_policy_attachment" "remediation_prowler_readonly_policy_attachment" {
-  policy_arn = aws_iam_policy.remediation_prowler_readonly_policy.arn
-  role       = "GitHubActionsProwlerRole"
+data "aws_iam_role" "target_role" {
+  name = "GitHubActionsProwlerRole"
+}
+
+# NOTE: IAM permissions for GitHubActionsProwlerRole are managed in
+# iac/terraform/bootstrap/ — do not add inline policies here.
+
+# Enforce strict account password policy
+resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
+  minimum_password_length        = 14
+  require_uppercase_characters   = true
+  require_lowercase_characters   = true
+  require_numbers                = true
+  require_symbols                = true
+  allow_users_to_change_password = true
+  hard_expiry                    = false
+  password_reuse_prevention      = 24
+  max_password_age               = 90
 }

@@ -1,7 +1,7 @@
-# Create a new IAM policy with limited permissions
+# Create a new IAM policy with reduced permissions
 resource "aws_iam_policy" "remediation_aws_learner_dynamodb_policy" {
   name        = "remediation_aws_learner_dynamodb_policy"
-  description = "Remediated IAM policy with limited permissions"
+  description = "Remediated IAM policy with reduced permissions"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -20,7 +20,7 @@ resource "aws_iam_policy" "remediation_aws_learner_dynamodb_policy" {
   })
 }
 
-# Attach the new policy to the appropriate IAM user(s)
+# Attach the new policy to the appropriate IAM user
 resource "aws_iam_user_policy_attachment" "remediation_aws_learner_dynamodb_policy_attachment" {
   user       = "my-iam-user"
   policy_arn = aws_iam_policy.remediation_aws_learner_dynamodb_policy.arn

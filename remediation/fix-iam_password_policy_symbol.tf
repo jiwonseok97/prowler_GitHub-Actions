@@ -1,5 +1,5 @@
 # Modify the existing IAM password policy to require at least one symbol
-resource "aws_iam_account_password_policy" "remediation_password_policy" {
+resource "aws_iam_account_password_policy" "remediation_iam_password_policy" {
   minimum_password_length        = 14
   require_lowercase_characters   = true
   require_numbers                = true
