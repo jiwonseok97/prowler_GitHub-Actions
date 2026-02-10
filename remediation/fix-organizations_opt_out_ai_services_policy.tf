@@ -1,5 +1,5 @@
 # AI Services Opt-Out Policy for AWS Organization
-data "aws_organizations_organization" "current" {}
+
 
 resource "aws_organizations_policy" "remediation_ai_opt_out" {
   name        = "ai-services-opt-out"
@@ -21,5 +21,5 @@ resource "aws_organizations_policy" "remediation_ai_opt_out" {
 
 resource "aws_organizations_policy_attachment" "remediation_ai_opt_out" {
   policy_id = aws_organizations_policy.remediation_ai_opt_out.id
-  target_id = data.aws_organizations_organization.current.roots[0].id
+  target_id = aws_organizations_organization.remediation_organization.roots[0].id
 }
