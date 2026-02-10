@@ -5,7 +5,7 @@
     "file": "fix-iam_customer_unattached_policy_no_administrative_privileges.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_inline_policy_no_full_access_to_kms",
@@ -13,7 +13,7 @@
     "file": "fix-iam_inline_policy_no_full_access_to_kms.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_password_policy_expires_passwords_within_90_days_or_less",
@@ -21,7 +21,7 @@
     "file": "fix-iam_password_policy_expires_passwords_within_90_days_or_less.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_password_policy_minimum_length_14",
@@ -29,7 +29,7 @@
     "file": "fix-iam_password_policy_minimum_length_14.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_password_policy_number",
@@ -37,7 +37,7 @@
     "file": "fix-iam_password_policy_number.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_password_policy_reuse_24",
@@ -45,7 +45,7 @@
     "file": "fix-iam_password_policy_reuse_24.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_password_policy_symbol",
@@ -53,7 +53,7 @@
     "file": "fix-iam_password_policy_symbol.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_password_policy_uppercase",
@@ -61,7 +61,7 @@
     "file": "fix-iam_password_policy_uppercase.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_policy_cloudshell_admin_not_attached",
@@ -69,7 +69,7 @@
     "file": "fix-iam_policy_cloudshell_admin_not_attached.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_policy_no_full_access_to_cloudtrail",
@@ -77,7 +77,7 @@
     "file": "fix-iam_policy_no_full_access_to_cloudtrail.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_policy_no_full_access_to_kms",
@@ -85,7 +85,7 @@
     "file": "fix-iam_policy_no_full_access_to_kms.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_user_console_access_unused",
@@ -93,6 +93,6 @@
     "file": "fix-iam_user_console_access_unused.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   }
 ]

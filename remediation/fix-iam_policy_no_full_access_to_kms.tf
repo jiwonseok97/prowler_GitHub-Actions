@@ -1,24 +1,30 @@
-# IAM remediation baseline snippet (targets provided user/role)
-# NOTE: This applies account-level password policy (real change)
-
-# Target IAM principal references (for validation and future use)
-data "aws_iam_user" "target_user" {
-  user_name = "github-actions-prowler"
+# Modify the existing IAM policy to remove the 'kms:*' privilege and only allow the required KMS actions
+resource "aws_iam_policy" "remediation_iam_policy" {
+  name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
+  description = "Custom IAM policy with least privilege KMS access"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        Resource = [
+          "arn:aws:kms:ap-northeast-2:${data.aws_caller_identity.current.account_id}:key/*"
+        ]
+      },
+      # Add other required permissions here
+    ]
+  })
 }
 
-data "aws_iam_role" "target_role" {
-  name = "GitHubActionsProwlerRole"
-}
-
-# Enforce strict account password policy
-resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
-  minimum_password_length        = 14
-  require_uppercase_characters   = true
-  require_lowercase_characters   = true
-  require_numbers                = true
-  require_symbols                = true
-  allow_users_to_change_password = true
-  hard_expiry                    = false
-  password_reuse_prevention      = 24
-  max_password_age               = 90
+# Attach the modified IAM policy to the existing GitHubActionsProwlerRole-ProwlerReadOnly role
+resource "aws_iam_role_policy_attachment" "remediation_iam_role_policy_attachment" {
+  policy_arn = aws_iam_policy.remediation_iam_policy.arn
+  role       = "GitHubActionsProwlerRole-ProwlerReadOnly"
 }
