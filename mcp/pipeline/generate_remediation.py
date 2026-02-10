@@ -1340,111 +1340,6 @@ def _ensure_visibility_config(lines):
     return out
 
 
-def _ensure_sns_topic_policy_arn(lines):
-    """aws_sns_topic_policy 리소스에 필수 arn 속성이 없으면 자동 추가."""
-    # 코드 내 aws_sns_topic 리소스 이름 수집
-    topic_names = []
-    for line in lines:
-        m = re.match(r'^\s*resource\s+"aws_sns_topic"\s+"([^"]+)"\s*\{', line)
-        if m:
-            topic_names.append(m.group(1))
-
-    out = []
-    in_policy = False
-    policy_brace = 0
-    has_arn = False
-    insert_idx = -1
-
-    for line in lines:
-        if not in_policy:
-            m = re.match(
-                r'^\s*resource\s+"aws_sns_topic_policy"\s+"([^"]+)"\s*\{', line
-            )
-            if m:
-                in_policy = True
-                policy_brace = _brace_delta(line)
-                has_arn = False
-                insert_idx = len(out)
-                out.append(line)
-                if policy_brace <= 0:
-                    in_policy = False
-                continue
-            out.append(line)
-            continue
-
-        if re.match(r'^\s*arn\s*=', line):
-            has_arn = True
-
-        policy_brace += _brace_delta(line)
-        out.append(line)
-
-        if policy_brace <= 0:
-            in_policy = False
-            if not has_arn and insert_idx >= 0:
-                if topic_names:
-                    arn_ref = f"aws_sns_topic.{topic_names[0]}.arn"
-                else:
-                    arn_ref = (
-                        '"arn:aws:sns:${data.aws_region.current.name}'
-                        ':${data.aws_caller_identity.current.account_id}'
-                        ':remediation-topic"'
-                    )
-                out.insert(insert_idx + 1, f"  arn = {arn_ref}")
-            insert_idx = -1
-
-    return out
-
-
-def _ensure_kms_key_policy_key_id(lines):
-    """aws_kms_key_policy 리소스에 필수 key_id 속성이 없으면 자동 추가."""
-    key_names = []
-    for line in lines:
-        m = re.match(r'^\s*resource\s+"aws_kms_key"\s+"([^"]+)"\s*\{', line)
-        if m:
-            key_names.append(m.group(1))
-
-    out = []
-    in_policy = False
-    policy_brace = 0
-    has_key_id = False
-    insert_idx = -1
-
-    for line in lines:
-        if not in_policy:
-            m = re.match(
-                r'^\s*resource\s+"aws_kms_key_policy"\s+"([^"]+)"\s*\{', line
-            )
-            if m:
-                in_policy = True
-                policy_brace = _brace_delta(line)
-                has_key_id = False
-                insert_idx = len(out)
-                out.append(line)
-                if policy_brace <= 0:
-                    in_policy = False
-                continue
-            out.append(line)
-            continue
-
-        if re.match(r'^\s*key_id\s*=', line):
-            has_key_id = True
-
-        policy_brace += _brace_delta(line)
-        out.append(line)
-
-        if policy_brace <= 0:
-            in_policy = False
-            if not has_key_id and insert_idx >= 0:
-                if key_names:
-                    key_ref = f"aws_kms_key.{key_names[0]}.id"
-                else:
-                    key_ref = '"alias/remediation-key"'
-                out.insert(insert_idx + 1, f"  key_id = {key_ref}")
-            insert_idx = -1
-
-    return out
-
-
 def _ensure_cloudwatch_alarm_required_attrs(lines):
     """aws_cloudwatch_metric_alarm에 evaluation_periods 누락 시 기본값 추가."""
     out = []
@@ -1482,46 +1377,6 @@ def _ensure_cloudwatch_alarm_required_attrs(lines):
             if not has_eval_periods and insert_idx >= 0:
                 out.insert(insert_idx + 1, "  evaluation_periods = 1")
             insert_idx = -1
-
-    return out
-
-
-def _extract_nested_resource_from_data(lines):
-    """data 블록 내부에 잘못 중첩된 resource 블록을 추출하여 최상위로 이동."""
-    out = []
-    in_data = False
-    data_brace = 0
-
-    for line in lines:
-        if not in_data:
-            m = re.match(r'^\s*data\s+"[^"]+"\s+"[^"]+"\s*\{', line)
-            if m:
-                in_data = True
-                data_brace = _brace_delta(line)
-                out.append(line)
-                if data_brace <= 0:
-                    in_data = False
-                continue
-            out.append(line)
-            continue
-
-        # data 블록 내부에서 resource/data 시작 감지 → 중첩 오류
-        nested_m = re.match(
-            r'^\s*(resource|data)\s+"[^"]+"\s+"[^"]+"\s*\{', line
-        )
-        if nested_m and data_brace > 0:
-            # data 블록 강제 종료 후 중첩된 블록을 최상위로 추출
-            out.append("}")
-            out.append("")
-            in_data = False
-            data_brace = 0
-            out.append(line)
-            continue
-
-        data_brace += _brace_delta(line)
-        out.append(line)
-        if data_brace <= 0:
-            in_data = False
 
     return out
 
@@ -1603,7 +1458,7 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _strip_deprecated_s3_bucket_attrs(lines)
     # 프레임워크 중복 data 블록 제거
     lines = _remove_duplicate_data_blocks(lines)
-    # data 블록 내부에 중첩된 resource 블록 이동
+    # data 블록 내부에 중첩된 resource 블록 추출
     lines = _lift_resources_from_data_blocks(lines)
     # provider 스키마 기반 computed-only 속성 제거
     lines = _strip_schema_computed_attrs(lines)
@@ -1624,6 +1479,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _ensure_sns_topic_policy_arn(lines)
     # aws_kms_key_policy key_id 누락 보정
     lines = _ensure_kms_key_policy_key_id(lines)
+    # aws_cloudwatch_metric_alarm evaluation_periods 누락 보정
+    lines = _ensure_cloudwatch_alarm_required_attrs(lines)
     # WAFv2 visibility_config 누락 보정
     lines = _ensure_visibility_config(lines)
     # 하드코딩된 AWS 계정 ID → data source 참조로 치환
