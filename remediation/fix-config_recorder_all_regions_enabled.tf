@@ -1,21 +1,15 @@
-# Create a new AWS Config Delivery Channel to deliver configuration snapshots and logs
-resource "aws_config_delivery_channel" "remediation_config_delivery_channel" {
-  name           = "remediation-config-delivery-channel"
-  s3_bucket_name = "my-config-bucket"
-}
-
-# Create a new AWS Config Configuration Recorder to record resource configurations
+# Enable AWS Config in ap-northeast-2 region with continuous recording
 resource "aws_config_configuration_recorder" "remediation_config_recorder" {
   name     = "remediation-config-recorder"
   role_arn = aws_iam_role.remediation_config_recorder_role.arn
-
+  
   recording_group {
     all_supported                 = true
     include_global_resource_types = true
   }
 }
 
-# Create a new IAM role for the AWS Config Recorder
+# Create IAM role for AWS Config recorder
 resource "aws_iam_role" "remediation_config_recorder_role" {
   name = "remediation-config-recorder-role"
 
@@ -33,7 +27,7 @@ resource "aws_iam_role" "remediation_config_recorder_role" {
   })
 }
 
-# Attach the required IAM policy to the Config Recorder role
+# Attach AWS managed policy to the IAM role
 resource "aws_iam_role_policy_attachment" "remediation_config_recorder_role_policy_attachment" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSConfigRole"
   role       = aws_iam_role.remediation_config_recorder_role.name
