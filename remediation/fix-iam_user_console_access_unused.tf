@@ -1,24 +1,13 @@
-# IAM remediation baseline snippet (targets provided user/role)
-# NOTE: This applies account-level password policy (real change)
-
-# Target IAM principal references (for validation and future use)
-data "aws_iam_user" "target_user" {
-  user_name = "github-actions-prowler"
+# Disable console access for the IAM user
+resource "aws_iam_user_login_profile" "remediation_aws_learner_console_access" {
+  user                    = "aws_learner"
+  password_length         = 20
+  password_reset_required = true
+  pgp_key                 = "keybase:some_person_that_exists"
 }
 
-data "aws_iam_role" "target_role" {
-  name = "GitHubActionsProwlerRole"
-}
-
-# Enforce strict account password policy
-resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
-  minimum_password_length        = 14
-  require_uppercase_characters   = true
-  require_lowercase_characters   = true
-  require_numbers                = true
-  require_symbols                = true
-  allow_users_to_change_password = true
-  hard_expiry                    = false
-  password_reuse_prevention      = 24
-  max_password_age               = 90
+# Attach a policy to the IAM user to restrict console access
+resource "aws_iam_user_policy_attachment" "remediation_aws_learner_no_console_access" {
+  user       = "aws_learner"
+  policy_arn = "arn:aws:iam::aws:policy/IAMUserChangePassword"
 }

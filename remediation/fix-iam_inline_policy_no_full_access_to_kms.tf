@@ -1,24 +1,27 @@
-# IAM remediation baseline snippet (targets provided user/role)
-# NOTE: This applies account-level password policy (real change)
-
-# Target IAM principal references (for validation and future use)
-data "aws_iam_user" "target_user" {
-  user_name = "github-actions-prowler"
+# Create a new IAM managed policy with the required permissions
+resource "aws_iam_policy" "remediation_kms_policy" {
+  name        = "remediation-kms-policy"
+  description = "Allows required KMS operations"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        Resource = ["arn:aws:kms:ap-northeast-2:${data.aws_caller_identity.current.account_id}:key/*"]
+      }
+    ]
+  })
 }
 
-data "aws_iam_role" "target_role" {
-  name = "GitHubActionsProwlerRole"
-}
-
-# Enforce strict account password policy
-resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
-  minimum_password_length        = 14
-  require_uppercase_characters   = true
-  require_lowercase_characters   = true
-  require_numbers                = true
-  require_symbols                = true
-  allow_users_to_change_password = true
-  hard_expiry                    = false
-  password_reuse_prevention      = 24
-  max_password_age               = 90
+# Attach the new managed policy to the IAM user
+resource "aws_iam_user_policy_attachment" "remediation_kms_policy_attachment" {
+  user       = "github-actions-prowler"
+  policy_arn = aws_iam_policy.remediation_kms_policy.arn
 }
