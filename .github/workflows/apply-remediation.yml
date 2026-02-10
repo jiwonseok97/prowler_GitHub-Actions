@@ -236,7 +236,6 @@ jobs:
             </details>
 
             > 💡 이 PR을 머지하면 위 리소스가 AWS에 자동 적용됩니다.`;
-            > ⚠️ 비용 발생 리소스가 있는지 반드시 확인하세요.`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
