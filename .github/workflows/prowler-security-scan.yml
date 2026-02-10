@@ -218,6 +218,8 @@ jobs:
 
       # AI 기반 Terraform remediation 코드 생성
       - name: Generate Terraform remediation
+        env:
+          PREFER_IAC_SNIPPET: "false"
         run: |
           mkdir -p remediation
           # 이번 실행에서 생성된 파일만 유지 (이전 결과 정리)
