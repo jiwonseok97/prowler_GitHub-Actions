@@ -96,6 +96,21 @@ SKIP_CHECKS = {
     "account_maintain_different_contact_details_to_security_billing_and_operations",
     "account_security_contact_information_is_registered",
     "account_security_questions_are_registered_in_the_aws_account",
+    "iam_policy_cloudshell_admin_not_attached",       # 수동 detach 필요
+    "iam_user_console_access_unused",                 # 수동 비활성화 필요
+    "iam_inline_policy_no_full_access_to_kms",        # 수동 정책 수정 필요
+    "organizations_account_part_of_organizations",    # 조직 가입 필요 (자동 적용 어려움)
+}
+
+# 동일 singleton AWS 리소스를 생성하는 체크들 → 하나의 파일로 통합
+CONSOLIDATE_CHECKS = {
+    "iam_password_policy_expires_passwords_within_90_days_or_less": "fix-iam_password_policy.tf",
+    "iam_password_policy_minimum_length_14": "fix-iam_password_policy.tf",
+    "iam_password_policy_lowercase": "fix-iam_password_policy.tf",
+    "iam_password_policy_number": "fix-iam_password_policy.tf",
+    "iam_password_policy_reuse_24": "fix-iam_password_policy.tf",
+    "iam_password_policy_symbol": "fix-iam_password_policy.tf",
+    "iam_password_policy_uppercase": "fix-iam_password_policy.tf",
 }
 
 DATA_ONLY_RESOURCE_TYPES = {
@@ -2462,6 +2477,11 @@ os.makedirs(args.output_dir, exist_ok=True)
 
 # P0/P1/P2 우선순위만 자동 리메디에이션 대상 (P3는 수동)
 high_priority = df[df['priority'].isin(['P0', 'P1', 'P2'])]
+# check_id가 비어있는 행은 제외
+high_priority = high_priority[
+    high_priority['check_id'].notna()
+    & ~high_priority['check_id'].astype(str).str.strip().str.lower().isin(["", "nan", "none"])
+]
 print(f"Found {len(high_priority)} high-priority findings (P0/P1/P2) out of {len(df)} total")
 
 # check_id 기준 중복 제거 (같은 체크가 여러 리소스에 반복될 수 있음)
@@ -2473,6 +2493,7 @@ print(f"Unique check_ids: {len(unique_checks)} (skipped {len(skipped_checks)} no
 # 생성 결과/통계
 generated = []
 bedrock_failures = 0
+_consolidated_files_written = set()   # CONSOLIDATE_CHECKS용: 이미 기록한 파일 추적
 
 for _, row in unique_checks.iterrows():
     # check_id를 파일명에 안전하게 사용하도록 문자 치환
@@ -2551,8 +2572,33 @@ for _, row in unique_checks.iterrows():
             print(f"SKIP {check_id}: failed validation after {MAX_RETRIES} attempts")
             continue
 
-        # 개별 .tf 파일로 저장
-        filename = f"fix-{check_id}.tf"
+        # resource/data 블록이 하나도 없으면 skip (주석만 남은 경우)
+        if not re.search(r'^\s*(resource|data)\s+"', tf_code, re.MULTILINE):
+            print(f"SKIP (no resource/data blocks after sanitize): {check_id}")
+            continue
+
+        # singleton 통합 대상이면 하나의 파일로 병합
+        raw_check_id = str(row.get('check_id', ''))
+        consolidated_file = CONSOLIDATE_CHECKS.get(raw_check_id)
+        if consolidated_file:
+            filename = consolidated_file
+            if filename in _consolidated_files_written:
+                # 이미 기록됨 → manifest에만 추가
+                generated.append({
+                    'check_id': row.get('check_id'),
+                    'check_title': row.get('check_title'),
+                    'file': filename,
+                    'priority': row.get('priority'),
+                    'category': category,
+                    'source': source
+                })
+                print(f"Consolidated (already written): {check_id} -> {filename}")
+                continue
+            _consolidated_files_written.add(filename)
+        else:
+            filename = f"fix-{check_id}.tf"
+
+        # .tf 파일로 저장
         filepath = os.path.join(args.output_dir, filename)
         with open(filepath, 'w') as f:
             f.write(tf_code)

@@ -9,6 +9,11 @@ Usage: python3 dedup_resources.py <directory>
 """
 import re, sys, pathlib, glob
 
+# Resource types that should be treated as singletons across files
+SINGLETON_RESOURCE_TYPES = {
+    "aws_iam_account_password_policy",
+}
+
 
 def extract_blocks(text):
     """Split HCL text into top-level blocks with their signatures."""
@@ -83,9 +88,13 @@ def dedup_directory(directory):
         kept = []
         for sig, content in blocks:
             if sig is not None:
-                if sig in seen_sigs:
-                    continue  # duplicate — skip
-                seen_sigs.add(sig)
+                kind, rtype, name = sig
+                dedup_key = sig
+                if kind == "resource" and rtype in SINGLETON_RESOURCE_TYPES:
+                    dedup_key = (kind, rtype)
+                if dedup_key in seen_sigs:
+                    continue  # duplicate ??skip
+                seen_sigs.add(dedup_key)
             kept.append(content)
 
         # Rewrite the file without duplicates

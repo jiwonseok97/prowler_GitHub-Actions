@@ -10,3 +10,12 @@ config_recorder_all_regions_enabled: iac/terraform/snippets/config_recorder_all_
 networkfirewall_in_all_vpc: iac/terraform/snippets/networkfirewall.tf
 # Organizations AI opt-out
 organizations_opt_out_ai_services_policy: iac/terraform/snippets/organizations_ai_opt_out.tf
+
+# IAM password policy (singleton — all checks share one resource)
+iam_password_policy_expires_passwords_within_90_days_or_less: iac/terraform/snippets/iam_password_policy.tf
+iam_password_policy_minimum_length_14: iac/terraform/snippets/iam_password_policy.tf
+iam_password_policy_lowercase: iac/terraform/snippets/iam_password_policy.tf
+iam_password_policy_number: iac/terraform/snippets/iam_password_policy.tf
+iam_password_policy_reuse_24: iac/terraform/snippets/iam_password_policy.tf
+iam_password_policy_symbol: iac/terraform/snippets/iam_password_policy.tf
+iam_password_policy_uppercase: iac/terraform/snippets/iam_password_policy.tf
