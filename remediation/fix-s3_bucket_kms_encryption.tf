@@ -24,7 +24,6 @@ data "aws_s3_bucket" "remediation_s3_bucket" {
 
 resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
   bucket = data.aws_s3_bucket.remediation_s3_bucket.id
-
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -36,6 +35,7 @@ resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
         Condition = {
           StringNotEquals = {
             "s3:x-amz-server-side-encryption" = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = aws_kms_key.remediation_s3_bucket_key.arn
           }
         }
       }
@@ -51,4 +51,20 @@ resource "aws_cloudtrail" "remediation_cloudtrail" {
   include_global_service_events = true
   is_multi_region_trail         = true
   kms_key_id                    = aws_kms_key.remediation_s3_bucket_key.arn
+}
+
+# Consider using S3 Bucket Keys to control costs
+resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership" {
+  bucket = data.aws_s3_bucket.remediation_s3_bucket.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access" {
+  bucket = data.aws_s3_bucket.remediation_s3_bucket.id
+  block_public_acls       = true
+  block_public_policy    = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
