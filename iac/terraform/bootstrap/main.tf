@@ -351,6 +351,18 @@ resource "aws_iam_role_policy" "remediation_kms" {
         ]
         Resource = "*"
       }
+      ,
+      {
+        Sid      = "AllowKmsServiceLinkedRole"
+        Effect   = "Allow"
+        Action   = "iam:CreateServiceLinkedRole"
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "iam:AWSServiceName" = "kms.amazonaws.com"
+          }
+        }
+      }
     ]
   })
 }
