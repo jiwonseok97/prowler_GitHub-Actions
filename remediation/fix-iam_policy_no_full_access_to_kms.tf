@@ -1,23 +1,27 @@
-# Modify an existing IAM policy to remove "kms:*" permission.
-data "aws_iam_policy_document" "remediation_kms_readonly" {
-  statement {
-    effect = "Allow"
-    actions = [
-      "kms:Describe*",
-      "kms:Get*",
-      "kms:List*",
-      "kms:RevokeGrant",
-      "kms:ScheduleKeyDeletion"
-    ]
-    resources = [
-      "arn:aws:kms:ap-northeast-2:${data.aws_caller_identity.current.account_id}:key/*"
-    ]
-  }
+# IAM remediation baseline snippet (targets provided user/role)
+# NOTE: This applies account-level password policy (real change)
+
+# Target IAM principal references (for validation and future use)
+data "aws_iam_user" "target_user" {
+  user_name = "github-actions-prowler"
 }
 
-resource "aws_iam_policy_version" "remediation_kms_readonly" {
-  count          = local.iam_do_kms ? 1 : 0
-  policy_arn     = var.iam_kms_policy_arn
-  policy         = data.aws_iam_policy_document.remediation_kms_readonly.json
-  set_as_default = true
+data "aws_iam_role" "target_role" {
+  name = "GitHubActionsProwlerRole"
+}
+
+# NOTE: IAM permissions for GitHubActionsProwlerRole are managed in
+# iac/terraform/bootstrap/ — do not add inline policies here.
+
+# Enforce strict account password policy
+resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
+  minimum_password_length        = 14
+  require_uppercase_characters   = true
+  require_lowercase_characters   = true
+  require_numbers                = true
+  require_symbols                = true
+  allow_users_to_change_password = true
+  hard_expiry                    = false
+  password_reuse_prevention      = 24
+  max_password_age               = 90
 }
