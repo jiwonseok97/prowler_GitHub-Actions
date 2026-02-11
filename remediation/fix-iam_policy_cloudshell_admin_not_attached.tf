@@ -1,8 +1,3 @@
-# Detach the AWSCloudShellFullAccess policy from all IAM identities
-resource "aws_iam_policy_attachment" "remediation_detach_cloudshell_admin_policy" {
-  name       = "remediation-detach-cloudshell-admin-policy"
-  policy_arn = "arn:aws:iam::aws:policy/AWSCloudShellFullAccess"
-  roles      = []
-  users      = []
-  groups     = []
-}
+# CloudShell admin policy detachment
+# aws_iam_policy_attachment is an exclusive resource and causes empty result errors.
+# Use aws_iam_role_policy_attachment per-role instead if manual remediation is needed.

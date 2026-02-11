@@ -1382,23 +1382,30 @@ def _ensure_cloudwatch_alarm_required_attrs(lines):
 
 
 def _remove_dangerous_iam_attachments(lines):
-    """외부(비-remediation) IAM 역할/사용자에 대한 policy attachment 블록 제거.
+    """기존 IAM 리소스를 수정하는 위험한 블록 제거.
 
-    AI가 GitHubActionsProwlerRole, my-iam-user 등 실제 존재하지 않거나
-    bootstrap 권한 밖의 역할/사용자에 attachment를 생성하면 apply 시 403/404 오류 발생.
-    remediation_ 또는 remediation- 접두어가 아닌 대상 attachment는 제거.
+    제거 대상:
+    - aws_iam_policy_attachment (exclusive 리소스, empty result 오류)
+    - aws_iam_role/user/group_policy_attachment (bootstrap 권한 밖 대상)
+    - aws_iam_user_login_profile (이미 존재하는 프로필 중복 생성 오류)
+    - aws_iam_access_key (기존 사용자에 키 생성 시도)
+    - aws_iam_user_policy (기존 사용자에 인라인 정책)
     """
+    DANGEROUS_TYPES = re.compile(
+        r'^\s*resource\s+"('
+        r'aws_iam_policy_attachment'
+        r'|aws_iam_(?:role|user|group)_policy_attachment'
+        r'|aws_iam_user_login_profile'
+        r'|aws_iam_access_key'
+        r'|aws_iam_user_policy'
+        r')"\s+"[^"]+"\s*\{'
+    )
     out = []
     skip_block = False
     brace = 0
     for line in lines:
         if not skip_block:
-            m = re.match(
-                r'^\s*resource\s+"(aws_iam_(?:role|user|group)_policy_attachment)"\s+"[^"]+"\s*\{',
-                line,
-            )
-            if m:
-                # 블록 전체를 읽어서 대상이 remediation인지 확인
+            if DANGEROUS_TYPES.match(line):
                 skip_block = True
                 brace = _brace_delta(line)
                 if brace <= 0:
