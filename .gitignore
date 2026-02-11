@@ -2,3 +2,8 @@
 .claude/
 docs/
 nul
+.git_copy/
+iac/terraform/bootstrap/.terraform/
+iac/terraform/bootstrap/.terraform.lock.hcl
+iac/terraform/bootstrap/*.tfstate
+iac/terraform/bootstrap/*.tfstate.backup
