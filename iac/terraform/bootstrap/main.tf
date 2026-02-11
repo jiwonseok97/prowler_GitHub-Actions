@@ -99,10 +99,13 @@ resource "aws_iam_role_policy" "remediation_iam" {
           "iam:DeletePolicyVersion",
           "iam:ListEntitiesForPolicy",
         ]
-        Resource = [
-          "arn:aws:iam::${var.account_id}:policy/remediation_*",
-          "arn:aws:iam::${var.account_id}:policy/remediation-*",
-        ]
+        Resource = concat(
+          [
+            "arn:aws:iam::${var.account_id}:policy/remediation_*",
+            "arn:aws:iam::${var.account_id}:policy/remediation-*",
+          ],
+          var.extra_policy_arns
+        )
       },
       {
         Sid    = "UserManagement"

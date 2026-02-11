@@ -117,6 +117,14 @@ jobs:
               # Deduplicate resource/data blocks across files
               python3 iac/scripts/dedup_resources.py "$work"
 
+              # Copy optional tfvars for this category (if provided)
+              if [ -f "remediation/${category}.auto.tfvars" ]; then
+                cp "remediation/${category}.auto.tfvars" "$work/"
+              fi
+              if [ -f "remediation/terraform.auto.tfvars" ]; then
+                cp "remediation/terraform.auto.tfvars" "$work/"
+              fi
+
               # Check if any resource blocks remain
               if ! grep -rEq '^\s*resource\s+"' "$work"/*.tf 2>/dev/null; then
                 echo "SKIP $category: no resource blocks after cleanup" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
@@ -367,6 +375,14 @@ jobs:
 
             # Deduplicate resource/data blocks across files
             python3 iac/scripts/dedup_resources.py "$work"
+
+            # Copy optional tfvars for this category (if provided)
+            if [ -f "remediation/${category}.auto.tfvars" ]; then
+              cp "remediation/${category}.auto.tfvars" "$work/"
+            fi
+            if [ -f "remediation/terraform.auto.tfvars" ]; then
+              cp "remediation/terraform.auto.tfvars" "$work/"
+            fi
 
             # Check if any resource blocks remain
             if ! grep -rEq '^\s*resource\s+"' "$work"/*.tf 2>/dev/null; then

@@ -17,3 +17,8 @@ variable "state_bucket" {
 variable "lock_table" {
   default = "prowler-terraform-locks"
 }
+
+variable "extra_policy_arns" {
+  type    = list(string)
+  default = []
+}
