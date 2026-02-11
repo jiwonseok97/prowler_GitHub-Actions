@@ -38,6 +38,67 @@ _PLACEHOLDER_VALUES = [
 ]
 
 
+def _ensure_lifecycle_rule_id(lines):
+    """Ensure each aws_s3_bucket_lifecycle_configuration rule has an id."""
+    out = []
+    in_lifecycle = False
+    lifecycle_brace = 0
+    in_rule = False
+    rule_brace = 0
+    has_id = False
+    rule_insert_idx = -1
+    rule_counter = 0
+
+    for line in lines:
+        if not in_lifecycle:
+            m = re.match(
+                r'^\s*resource\s+"aws_s3_bucket_lifecycle_configuration"\s+"[^"]+"\s*\{',
+                line,
+            )
+            if m:
+                in_lifecycle = True
+                lifecycle_brace = line.count("{") - line.count("}")
+                rule_counter = 0
+            out.append(line)
+            continue
+
+        if not in_rule:
+            m = re.match(r'^\s*rule\s*\{', line)
+            if m:
+                in_rule = True
+                rule_brace = line.count("{") - line.count("}")
+                has_id = False
+                rule_counter += 1
+                rule_insert_idx = len(out)
+                out.append(line)
+                lifecycle_brace += line.count("{") - line.count("}")
+                continue
+            lifecycle_brace += line.count("{") - line.count("}")
+            if lifecycle_brace <= 0:
+                in_lifecycle = False
+            out.append(line)
+            continue
+
+        if re.match(r'^\s*id\s*=', line):
+            has_id = True
+        rule_brace += line.count("{") - line.count("}")
+        lifecycle_brace += line.count("{") - line.count("}")
+        out.append(line)
+
+        if rule_brace <= 0:
+            if not has_id and rule_insert_idx >= 0:
+                out.insert(
+                    rule_insert_idx + 1,
+                    f'    id = "lifecycle-rule-{rule_counter}"',
+                )
+            in_rule = False
+            rule_insert_idx = -1
+        if lifecycle_brace <= 0:
+            in_lifecycle = False
+
+    return out
+
+
 def cleanup(path):
     lines = path.read_text().splitlines()
     out = []
@@ -187,6 +248,7 @@ def cleanup(path):
                 line = pat.sub(replacement, line)
         result.append(line)
 
+    result = _ensure_lifecycle_rule_id(result)
     path.write_text("\n".join(result) + "\n")
 
 if __name__ == "__main__":
