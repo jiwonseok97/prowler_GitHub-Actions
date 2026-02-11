@@ -1,33 +1,35 @@
-# Modify the existing IAM policy to remove the "cloudtrail:*" permission
-resource "aws_iam_policy" "remediation_iam_policy" {
-  name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
-  description = "Remediated IAM policy to remove 'cloudtrail:*' permission"
-  policy      = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "cloudtrail:DescribeTrails",
-          "cloudtrail:GetTrailStatus",
-          "cloudtrail:LookupEvents"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "s3:GetBucketLocation",
-          "s3:GetObject",
-          "s3:ListBucket"
-        ],
-        Resource = [
-          "arn:aws:s3:::my-cloudtrail-bucket",
-          "arn:aws:s3:::my-cloudtrail-bucket/*"
-        ]
-      }
-    ]
-  })
+# Modify an existing IAM policy to remove "cloudtrail:*" permission.
+# This remediation is gated to avoid failing apply when the target policy
+# ARN is not provided.
+variable "enable_remediation" {
+  type    = bool
+  default = false
 }
 
-# Attach the remediated IAM policy to the existing IAM role
+variable "target_policy_arn" {
+  type    = string
+  default = ""
+}
+
+locals {
+  do_remediate = var.enable_remediation && var.target_policy_arn != ""
+}
+
+data "aws_iam_policy_document" "remediation_cloudtrail_readonly" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "cloudtrail:DescribeTrails",
+      "cloudtrail:GetTrailStatus",
+      "cloudtrail:LookupEvents"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy_version" "remediation_cloudtrail_readonly" {
+  count          = local.do_remediate ? 1 : 0
+  policy_arn     = var.target_policy_arn
+  policy         = data.aws_iam_policy_document.remediation_cloudtrail_readonly.json
+  set_as_default = true
+}
