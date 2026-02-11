@@ -313,6 +313,8 @@ resource "aws_iam_role_policy" "remediation_s3" {
           "s3:PutBucketOwnershipControls",
           "s3:GetBucketTagging",
           "s3:PutBucketTagging",
+          "s3:GetLifecycleConfiguration",
+          "s3:PutLifecycleConfiguration",
         ]
         Resource = "*"
       }

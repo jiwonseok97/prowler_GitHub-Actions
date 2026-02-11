@@ -1730,6 +1730,359 @@ def _replace_placeholder_values(lines):
     return out
 
 
+def _convert_s3_bucket_resource_to_data(lines):
+    """resource "aws_s3_bucket" with hardcoded bucket names → data source.
+
+    기존 S3 버킷을 다시 생성하면 BucketAlreadyOwnedByYou 오류가 발생하므로
+    하드코딩된 버킷 이름을 가진 resource 블록을 data source로 변환한다.
+    """
+    # 1단계: resource "aws_s3_bucket" 블록에서 하드코딩된 버킷 이름 수집
+    conversions = {}  # {resource_name: bucket_value}
+    i = 0
+    while i < len(lines):
+        m = re.match(r'^\s*resource\s+"aws_s3_bucket"\s+"([^"]+)"\s*\{', lines[i])
+        if m:
+            res_name = m.group(1)
+            brace = _brace_delta(lines[i])
+            bucket_value = None
+            j = i + 1
+            while j < len(lines) and brace > 0:
+                bm = re.match(r'^\s*bucket\s*=\s*"([^"]+)"', lines[j])
+                if bm:
+                    bucket_value = bm.group(1)
+                brace += _brace_delta(lines[j])
+                j += 1
+            # 보간(${...})이 없는 리터럴 문자열만 변환 대상
+            if bucket_value and "${" not in bucket_value:
+                conversions[res_name] = bucket_value
+        i += 1
+
+    if not conversions:
+        return lines
+
+    # 2단계: resource 블록을 data 블록으로 변환하고 참조 업데이트
+    out = []
+    skip_block = False
+    skip_brace = 0
+    for line in lines:
+        if skip_block:
+            skip_brace += _brace_delta(line)
+            if skip_brace <= 0:
+                skip_block = False
+            continue
+
+        m = re.match(r'^(\s*)resource\s+"aws_s3_bucket"\s+"([^"]+)"\s*\{', line)
+        if m and m.group(2) in conversions:
+            res_name = m.group(2)
+            indent = m.group(1)
+            bucket_val = conversions[res_name]
+            out.append(f'{indent}data "aws_s3_bucket" "{res_name}" {{')
+            out.append(f'{indent}  bucket = "{bucket_val}"')
+            out.append(f'{indent}}}')
+            skip_brace = _brace_delta(line)
+            if skip_brace > 0:
+                skip_block = True
+            continue
+
+        # 참조 업데이트: aws_s3_bucket.name → data.aws_s3_bucket.name
+        for res_name in conversions:
+            line = re.sub(
+                rf'(?<!data\.)aws_s3_bucket\.{re.escape(res_name)}',
+                f'data.aws_s3_bucket.{res_name}',
+                line,
+            )
+        out.append(line)
+
+    return out
+
+
+def _remove_s3_bucket_acl_resources(lines):
+    """aws_s3_bucket_acl 리소스 블록 제거.
+
+    BucketOwnerEnforced 설정된 버킷에서는 ACL을 사용할 수 없으므로
+    AccessControlListNotSupported 오류를 방지한다.
+    """
+    out = []
+    skip_block = False
+    brace = 0
+    for line in lines:
+        if not skip_block:
+            if re.match(r'^\s*resource\s+"aws_s3_bucket_acl"\s+"[^"]+"\s*\{', line):
+                skip_block = True
+                brace = _brace_delta(line)
+                if brace <= 0:
+                    skip_block = False
+                continue
+            out.append(line)
+            continue
+        brace += _brace_delta(line)
+        if brace <= 0:
+            skip_block = False
+    return out
+
+
+def _fix_mfa_delete(lines):
+    """mfa_delete = "Enabled" → "Disabled" (Terraform으로 MFA 설정 불가).
+
+    MFA 삭제는 AWS CLI에서 MFA 세션으로만 활성화할 수 있으므로
+    Terraform에서 "Enabled" 설정 시 AccessDenied 오류가 발생한다.
+    """
+    out = []
+    for line in lines:
+        line = re.sub(
+            r'(mfa_delete\s*=\s*)"Enabled"',
+            r'\1"Disabled"',
+            line,
+        )
+        out.append(line)
+    return out
+
+
+def _ensure_cloudtrail_s3_bucket_policy(lines):
+    """CloudTrail 리소스가 있을 때 S3 bucket policy에 CloudTrail 권한을 보장.
+
+    InsufficientS3BucketPolicyException 방지: CloudTrail이 S3 버킷에
+    로그를 기록하려면 bucket policy에 cloudtrail.amazonaws.com 서비스
+    주체의 s3:PutObject, s3:GetBucketAcl 권한이 필요하다.
+    """
+    # CloudTrail 리소스 존재 여부 확인
+    has_cloudtrail = False
+    cloudtrail_bucket_name = None
+    for line in lines:
+        if re.match(r'^\s*resource\s+"aws_cloudtrail"\s+"[^"]+"\s*\{', line):
+            has_cloudtrail = True
+        m = re.match(r'^\s*s3_bucket_name\s*=\s*"([^"]+)"', line)
+        if m and has_cloudtrail:
+            cloudtrail_bucket_name = m.group(1)
+
+    if not has_cloudtrail or not cloudtrail_bucket_name:
+        return lines
+
+    # 이미 bucket policy가 있으면 건너뜀
+    for line in lines:
+        if re.match(r'^\s*resource\s+"aws_s3_bucket_policy"\s+"[^"]+"\s*\{', line):
+            return lines
+
+    # CloudTrail용 S3 bucket policy 추가
+    bucket_arn = f"arn:aws:s3:::{cloudtrail_bucket_name}"
+    POLICY_TEMPLATE = [
+        '',
+        'resource "aws_s3_bucket_policy" "remediation_cloudtrail_bucket_policy" {',
+        f'  bucket = "{cloudtrail_bucket_name}"',
+        '  policy = jsonencode({',
+        '    Version = "2012-10-17"',
+        '    Statement = [',
+        '      {',
+        '        Sid       = "AWSCloudTrailAclCheck"',
+        '        Effect    = "Allow"',
+        '        Principal = { Service = "cloudtrail.amazonaws.com" }',
+        '        Action    = "s3:GetBucketAcl"',
+        f'        Resource  = "{bucket_arn}"',
+        '      },',
+        '      {',
+        '        Sid       = "AWSCloudTrailWrite"',
+        '        Effect    = "Allow"',
+        '        Principal = { Service = "cloudtrail.amazonaws.com" }',
+        '        Action    = "s3:PutObject"',
+        f'        Resource  = "{bucket_arn}/*"',
+        '        Condition = {',
+        '          StringEquals = {',
+        '            "s3:x-amz-acl" = "bucket-owner-full-control"',
+        '          }',
+        '        }',
+        '      }',
+        '    ]',
+        '  })',
+        '}',
+    ]
+    lines.extend(POLICY_TEMPLATE)
+    return lines
+
+
+def _fix_unsupported_data_attrs(lines):
+    """data source에서 지원하지 않는 속성 참조를 variable로 치환.
+
+    예: data.aws_instance.*.vpc_id → var.vpc_id (aws_instance는 vpc_id를 export하지 않음)
+    """
+    # data.aws_instance.<name>.vpc_id → var.vpc_id
+    out = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            out.append(line)
+            continue
+        line = re.sub(
+            r'data\.aws_instance\.\w+\.vpc_id',
+            'var.vpc_id',
+            line,
+        )
+        out.append(line)
+    return out
+
+
+def _ensure_required_resource_attrs(lines):
+    """여러 리소스 타입에서 자주 누락되는 필수 속성을 자동 삽입."""
+    # 1차 패스: 기존 리소스 이름 수집 (cross-reference용)
+    existing_resources = {}
+    for line in lines:
+        m = re.match(r'^\s*resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+        if m:
+            existing_resources.setdefault(m.group(1), []).append(m.group(2))
+
+    # 리소스별 필수 속성 정의: {attr: default_value}
+    # 값이 callable이면 existing_resources를 인자로 호출
+    REQUIRED = {
+        "aws_iam_role": {
+            "assume_role_policy": (
+                'jsonencode({\n'
+                '    Version = "2012-10-17"\n'
+                '    Statement = [{\n'
+                '      Action = "sts:AssumeRole"\n'
+                '      Effect = "Allow"\n'
+                '      Principal = { Service = "ec2.amazonaws.com" }\n'
+                '    }]\n'
+                '  })'
+            ),
+        },
+        "aws_cloudtrail": {
+            "name": '"remediation-cloudtrail"',
+            "s3_bucket_name": '"remediation-cloudtrail-bucket"',
+        },
+        "aws_inspector_assessment_target": {
+            "name": '"remediation-inspector-target"',
+        },
+        "aws_inspector_assessment_template": {
+            "name": '"remediation-inspector-template"',
+            "duration": "3600",
+        },
+        "aws_config_configuration_recorder": {
+            "name": '"remediation-config-recorder"',
+        },
+        "aws_ssm_activation": {
+            "iam_role": "var.ssm_iam_role",
+        },
+    }
+
+    # inspector_assessment_template의 target_arn: 기존 target 리소스가 있으면 참조
+    if "aws_inspector_assessment_target" in existing_resources:
+        target_name = existing_resources["aws_inspector_assessment_target"][0]
+        REQUIRED["aws_inspector_assessment_template"]["target_arn"] = (
+            f"aws_inspector_assessment_target.{target_name}.arn"
+        )
+    else:
+        REQUIRED["aws_inspector_assessment_template"]["target_arn"] = (
+            "var.inspector_target_arn"
+        )
+
+    # cloudtrail의 s3_bucket_name: 기존 S3 bucket 리소스가 있으면 참조
+    if "aws_s3_bucket" in existing_resources:
+        bucket_name = existing_resources["aws_s3_bucket"][0]
+        REQUIRED["aws_cloudtrail"]["s3_bucket_name"] = (
+            f"aws_s3_bucket.{bucket_name}.id"
+        )
+
+    out = []
+    current_type = None
+    in_block = False
+    brace = 0
+    found_attrs = set()
+    insert_idx = -1
+
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^\s*resource\s+"([^"]+)"\s+"[^"]+"\s*\{', line)
+            if m and m.group(1) in REQUIRED:
+                current_type = m.group(1)
+                in_block = True
+                brace = _brace_delta(line)
+                found_attrs = set()
+                insert_idx = len(out)
+                out.append(line)
+                if brace <= 0:
+                    in_block = False
+                continue
+            out.append(line)
+            continue
+
+        # 속성 존재 여부 확인
+        for attr in REQUIRED[current_type]:
+            if re.match(rf'^\s*{re.escape(attr)}\s*=', line):
+                found_attrs.add(attr)
+        brace += _brace_delta(line)
+        out.append(line)
+
+        if brace <= 0:
+            # 블록 종료 시 누락 속성 삽입
+            missing = set(REQUIRED[current_type].keys()) - found_attrs
+            if missing and insert_idx >= 0:
+                for i, attr in enumerate(sorted(missing)):
+                    val = REQUIRED[current_type][attr]
+                    out.insert(insert_idx + 1 + i, f"  {attr} = {val}")
+            in_block = False
+            insert_idx = -1
+    return out
+
+
+def _auto_declare_variables(lines):
+    """코드에서 참조되는 var.xxx 중 선언되지 않은 variable 블록을 자동 추가."""
+    # 기존 variable 선언 수집
+    declared = set()
+    for line in lines:
+        m = re.match(r'^\s*variable\s+"([^"]+)"\s*\{', line)
+        if m:
+            declared.add(m.group(1))
+
+    # var.xxx 참조 수집 (주석 제외)
+    referenced = set()
+    in_heredoc = False
+    heredoc_marker = None
+    for line in lines:
+        stripped = line.lstrip()
+        if in_heredoc:
+            if stripped.rstrip() == heredoc_marker:
+                in_heredoc = False
+            continue
+        hm = re.search(r'<<-?\s*([A-Z_]+)\s*$', line)
+        if hm:
+            in_heredoc = True
+            heredoc_marker = hm.group(1)
+            continue
+        if stripped.startswith("#") or stripped.startswith("//"):
+            continue
+        for m in re.finditer(r'var\.([A-Za-z_][A-Za-z0-9_]*)', line):
+            referenced.add(m.group(1))
+
+    undeclared = referenced - declared
+    if not undeclared:
+        return lines
+
+    # 변수별 기본 설명/타입 매핑
+    VAR_DEFAULTS = {
+        "vpc_id": ('description = "Target VPC ID"\n  type        = string', None),
+        "subnet_id": ('description = "Target subnet ID"\n  type        = string\n  default     = ""', None),
+        "subnet_ids": ('description = "Target subnet IDs"\n  type        = list(string)\n  default     = []', None),
+        "security_group_id": ('description = "Target security group ID"\n  type        = string\n  default     = ""', None),
+        "launch_template_name": ('description = "EC2 launch template name"\n  type        = string\n  default     = ""', None),
+        "ssm_iam_role": ('description = "IAM role for SSM activation"\n  type        = string', None),
+        "inspector_target_arn": ('description = "Inspector assessment target ARN"\n  type        = string', None),
+    }
+
+    out = list(lines)
+    out.append("")
+    for var_name in sorted(undeclared):
+        body = VAR_DEFAULTS.get(var_name)
+        if body:
+            inner = body[0]
+        else:
+            inner = f'description = "{var_name}"\n  type        = string\n  default     = ""'
+        out.append(f'variable "{var_name}" {{')
+        for bl in inner.split("\n"):
+            out.append(f"  {bl.lstrip()}")
+        out.append("}")
+        out.append("")
+    return out
+
+
 def sanitize_tf_code(code, extra_unconfig_attrs=None):
     if not code:
         return ""
@@ -1794,6 +2147,20 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _replace_placeholder_ids(lines)
     # placeholder 이메일/키페어 → variable 참조로 치환
     lines = _replace_placeholder_values(lines)
+    # S3 apply 오류 방지: 기존 버킷 resource → data 변환
+    lines = _convert_s3_bucket_resource_to_data(lines)
+    # S3 apply 오류 방지: BucketOwnerEnforced와 충돌하는 ACL 제거
+    lines = _remove_s3_bucket_acl_resources(lines)
+    # S3 apply 오류 방지: MFA delete는 Terraform으로 설정 불가
+    lines = _fix_mfa_delete(lines)
+    # CloudTrail용 S3 bucket policy 누락 보정
+    lines = _ensure_cloudtrail_s3_bucket_policy(lines)
+    # data source에서 지원하지 않는 속성 참조 치환
+    lines = _fix_unsupported_data_attrs(lines)
+    # 리소스별 필수 속성 누락 보정
+    lines = _ensure_required_resource_attrs(lines)
+    # 선언 없이 참조된 variable 자동 선언
+    lines = _auto_declare_variables(lines)
     # 미닫힌 따옴표 보정
     lines = _repair_unbalanced_quotes(lines)
     # 괄호/대괄호 균형 보정
@@ -1830,6 +2197,20 @@ def apply_error_fixes(tf_code, error_msg):
                 continue
             filtered.append(line)
         return sanitize_tf_code("\n".join(filtered))
+    # Unsupported attribute 오류 (data source 속성 미지원) → sanitize 재적용
+    if "Unsupported attribute" in error_msg:
+        return sanitize_tf_code(tf_code)
+    # 선언되지 않은 변수 참조 → _auto_declare_variables가 처리
+    if "Reference to undeclared input variable" in error_msg:
+        return sanitize_tf_code(tf_code)
+    # Unexpected resource instance key (count/for_each 미사용 시 인덱스 접근) → 인덱스 제거
+    if "Unexpected resource instance key" in error_msg:
+        m2 = re.search(r'(\w+\.\w+\.\w+)\[(\d+)\]', error_msg)
+        if m2:
+            bad_ref = re.escape(m2.group(0))
+            good_ref = m2.group(1)
+            tf_code = re.sub(bad_ref, good_ref, tf_code)
+        return sanitize_tf_code(tf_code)
     # log_group_name에 ARN이 들어간 경우 보정 시도
     if "log_group_name" in error_msg and "arn:aws:logs" in error_msg:
         return sanitize_tf_code(tf_code)
