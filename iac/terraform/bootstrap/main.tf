@@ -152,6 +152,29 @@ resource "aws_iam_role_policy" "remediation_iam" {
 }
 
 # -----------------------------------------------------
+# Bedrock InvokeModel Permissions
+# -----------------------------------------------------
+resource "aws_iam_role_policy" "bedrock_invoke" {
+  count = length(var.bedrock_model_arns) > 0 ? 1 : 0
+  name  = "BedrockInvokeModel"
+  role  = data.aws_iam_role.github_actions.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "InvokeBedrockModels"
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+        ]
+        Resource = var.bedrock_model_arns
+      }
+    ]
+  })
+}
+
+# -----------------------------------------------------
 # Organizations Remediation Permissions
 # -----------------------------------------------------
 resource "aws_iam_role_policy" "remediation_organizations" {
