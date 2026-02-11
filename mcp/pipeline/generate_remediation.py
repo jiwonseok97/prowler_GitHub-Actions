@@ -54,7 +54,7 @@ df = pd.read_csv(args.input)
 # -----------------------------------------------------------------------------
 # Bedrock 설정 (환경 변수로 오버라이드 가능)
 # -----------------------------------------------------------------------------
-MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
+MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "apac.anthropic.claude-3-5-sonnet-20241022-v2:0")
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", "ap-northeast-2")
 MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))  # Terraform 코드 최대 길이
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"

@@ -28,5 +28,6 @@ variable "bedrock_model_arns" {
   default = [
     "arn:aws:bedrock:ap-northeast-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0",
     "arn:aws:bedrock:ap-northeast-2::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "arn:aws:bedrock:ap-northeast-2:132410971304:inference-profile/apac.anthropic.claude-3-5-sonnet-20241022-v2:0",
   ]
 }
