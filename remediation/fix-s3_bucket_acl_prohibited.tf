@@ -2,15 +2,14 @@
 resource "aws_s3_bucket" "remediation_aws_cloudtrail_logs" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 
-  # Enable bucket ownership control
+  # Set Object Ownership to BucketOwnerEnforced
 }
 
-# Create a new IAM policy to grant the necessary permissions for the CloudTrail logs bucket
-data "aws_iam_policy_document" "remediation_cloudtrail_logs_bucket_policy" {
+# Create an IAM policy to grant the necessary permissions to the bucket
+data "aws_iam_policy_document" "remediation_aws_cloudtrail_logs_policy" {
   statement {
     effect = "Allow"
     actions = [
-      "s3:GetBucketAcl",
       "s3:GetBucketLocation",
       "s3:GetObject",
       "s3:ListBucket",
@@ -23,18 +22,10 @@ data "aws_iam_policy_document" "remediation_cloudtrail_logs_bucket_policy" {
   }
 }
 
-resource "aws_s3_bucket_policy" "remediation_cloudtrail_logs_bucket_policy" {
-  bucket = aws_s3_bucket.remediation_aws_cloudtrail_logs.id
-  policy = data.aws_iam_policy_document.remediation_cloudtrail_logs_bucket_policy.json
+resource "aws_iam_policy" "remediation_aws_cloudtrail_logs_policy" {
+  name        = "remediation-aws-cloudtrail-logs-policy"
+  description = "Policy to manage access to the aws-cloudtrail-logs-132410971304-0971c04b S3 bucket"
+  policy      = data.aws_iam_policy_document.remediation_aws_cloudtrail_logs_policy.json
 }
 
-# Enable server-side encryption for the CloudTrail logs bucket
-resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloudtrail_logs_encryption" {
-  bucket = aws_s3_bucket.remediation_aws_cloudtrail_logs.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
+# Attach the IAM policy to the appropriate IAM user or role

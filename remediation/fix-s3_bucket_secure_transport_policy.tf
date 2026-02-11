@@ -1,5 +1,5 @@
-# Modify the existing S3 bucket policy to deny insecure (HTTP) access
-resource "aws_s3_bucket_policy" "remediation_s3_bucket_secure_transport_policy" {
+# Modify the existing S3 bucket policy to enforce HTTPS-only access
+resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
   policy = jsonencode({
     Version = "2012-10-17"

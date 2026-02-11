@@ -1,98 +1,58 @@
 [
   {
-    "check_id": "iam_customer_unattached_policy_no_administrative_privileges",
-    "check_title": "Unattached customer managed IAM policy does not allow '*:*' administrative privileges",
-    "file": "fix-iam_customer_unattached_policy_no_administrative_privileges.tf",
+    "check_id": "s3_bucket_acl_prohibited",
+    "check_title": "S3 bucket has bucket ACLs disabled",
+    "file": "fix-s3_bucket_acl_prohibited.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "s3",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_inline_policy_no_full_access_to_kms",
-    "check_title": "Inline IAM policy does not allow kms:* privileges",
-    "file": "fix-iam_inline_policy_no_full_access_to_kms.tf",
+    "check_id": "s3_bucket_default_encryption",
+    "check_title": "S3 bucket has default server-side encryption (SSE) enabled",
+    "file": "fix-s3_bucket_default_encryption.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "s3",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_expires_passwords_within_90_days_or_less",
-    "check_title": "IAM account password policy enforces password expiration within 90 days or less",
-    "file": "fix-iam_password_policy_expires_passwords_within_90_days_or_less.tf",
+    "check_id": "s3_bucket_kms_encryption",
+    "check_title": "S3 bucket has server-side encryption with AWS KMS",
+    "file": "fix-s3_bucket_kms_encryption.tf",
     "priority": "P2",
-    "category": "iam",
-    "source": "iac_snippet"
-  },
-  {
-    "check_id": "iam_password_policy_minimum_length_14",
-    "check_title": "IAM password policy requires passwords to be at least 14 characters long",
-    "file": "fix-iam_password_policy_minimum_length_14.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "iac_snippet"
-  },
-  {
-    "check_id": "iam_password_policy_number",
-    "check_title": "IAM password policy requires at least one number",
-    "file": "fix-iam_password_policy_number.tf",
-    "priority": "P2",
-    "category": "iam",
+    "category": "s3",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_reuse_24",
-    "check_title": "IAM password policy prevents reuse of the last 24 passwords",
-    "file": "fix-iam_password_policy_reuse_24.tf",
+    "check_id": "s3_bucket_no_mfa_delete",
+    "check_title": "S3 bucket has MFA Delete enabled",
+    "file": "fix-s3_bucket_no_mfa_delete.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "s3",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_symbol",
-    "check_title": "IAM password policy requires at least one symbol",
-    "file": "fix-iam_password_policy_symbol.tf",
+    "check_id": "s3_bucket_object_versioning",
+    "check_title": "S3 bucket has object versioning enabled",
+    "file": "fix-s3_bucket_object_versioning.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "s3",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_uppercase",
-    "check_title": "IAM password policy requires at least one uppercase letter",
-    "file": "fix-iam_password_policy_uppercase.tf",
+    "check_id": "s3_bucket_secure_transport_policy",
+    "check_title": "S3 bucket policy denies requests over insecure transport",
+    "file": "fix-s3_bucket_secure_transport_policy.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "s3",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_policy_cloudshell_admin_not_attached",
-    "check_title": "No IAM users, groups, or roles have the AWSCloudShellFullAccess policy attached",
-    "file": "fix-iam_policy_cloudshell_admin_not_attached.tf",
+    "check_id": "s3_bucket_server_access_logging_enabled",
+    "check_title": "S3 bucket has server access logging enabled",
+    "file": "fix-s3_bucket_server_access_logging_enabled.tf",
     "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_policy_no_full_access_to_cloudtrail",
-    "check_title": "Customer managed IAM policy does not allow cloudtrail:* privileges",
-    "file": "fix-iam_policy_no_full_access_to_cloudtrail.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_policy_no_full_access_to_kms",
-    "check_title": "Custom IAM policy does not allow 'kms:*' privileges",
-    "file": "fix-iam_policy_no_full_access_to_kms.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_user_console_access_unused",
-    "check_title": "IAM user console access is disabled, used within the configured inactivity period, or never used",
-    "file": "fix-iam_user_console_access_unused.tf",
-    "priority": "P2",
-    "category": "iam",
+    "category": "s3",
     "source": "bedrock"
   }
 ]
