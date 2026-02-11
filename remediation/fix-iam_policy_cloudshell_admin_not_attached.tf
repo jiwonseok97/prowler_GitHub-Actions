@@ -1,1 +1,1 @@
-# Detach the AWSCloudShellFullAccess policy from all IAM identities
+# Remove the AWSCloudShellFullAccess policy from all IAM identities

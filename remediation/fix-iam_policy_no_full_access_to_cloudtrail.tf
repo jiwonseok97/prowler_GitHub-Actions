@@ -1,17 +1,10 @@
-# Modify the existing IAM policy to remove the overly broad "cloudtrail:*" permission
-resource "aws_iam_policy" "remediation_aws_learner_dynamodb_policy" {
-  name        = "remediation_aws_learner_dynamodb_policy"
-  description = "Remediated IAM policy to remove cloudtrail:* privilege"
+# Modify the existing IAM policy to remove the "cloudtrail:*" permission
+resource "aws_iam_policy" "remediation_iam_policy" {
+  name        = "GitHubActionsProwlerRole-ProwlerReadOnly"
+  description = "Remediated IAM policy to remove 'cloudtrail:*' permission"
   policy      = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "dynamodb:*"
-        ],
-        Resource = "*"
-      },
       {
         Effect = "Allow",
         Action = [
@@ -20,9 +13,21 @@ resource "aws_iam_policy" "remediation_aws_learner_dynamodb_policy" {
           "cloudtrail:LookupEvents"
         ],
         Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetBucketLocation",
+          "s3:GetObject",
+          "s3:ListBucket"
+        ],
+        Resource = [
+          "arn:aws:s3:::my-cloudtrail-bucket",
+          "arn:aws:s3:::my-cloudtrail-bucket/*"
+        ]
       }
     ]
   })
 }
 
-# Attach the remediated IAM policy to the appropriate IAM user(s)
+# Attach the remediated IAM policy to the existing IAM role
