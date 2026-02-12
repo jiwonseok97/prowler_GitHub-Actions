@@ -130,6 +130,11 @@ jobs:
 
       # Normalize → Score → AI Assist → Runbook → OCSF export
       - name: Process findings pipeline
+        env:
+          BEDROCK_MODEL_ID: ${{ env.BEDROCK_MODEL_ID }}
+          BEDROCK_REGION: ap-northeast-2
+          AWS_REGION: ap-northeast-2
+          AWS_DEFAULT_REGION: ap-northeast-2
         run: |
           set -e
 
@@ -226,6 +231,10 @@ jobs:
       - name: Generate Terraform remediation
         env:
           PREFER_IAC_SNIPPET: "false"
+          BEDROCK_MODEL_ID: ${{ env.BEDROCK_MODEL_ID }}
+          BEDROCK_REGION: ap-northeast-2
+          AWS_REGION: ap-northeast-2
+          AWS_DEFAULT_REGION: ap-northeast-2
         run: |
           mkdir -p remediation
           # 이번 실행에서 생성된 파일만 유지 (이전 결과 정리)
