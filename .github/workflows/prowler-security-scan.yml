@@ -1,4 +1,4 @@
-﻿name: ProwlerSecurityScan
+name: ProwlerSecurityScan
 
 on:
   # PR에서는 보안 점검/ 리포트 생성
@@ -69,6 +69,18 @@ jobs:
             --severity medium \
             --output-directory output \
             --output-formats json-ocsf html csv
+
+      # S3 업로드 (대시보드 연동용, 설정된 경우에만 실행)
+      - name: Upload CSV to S3 for dashboard (optional)
+        if: ${{ secrets.PROWLER_DASHBOARD_BUCKET != '' }}
+        env:
+          BUCKET: ${{ secrets.PROWLER_DASHBOARD_BUCKET }}
+          PREFIX: ${{ secrets.PROWLER_DASHBOARD_PREFIX }}
+        run: |
+          set -euo pipefail
+          PREFIX="${PREFIX:-prowler/output/${{ github.run_id }}}"
+          echo "Uploading CSVs to s3://$BUCKET/$PREFIX/"
+          aws s3 cp output/ "s3://$BUCKET/$PREFIX/" --recursive --exclude "*" --include "*.csv"
 
       # 원본 결과 아티팩트 업로드 (다음 job에서 사용)
       - name: "Upload artifacts: Prowler raw output"
