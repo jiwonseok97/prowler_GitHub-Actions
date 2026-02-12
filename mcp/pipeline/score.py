@@ -27,7 +27,7 @@ df = pd.read_csv(args.input)
 
 # --- 가중치 매핑 테이블 ---
 sev = {"low": 2, "medium": 3, "high": 4, "critical": 5}          # 심각도 → 발생 가능성 점수
-dc = {"public": 1.0, "internal": 1.1, "confidential": 1.2, "regulated": 1.3}  # 데이터 등급 배수
+dc  = {"public": 1.0, "internal": 1.1, "confidential": 1.2, "regulated": 1.3}  # 데이터 등급 배수
 env = {"prod": 1.2, "non-prod": 1.0, "unknown": 1.1}             # 환경 배수
 
 

@@ -1,40 +1,62 @@
+# 워크플로우 이름 (GitHub Actions 탭에 표시됨)
 name: "CodeQL Analysis"
 
+# 워크플로우 실행 조건 정의
 on:
+  # main 브랜치에 push 될 때 실행
   push:
     branches: [main]
+
+  # main 브랜치로 PR 생성/업데이트 시 실행
   pull_request:
     branches: [main]
+
+  # 매주 월요일 06:00 UTC (한국시간 15:00) 정기 실행
   schedule:
     - cron: "0 6 * * 1"
 
 jobs:
   analyze:
+    # Job 이름
     name: Analyze
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
 
+    # 실행 환경 (GitHub 제공 Ubuntu 러너)
+    runs-on: ubuntu-latest
+
+    # 필요한 권한 설정 (최소 권한 원칙 적용)
+    permissions:
+      actions: read            # 워크플로우 메타데이터 읽기
+      contents: read           # 레포지토리 코드 읽기
+      security-events: write   # CodeQL 결과를 Security 탭에 업로드
+
+    # 매트릭스 전략 (언어별 병렬 분석 가능)
     strategy:
-      fail-fast: false
+      fail-fast: false         # 하나 실패해도 다른 언어 계속 실행
       matrix:
-        language: ["python"]
+        language: ["python"]   # 분석 대상 언어 (현재 Python만)
 
     steps:
+      # 1️⃣ 레포지토리 코드 체크아웃
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2️⃣ CodeQL 초기화
+      # 분석 대상 언어에 맞는 CodeQL 데이터베이스 준비
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
 
+      # 3️⃣ 자동 빌드 단계
+      # Python은 보통 별도 빌드가 없지만
+      # 다른 언어(Java, C# 등)에서는 필수 단계
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
 
+      # 4️⃣ 실제 정적 분석 실행
+      # 결과는 GitHub Security → Code scanning alerts 탭으로 전송
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
+          # 언어별 결과 분류 태그
           category: "/language:${{ matrix.language }}"
