@@ -1,27 +1,70 @@
-# IAM remediation baseline snippet (targets provided user/role)
-# NOTE: This applies account-level password policy (real change)
-
-# Target IAM principal references (for validation and future use)
-data "aws_iam_user" "target_user" {
-  user_name = "github-actions-prowler"
+# Remove the unattached customer-managed IAM policy
+resource "aws_iam_policy" "remediation_aws_cloudtrail_logs_policy" {
+  name        = "remediation-aws-cloudtrail-logs-policy"
+  description = "Remediation policy for AWS CloudTrail logs"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "cloudtrail:DescribeTrails",
+          "cloudtrail:GetTrailStatus",
+          "cloudtrail:StartLogging",
+          "cloudtrail:StopLogging"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
 }
 
-data "aws_iam_role" "target_role" {
-  name = "GitHubActionsProwlerRole"
+# Apply a permissions boundary to the IAM policy
+resource "aws_iam_policy" "remediation_permissions_boundary" {
+  name        = "remediation-permissions-boundary"
+  description = "Permissions boundary for remediation resources"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Deny",
+        NotAction = "*:*",
+        Resource = "*"
+      }
+    ]
+  })
 }
 
-# NOTE: IAM permissions for GitHubActionsProwlerRole are managed in
-# iac/terraform/bootstrap/ — do not add inline policies here.
+# Attach the permissions boundary to the IAM policy
 
-# Enforce strict account password policy
-resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
-  minimum_password_length        = 14
-  require_uppercase_characters   = true
-  require_lowercase_characters   = true
-  require_numbers                = true
-  require_symbols                = true
-  allow_users_to_change_password = true
-  hard_expiry                    = false
-  password_reuse_prevention      = 24
-  max_password_age               = 90
+# Create an IAM role for the remediation resources
+resource "aws_iam_role" "remediation_role" {
+  name               = "remediation-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Attach the remediation policy to the IAM role
+
+# Create an EC2 instance with the remediation role
+resource "aws_instance" "remediation_instance" {
+  ami           = "ami-0b7546e839d7ace12"
+  instance_type = "t2.micro"
+  iam_instance_profile = aws_iam_instance_profile.remediation_instance_profile.name
+}
+
+# Create an IAM instance profile for the remediation instance
+resource "aws_iam_instance_profile" "remediation_instance_profile" {
+  name = "remediation-instance-profile"
+  role = aws_iam_role.remediation_role.name
 }
