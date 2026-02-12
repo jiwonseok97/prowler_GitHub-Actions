@@ -30,6 +30,9 @@ jobs:
     permissions:
       contents: read
       id-token: write   # OIDC role assume
+    env:
+      PROWLER_DASHBOARD_BUCKET: ${{ secrets.PROWLER_DASHBOARD_BUCKET }}
+      PROWLER_DASHBOARD_PREFIX: ${{ secrets.PROWLER_DASHBOARD_PREFIX }}
 
     steps:
       # 레포 코드 체크아웃
@@ -72,10 +75,10 @@ jobs:
 
       # S3 업로드 (대시보드 연동용, 설정된 경우에만 실행)
       - name: Upload CSV to S3 for dashboard (optional)
-        if: ${{ secrets.PROWLER_DASHBOARD_BUCKET != '' }}
+        if: ${{ env.PROWLER_DASHBOARD_BUCKET != '' }}
         env:
-          BUCKET: ${{ secrets.PROWLER_DASHBOARD_BUCKET }}
-          PREFIX: ${{ secrets.PROWLER_DASHBOARD_PREFIX }}
+          BUCKET: ${{ env.PROWLER_DASHBOARD_BUCKET }}
+          PREFIX: ${{ env.PROWLER_DASHBOARD_PREFIX }}
         run: |
           set -euo pipefail
           PREFIX="${PREFIX:-prowler/output/${{ github.run_id }}}"
