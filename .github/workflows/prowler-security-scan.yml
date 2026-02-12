@@ -1,15 +1,15 @@
 name: ProwlerSecurityScan
 
 on:
-  # PR에서는 보안 점검/ 리포트 생성
+  # PR?�서??보안 ?��?/ 리포???�성
   pull_request:
-  # main 브랜치에 머지되면 remediation + PR 자동 생성까지 수행
+  # main 브랜치에 머�??�면 remediation + PR ?�동 ?�성까�? ?�행
   push:
     branches: ["main"]
-  # 수동 재실행(Apply 이후 재스캔 트리거용)
+  # ?�동 ?�실??Apply ?�후 ?�스�??�리거용)
   workflow_dispatch:
 
-# 기본은 최소 권한 (읽기 전용)
+# 기본?� 최소 권한 (?�기 ?�용)
 permissions:
   contents: read
 
@@ -21,7 +21,7 @@ jobs:
 
   # ================================
   # 1) SCAN JOB
-  # AWS에 실제로 접속해서 Prowler 보안 점검 수행
+  # AWS???�제�??�속?�서 Prowler 보안 ?��? ?�행
   # ================================
   scan:
     name: 1) Scan (Prowler CIS 1.4)
@@ -35,34 +35,34 @@ jobs:
       PROWLER_DASHBOARD_PREFIX: ${{ secrets.PROWLER_DASHBOARD_PREFIX }}
 
     steps:
-      # 레포 코드 체크아웃
+      # ?�포 코드 체크?�웃
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 결과 저장 디렉토리 생성
+      # 결과 ?�???�렉?�리 ?�성
       - name: Create working directories
         run: |
           mkdir -p output reports scripts mcp/output
 
-      # Python 환경 구성
+      # Python ?�경 구성
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # GitHub OIDC → AWS IAM Role Assume
+      # GitHub OIDC ??AWS IAM Role Assume
       - name: Configure AWS credentials (OIDC assume-role)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
-      # Prowler 및 리포트 라이브러리 설치
+      # Prowler �?리포???�이브러�??�치
       - name: Install dependencies (Prowler + report tools)
         run: |
           pip install prowler pandas openpyxl boto3
 
-      # CIS 1.4 기준으로 AWS 스캔 실행
+      # CIS 1.4 기�??�로 AWS ?�캔 ?�행
       - name: Run Prowler scan (CIS 1.4 / ap-northeast-2)
         continue-on-error: true
         run: |
@@ -73,19 +73,19 @@ jobs:
             --output-directory output \
             --output-formats json-ocsf html csv
 
-      # S3 업로드 (대시보드 연동용, 설정된 경우에만 실행)
+      # S3 ?�로??(?�?�보???�동?? ?�정??경우?�만 ?�행)
       - name: Upload CSV to S3 for dashboard (optional)
-        if: ${{ env.PROWLER_DASHBOARD_BUCKET != '' }}
+        if: ${{ secrets.PROWLER_DASHBOARD_BUCKET != '' }}
         env:
-          BUCKET: ${{ env.PROWLER_DASHBOARD_BUCKET }}
-          PREFIX: ${{ env.PROWLER_DASHBOARD_PREFIX }}
+          BUCKET: ${{ secrets.PROWLER_DASHBOARD_BUCKET }}
+          PREFIX: ${{ secrets.PROWLER_DASHBOARD_PREFIX }}
         run: |
           set -euo pipefail
           PREFIX="${PREFIX:-prowler/output/${{ github.run_id }}}"
           echo "Uploading CSVs to s3://$BUCKET/$PREFIX/"
           aws s3 cp output/ "s3://$BUCKET/$PREFIX/" --recursive --exclude "*" --include "*.csv"
 
-      # 원본 결과 아티팩트 업로드 (다음 job에서 사용)
+      # ?�본 결과 ?�티?�트 ?�로??(?�음 job?�서 ?�용)
       - name: "Upload artifacts: Prowler raw output"
         if: always()
         uses: actions/upload-artifact@v4
@@ -96,7 +96,7 @@ jobs:
 
   # ================================
   # 2) PROCESS JOB
-  # Scan 결과를 정규화/점수화/AI보강/Runbook 생성
+  # Scan 결과�??�규???�수??AI보강/Runbook ?�성
   # ================================
   process:
     name: 2) Process (Normalize/Score/AI/Runbook/OCSF)
@@ -105,32 +105,32 @@ jobs:
     if: needs.scan.result == 'success'
     permissions:
       contents: read
-      id-token: write   # Bedrock 호출 시 OIDC assume-role 가능하도록
+      id-token: write   # Bedrock ?�출 ??OIDC assume-role 가?�하?�록
 
     steps:
-      # 레포 코드 체크아웃
+      # ?�포 코드 체크?�웃
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 작업 디렉토리 생성
+      # ?�업 ?�렉?�리 ?�성
       - name: Create working directories
         run: |
           mkdir -p output reports scripts mcp/output
 
-      # scan job에서 업로드한 원본 결과 다운로드
+      # scan job?�서 ?�로?�한 ?�본 결과 ?�운로드
       - name: "Download artifacts: Prowler raw output"
         uses: actions/download-artifact@v4
         with:
           name: prowler-output
           path: output
 
-      # Python 환경 구성
+      # Python ?�경 구성
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # GitHub OIDC → AWS IAM Role Assume (AI Assist용, fork PR에서는 건너뜀)
+      # GitHub OIDC ??AWS IAM Role Assume (AI Assist?? fork PR?�서??건너?�)
       - name: Configure AWS credentials (OIDC assume-role)
         if: github.event_name == 'push' || github.event.pull_request.head.repo.fork != true
         uses: aws-actions/configure-aws-credentials@v4
@@ -138,12 +138,80 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
-      # 파이프라인 처리용 라이브러리 설치
+      # ?�이?�라??처리???�이브러�??�치
       - name: Install dependencies (pipeline tools)
         run: |
           pip install pandas openpyxl boto3
 
-      # Normalize → Score → AI Assist → Runbook → OCSF export
+      # Normalize ??Score ??AI Assist ??Runbook ??OCSF export
+      - name: Process findings pipeline        env:
+          BUCKET: ${{ env.PROWLER_DASHBOARD_BUCKET }}
+          PREFIX: ${{ env.PROWLER_DASHBOARD_PREFIX }}
+        run: |
+          set -euo pipefail
+          PREFIX="${PREFIX:-prowler/output/${{ github.run_id }}}"
+          echo "Uploading CSVs to s3://$BUCKET/$PREFIX/"
+          aws s3 cp output/ "s3://$BUCKET/$PREFIX/" --recursive --exclude "*" --include "*.csv"
+
+      # ?�본 결과 ?�티?�트 ?�로??(?�음 job?�서 ?�용)
+      - name: "Upload artifacts: Prowler raw output"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prowler-output
+          path: output/
+
+
+  # ================================
+  # 2) PROCESS JOB
+  # Scan 결과�??�규???�수??AI보강/Runbook ?�성
+  # ================================
+  process:
+    name: 2) Process (Normalize/Score/AI/Runbook/OCSF)
+    runs-on: ubuntu-latest
+    needs: scan
+    if: needs.scan.result == 'success'
+    permissions:
+      contents: read
+      id-token: write   # Bedrock ?�출 ??OIDC assume-role 가?�하?�록
+
+    steps:
+      # ?�포 코드 체크?�웃
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ?�업 ?�렉?�리 ?�성
+      - name: Create working directories
+        run: |
+          mkdir -p output reports scripts mcp/output
+
+      # scan job?�서 ?�로?�한 ?�본 결과 ?�운로드
+      - name: "Download artifacts: Prowler raw output"
+        uses: actions/download-artifact@v4
+        with:
+          name: prowler-output
+          path: output
+
+      # Python ?�경 구성
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # GitHub OIDC ??AWS IAM Role Assume (AI Assist?? fork PR?�서??건너?�)
+      - name: Configure AWS credentials (OIDC assume-role)
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork != true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      # ?�이?�라??처리???�이브러�??�치
+      - name: Install dependencies (pipeline tools)
+        run: |
+          pip install pandas openpyxl boto3
+
+      # Normalize ??Score ??AI Assist ??Runbook ??OCSF export
       - name: Process findings pipeline
         env:
           BEDROCK_MODEL_ID: ${{ env.BEDROCK_MODEL_ID }}
@@ -153,7 +221,7 @@ jobs:
         run: |
           set -e
 
-          # CSV가 있을 경우만 처리
+          # CSV가 ?�을 경우�?처리
           if ls output/*.csv >/dev/null 2>&1; then
             python mcp/pipeline/normalize.py \
               --input "output/*.csv" \
@@ -180,7 +248,7 @@ jobs:
               --output mcp/output/ocsf-findings.json
           fi
 
-      # 가공된 결과 업로드
+      # 가공된 결과 ?�로??
       - name: "Upload artifacts: MCP processed output"
         if: always()
         uses: actions/upload-artifact@v4
@@ -191,13 +259,13 @@ jobs:
 
   # ================================
   # 3) REMEDIATE JOB
-  # main push일 때만 Terraform 코드 생성 + PR 자동 생성
+  # main push???�만 Terraform 코드 ?�성 + PR ?�동 ?�성
   # ================================
   remediate:
     name: 3) Remediate (Generate IaC + Create PR)
     runs-on: ubuntu-latest
     needs: process
-    # Gate 조건: main push일 때만 실행
+    # Gate 조건: main push???�만 ?�행
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
@@ -205,44 +273,44 @@ jobs:
       id-token: write
 
     steps:
-      # 브랜치 생성/푸시를 위해 full clone
+      # 브랜�??�성/?�시�??�해 full clone
       - name: Checkout repository (full history)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # MCP 가공 결과 다운로드
+      # MCP 가�?결과 ?�운로드
       - name: "Download artifacts: MCP processed output"
         uses: actions/download-artifact@v4
         with:
           name: mcp-output
           path: mcp/output
 
-      # Python 환경 구성.
+      # Python ?�경 구성.
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # GitHub OIDC → AWS IAM Role Assume (Bedrock 호출용)
+      # GitHub OIDC ??AWS IAM Role Assume (Bedrock ?�출??
       - name: Configure AWS credentials (OIDC assume-role)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
-      # IaC 보조 라이브러리 설치
+      # IaC 보조 ?�이브러�??�치
       - name: Install IaC helper libraries
         run: |
           pip install pandas pyyaml boto3
 
-      # Terraform CLI 설치 (검증용)
+      # Terraform CLI ?�치 (검증용)
       - name: Setup Terraform CLI
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.6.0
 
-      # AI 기반 Terraform remediation 코드 생성
+      # AI 기반 Terraform remediation 코드 ?�성
       - name: Generate Terraform remediation
         env:
           PREFER_IAC_SNIPPET: "false"
@@ -252,7 +320,7 @@ jobs:
           AWS_DEFAULT_REGION: ap-northeast-2
         run: |
           mkdir -p remediation
-          # 이번 실행에서 생성된 파일만 유지 (이전 결과 정리)
+          # ?�번 ?�행?�서 ?�성???�일�??��? (?�전 결과 ?�리)
           find remediation -type f ! -name '.gitkeep' -delete
 
           if [ -f mcp/output/findings-scored-ai.csv ]; then
@@ -264,7 +332,7 @@ jobs:
             exit 0
           fi
 
-      # 생성된 .tf 파일이 있을 경우 카테고리별 PR 생성
+      # ?�성??.tf ?�일???�을 경우 카테고리�?PR ?�성
       - name: Create remediation PRs (per category)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -279,12 +347,12 @@ jobs:
             exit 0
           fi
 
-          # 생성된 파일을 임시 디렉터리에 백업 (checkout 시 유실 방지)
+          # ?�성???�일???�시 ?�렉?�리??백업 (checkout ???�실 방�?)
           TMPGEN=$(mktemp -d)
           cp -r remediation/* "$TMPGEN/"
           echo "Backed up generated files to $TMPGEN"
 
-          # manifest.json에서 카테고리 목록 추출
+          # manifest.json?�서 카테고리 목록 추출
           CATEGORIES=$(python3 -c "
           import json, sys
           with open('$TMPGEN/manifest.json') as f:
@@ -302,7 +370,7 @@ jobs:
           for CATEGORY in $CATEGORIES; do
             echo "=== Processing category: $CATEGORY ==="
 
-            # 해당 카테고리 파일명 목록 추출 (basename만)
+            # ?�당 카테고리 ?�일�?목록 추출 (basename�?
             CAT_FILES=$(python3 -c "
           import json
           with open('$TMPGEN/manifest.json') as f:
@@ -320,7 +388,7 @@ jobs:
             BRANCH="remediation/$CATEGORY"
             git checkout -B "$BRANCH" main
 
-            # main에서 상속된 다른 카테고리 remediation 파일 제거
+            # main?�서 ?�속???�른 카테고리 remediation ?�일 ?�거
             git rm -f remediation/*.tf remediation/manifest.json 2>/dev/null || true
             mkdir -p remediation
             for fname in $CAT_FILES; do
@@ -330,7 +398,7 @@ jobs:
               fi
             done
 
-            # 카테고리별 manifest 생성 (머지 충돌 방지)
+            # 카테고리�?manifest ?�성 (머�? 충돌 방�?)
             python3 -c "
           import json
           with open('$TMPGEN/manifest.json') as f:
@@ -350,7 +418,7 @@ jobs:
             git commit -m "fix($CATEGORY): auto-generated Terraform remediation [$FILE_COUNT files]"
             git push origin "$BRANCH" --force
 
-            # 기존 PR이 있으면 업데이트, 없으면 생성
+            # 기존 PR???�으�??�데?�트, ?�으�??�성
             EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
             if [ -z "$EXISTING_PR" ]; then
               PR_BODY=$(python3 -c "
@@ -370,8 +438,9 @@ jobs:
                 --head "$BRANCH"
               echo "Created PR for category: $CATEGORY"
             else
-              echo "PR #${EXISTING_PR} already exists for ${BRANCH} – updated via force-push."
+              echo "PR #${EXISTING_PR} already exists for ${BRANCH} ??updated via force-push."
             fi
           done
 
           rm -rf "$TMPGEN"
+
