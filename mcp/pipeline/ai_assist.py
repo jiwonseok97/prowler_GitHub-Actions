@@ -30,9 +30,21 @@ args = parser.parse_args()
 
 df = pd.read_csv(args.input)
 
-# --- Bedrock ?ㅼ젙 (?섍꼍蹂?섎줈 ?ㅻ쾭?쇱씠??媛?? ---
-MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "apac.anthropic.claude-3-5-sonnet-20241022-v2:0")  # ?쒖슱 由ъ쟾 吏??紐⑤뜽
-BEDROCK_REGION = os.getenv("BEDROCK_REGION", "ap-northeast-2")  # ?쒖슱 由ъ쟾
+# --- Bedrock 설정 (환경 변수로 오버라이드 가능) ---
+DEFAULT_BEDROCK_REGION = "ap-northeast-2"
+DEFAULT_MODEL_ID = (
+    "arn:aws:bedrock:ap-northeast-2:132410971304:"
+    "inference-profile/apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
+)
+MODEL_ID = os.getenv("BEDROCK_MODEL_ID", DEFAULT_MODEL_ID)
+BEDROCK_REGION = os.getenv("BEDROCK_REGION", DEFAULT_BEDROCK_REGION)
+# Force Seoul region to avoid accidental Osaka calls
+if BEDROCK_REGION != DEFAULT_BEDROCK_REGION:
+    print(f"[Bedrock] Override region {BEDROCK_REGION} -> {DEFAULT_BEDROCK_REGION}")
+    BEDROCK_REGION = DEFAULT_BEDROCK_REGION
+if not MODEL_ID.startswith("arn:aws:bedrock:"):
+    print("[Bedrock] Override model_id to inference profile ARN (Seoul)")
+    MODEL_ID = DEFAULT_MODEL_ID
 MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "256"))        # ?묐떟 理쒕? ?좏겙 ??
 TEMPERATURE = float(os.getenv("BEDROCK_TEMPERATURE", "0.2"))    # ??쓣?섎줉 ?쇨????묐떟
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"  # Bedrock ?ъ슜 ?щ?

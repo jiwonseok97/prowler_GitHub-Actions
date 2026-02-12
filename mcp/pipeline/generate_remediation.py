@@ -54,8 +54,20 @@ df = pd.read_csv(args.input)
 # -----------------------------------------------------------------------------
 # Bedrock 설정 (환경 변수로 오버라이드 가능)
 # -----------------------------------------------------------------------------
-MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "apac.anthropic.claude-3-5-sonnet-20241022-v2:0")
-BEDROCK_REGION = os.getenv("BEDROCK_REGION", "ap-northeast-2")
+DEFAULT_BEDROCK_REGION = "ap-northeast-2"
+DEFAULT_MODEL_ID = (
+    "arn:aws:bedrock:ap-northeast-2:132410971304:"
+    "inference-profile/apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
+)
+MODEL_ID = os.getenv("BEDROCK_MODEL_ID", DEFAULT_MODEL_ID)
+BEDROCK_REGION = os.getenv("BEDROCK_REGION", DEFAULT_BEDROCK_REGION)
+# Force Seoul region to avoid accidental Osaka calls
+if BEDROCK_REGION != DEFAULT_BEDROCK_REGION:
+    print(f"[Bedrock] Override region {BEDROCK_REGION} -> {DEFAULT_BEDROCK_REGION}")
+    BEDROCK_REGION = DEFAULT_BEDROCK_REGION
+if not MODEL_ID.startswith("arn:aws:bedrock:"):
+    print("[Bedrock] Override model_id to inference profile ARN (Seoul)")
+    MODEL_ID = DEFAULT_MODEL_ID
 MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))  # Terraform 코드 최대 길이
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"
 # IaC 스니펫을 Bedrock보다 우선 적용할지 여부
