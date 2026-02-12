@@ -116,7 +116,7 @@ jobs:
 
       # scan job에서 업로드한 원본 결과 다운로드
       - name: "Download artifacts: Prowler raw output"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: prowler-output
           path: output
@@ -210,7 +210,7 @@ jobs:
 
       # MCP 가공 결과 다운로드
       - name: "Download artifacts: MCP processed output"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: mcp-output
           path: mcp/output
