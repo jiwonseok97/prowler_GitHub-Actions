@@ -26,6 +26,6 @@ variable "extra_policy_arns" {
 variable "bedrock_model_arns" {
   type = list(string)
   default = [
-    "arn:aws:bedrock:ap-northeast-2::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0",
+    "arn:aws:bedrock:ap-northeast-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0",
   ]
 }

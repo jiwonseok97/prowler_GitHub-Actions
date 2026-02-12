@@ -32,7 +32,7 @@ df = pd.read_csv(args.input)
 
 # --- Bedrock 설정 (환경 변수로 오버라이드 가능) ---
 DEFAULT_BEDROCK_REGION = "ap-northeast-2"
-DEFAULT_MODEL_ID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+DEFAULT_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
 MODEL_ID = os.getenv("BEDROCK_MODEL_ID", DEFAULT_MODEL_ID)
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", DEFAULT_BEDROCK_REGION)
 # Force Seoul region to avoid accidental Osaka calls
