@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   # -------------------------------------------------------
-  # Plan: PR 열릴 때 실행 → plan 결과를 PR 코멘트로 게시
+  # Plan: run on PR updates and post Terraform plan comment
   # -------------------------------------------------------
   plan:
     if: github.event.pull_request.merged != true && github.event.action != 'closed'
@@ -63,8 +63,8 @@ jobs:
           echo "files=$files" >> $GITHUB_OUTPUT
 
           # Extract unique categories from changed files
-          # fix-iam_password_policy_xxx.tf → iam
-          # fix-cloudwatch_log_group_xxx.tf → cloudwatch
+          # fix-iam_password_policy_xxx.tf -> iam
+          # fix-cloudwatch_log_group_xxx.tf -> cloudwatch
           categories=""
           for file in $files; do
             base=$(basename "$file" .tf | sed 's/^fix-//')
@@ -197,7 +197,7 @@ jobs:
                 exitcode=1
                 continue
               fi
-              # tfsec: 경고만 기록 (remediation 코드 특성상 blocking하지 않음)
+              # tfsec: record warnings only (non-blocking for remediation code)
               tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfgate.txt || echo "WARN $category: tfsec found issues (non-blocking)" | tee -a /tmp/tfplan.txt
               if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfplan.txt /tmp/tfgate.txt; then
                 echo "SKIP $category: validate failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
@@ -223,6 +223,139 @@ jobs:
             infracost output --format json $cost_files --out-file /tmp/infracost-total.json
             infracost output --format table $cost_files --out-file /tmp/infracost-table.txt
           fi
+
+          # Build categorized cost summaries for richer PR comments.
+          python3 - <<'PY'
+          import glob
+          import json
+          import os
+          import re
+          from collections import defaultdict
+
+          def to_float(v):
+              try:
+                  if v is None or v == "":
+                      return 0.0
+                  if isinstance(v, str):
+                      v = v.replace(",", "").replace("$", "").strip()
+                  return float(v)
+              except Exception:
+                  return 0.0
+
+          def resource_monthly(resource):
+              if not isinstance(resource, dict):
+                  return 0.0
+              direct = to_float(resource.get("monthlyCost"))
+              if direct != 0.0:
+                  return direct
+              comps = resource.get("costComponents")
+              if isinstance(comps, list):
+                  return sum(to_float(c.get("monthlyCost")) for c in comps if isinstance(c, dict))
+              return 0.0
+
+          def extract_total(data):
+              if not isinstance(data, dict):
+                  return 0.0
+              if "totalMonthlyCost" in data:
+                  return to_float(data.get("totalMonthlyCost"))
+              projects = data.get("projects")
+              if isinstance(projects, list):
+                  total = 0.0
+                  for p in projects:
+                      if not isinstance(p, dict):
+                          continue
+                      total += to_float((p.get("breakdown") or {}).get("totalMonthlyCost"))
+                  if total > 0:
+                      return total
+                  for p in projects:
+                      if not isinstance(p, dict):
+                          continue
+                      resources = (p.get("breakdown") or {}).get("resources") or []
+                      if isinstance(resources, list):
+                          total += sum(resource_monthly(r) for r in resources)
+                  return total
+              return 0.0
+
+          def service_name(resource):
+              if not isinstance(resource, dict):
+                  return "unknown"
+              rtype = str(resource.get("resourceType") or "")
+              if rtype:
+                  m = re.match(r"aws_([^_]+)", rtype)
+                  return m.group(1) if m else rtype
+              name = str(resource.get("name") or "")
+              m = re.match(r"aws_([^_]+)", name)
+              return m.group(1) if m else "unknown"
+
+          def resource_label(resource):
+              if not isinstance(resource, dict):
+                  return "unknown"
+              return str(resource.get("name") or resource.get("resourceType") or "unknown")
+
+          def write_md(path, headers, rows):
+              with open(path, "w", encoding="utf-8") as f:
+                  f.write("| " + " | ".join(headers) + " |\n")
+                  f.write("| " + " | ".join(["---"] * len(headers)) + " |\n")
+                  for row in rows:
+                      f.write("| " + " | ".join(row) + " |\n")
+
+          category_totals = {}
+          service_totals = defaultdict(float)
+          resource_totals = defaultdict(float)
+
+          for path in sorted(glob.glob("/tmp/infracost-*.json")):
+              base = os.path.basename(path)
+              if base == "infracost-total.json":
+                  continue
+              m = re.match(r"infracost-(.+)\.json$", base)
+              if not m:
+                  continue
+              category = m.group(1)
+              try:
+                  with open(path, "r", encoding="utf-8") as f:
+                      data = json.load(f)
+              except Exception:
+                  continue
+
+              category_totals[category] = category_totals.get(category, 0.0) + extract_total(data)
+              projects = data.get("projects") if isinstance(data, dict) else []
+              if not isinstance(projects, list):
+                  continue
+              for p in projects:
+                  if not isinstance(p, dict):
+                      continue
+                  resources = (p.get("breakdown") or {}).get("resources") or []
+                  if not isinstance(resources, list):
+                      continue
+                  for r in resources:
+                      monthly = resource_monthly(r)
+                      if monthly <= 0:
+                          continue
+                      svc = service_name(r)
+                      label = resource_label(r)
+                      service_totals[svc] += monthly
+                      resource_totals[f"{svc}:{label}"] += monthly
+
+          category_rows = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
+          service_rows = sorted(service_totals.items(), key=lambda x: x[1], reverse=True)
+          resource_rows = sorted(resource_totals.items(), key=lambda x: x[1], reverse=True)[:15]
+
+          write_md(
+              "/tmp/infracost-category-summary.md",
+              ["Category", "Monthly Cost (USD)"],
+              [[k, f"${v:.2f}"] for k, v in category_rows] or [["(none)", "$0.00"]],
+          )
+          write_md(
+              "/tmp/infracost-service-summary.md",
+              ["Service", "Monthly Cost (USD)"],
+              [[k, f"${v:.2f}"] for k, v in service_rows] or [["(none)", "$0.00"]],
+          )
+          write_md(
+              "/tmp/infracost-top-resources.md",
+              ["Resource", "Monthly Cost (USD)"],
+              [[k.split(":", 1)[1], f"${v:.2f}"] for k, v in resource_rows] or [["(none)", "$0.00"]],
+          )
+          PY
           echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
 
       - name: Post Plan to PR comment
@@ -231,31 +364,63 @@ jobs:
           PLAN_OUTPUT: ${{ steps.plan.outputs.exitcode }}
         with:
           script: |
-           const fs = require('fs');
+            const fs = require('fs');
             let plan = fs.readFileSync('/tmp/tfplan.txt', 'utf8');
             if (plan.length > 50000) {
               plan = plan.substring(0, 50000) + '\n\n... (truncated)';
             }
 
-            // Infracost 비용 정보 읽기
+            // Read Infracost outputs
+            const readIfExists = (path) => fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '';
+            const toNumber = (value) => {
+              if (value === null || value === undefined) return 0;
+              const n = parseFloat(String(value).replace(/[$,]/g, '').trim());
+              return Number.isFinite(n) ? n : 0;
+            };
+            const extractMonthlyCost = (costJson) => {
+              if (!costJson || typeof costJson !== 'object') return 0;
+              if (costJson.totalMonthlyCost !== undefined) return toNumber(costJson.totalMonthlyCost);
+              if (Array.isArray(costJson.projects)) {
+                return costJson.projects.reduce((sum, p) => sum + toNumber(p?.breakdown?.totalMonthlyCost), 0);
+              }
+              return 0;
+            };
+
             let costSection = '';
             try {
-              const costTable = fs.readFileSync('/tmp/infracost-table.txt', 'utf8');
-              const costJson = JSON.parse(fs.readFileSync('/tmp/infracost-total.json', 'utf8'));
-              const monthly = costJson.totalMonthlyCost || '0';
-              const emoji = parseFloat(monthly) > 10 ? '🔴' : parseFloat(monthly) > 0 ? '🟡' : '🟢';
-              costSection = `\n### ${emoji} 예상 월 비용: $${monthly}\n\n<details>\n<summary>비용 상세 보기 (클릭)</summary>\n\n\`\`\`\n${costTable}\n\`\`\`\n\n</details>\n`;
+              const costTable = readIfExists('/tmp/infracost-table.txt');
+              const categorySummary = readIfExists('/tmp/infracost-category-summary.md');
+              const serviceSummary = readIfExists('/tmp/infracost-service-summary.md');
+              const topResources = readIfExists('/tmp/infracost-top-resources.md');
+              const totalCostJson = readIfExists('/tmp/infracost-total.json');
+              const costJson = totalCostJson ? JSON.parse(totalCostJson) : {};
+              const monthly = extractMonthlyCost(costJson);
+              const emoji = monthly > 100 ? 'HIGH' : monthly > 0 ? 'INFO' : 'OK';
+
+              costSection = `\n### ${emoji} Estimated Monthly Cost: $${monthly.toFixed(2)}\n`;
+              if (categorySummary) {
+                costSection += `\n#### By Category\n${categorySummary}\n`;
+              }
+              if (serviceSummary) {
+                costSection += `\n#### By Service\n${serviceSummary}\n`;
+              }
+              if (topResources) {
+                costSection += `\n#### Top Resources (Monthly)\n${topResources}\n`;
+              }
+              if (costTable) {
+                costSection += `\n<details>\n<summary>Infracost Raw Table (click to expand)</summary>\n\n\`\`\`\n${costTable}\n\`\`\`\n\n</details>\n`;
+              }
             } catch (e) {
-              costSection = '\n### 💰 비용 정보 없음 (Infracost 실행 실패)\n';
+              costSection = '\n### Cost details unavailable (Infracost failed)\n';
             }
 
             const exitcode = process.env.PLAN_OUTPUT;
-            const status = exitcode === '0' ? '✅ Plan Succeeded' : '❌ Plan Failed';
+            const status = exitcode === '0' ? 'Plan Succeeded' : 'Plan Failed';
 
             const body = `### Terraform Plan Result - ${status}
             ${costSection}
             <details>
-            <summary>Plan 상세 보기 (클릭)</summary>
+            <summary>Plan details (click to expand)</summary>
 
             \`\`\`
             ${plan}
@@ -263,7 +428,7 @@ jobs:
 
             </details>
 
-            > 💡 이 PR을 머지하면 위 리소스가 AWS에 자동 적용됩니다.`;
+            > Merging this PR will auto-apply these resources to AWS.`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -306,10 +471,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: remediation-cost-estimate
-          path: /tmp/infracost-*.json
+          path: |
+            /tmp/infracost-*.json
+            /tmp/infracost-*.md
+            /tmp/infracost-table.txt
 
   # -------------------------------------------------------
-  # Apply: PR 머지 후 실행 → 실제 AWS 적용
+  # Apply: run after PR merge and apply to AWS
   # -------------------------------------------------------
   apply:
     if: github.event.pull_request.merged == true
@@ -512,7 +680,7 @@ jobs:
               failed=1
               continue
             fi
-            # tfsec: 경고만 기록 (remediation 코드 특성상 blocking하지 않음)
+            # tfsec: record warnings only (non-blocking for remediation code)
             tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfapply.txt || echo "WARN $category: tfsec found issues (non-blocking)" | tee -a /tmp/tfapply.txt
             if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfapply.txt; then
               echo "SKIP $category: validate failed" | tee -a /tmp/tfapply.txt
@@ -613,3 +781,4 @@ jobs:
             /tmp/tfapply.txt
             /tmp/post_fail_count.txt
             /tmp/post_fail_by_check.json
+
