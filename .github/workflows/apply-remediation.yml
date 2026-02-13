@@ -374,12 +374,21 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/pre_scan
 
+          set +e
           prowler aws \
             --region ap-northeast-2 \
             --compliance cis_1.4_aws \
             --severity medium \
             --output-directory /tmp/pre_scan \
             --output-formats csv
+          prowler_exit=$?
+          set -e
+
+          # Prowler can return 3 when findings exist; that should not stop apply flow.
+          if [ "$prowler_exit" -ne 0 ] && [ "$prowler_exit" -ne 3 ]; then
+            echo "Unexpected prowler exit code: $prowler_exit"
+            exit "$prowler_exit"
+          fi
 
           python3 - <<'PY'
           import glob
@@ -551,12 +560,21 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/post_scan
 
+          set +e
           prowler aws \
             --region ap-northeast-2 \
             --compliance cis_1.4_aws \
             --severity medium \
             --output-directory /tmp/post_scan \
             --output-formats csv
+          prowler_exit=$?
+          set -e
+
+          # Prowler can return 3 when findings exist; that should not stop apply flow.
+          if [ "$prowler_exit" -ne 0 ] && [ "$prowler_exit" -ne 3 ]; then
+            echo "Unexpected prowler exit code: $prowler_exit"
+            exit "$prowler_exit"
+          fi
 
           python3 - <<'PY'
           import glob
