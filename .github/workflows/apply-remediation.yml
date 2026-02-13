@@ -93,9 +93,32 @@ jobs:
               work=$(mktemp -d)
               state_key="remediation/${category}.tfstate"
 
-              # Copy ALL files for this category (not just changed ones)
+              # Copy only files listed in remediation/manifest.json for this category.
+              # This prevents stale category files from being applied accidentally.
               file_count=0
-              for f in remediation/fix-${category}_*.tf; do
+              cat_files=$(CATEGORY="$category" python3 - <<'PY'
+          import json
+          import os
+
+          category = os.environ.get("CATEGORY", "").strip()
+          manifest = "remediation/manifest.json"
+          selected = []
+          if category and os.path.exists(manifest):
+              with open(manifest, "r", encoding="utf-8") as f:
+                  items = json.load(f)
+              seen = set()
+              for item in items:
+                  if str(item.get("category", "")).strip() != category:
+                      continue
+                  fname = str(item.get("file", "")).strip()
+                  if not fname or fname in seen:
+                      continue
+                  seen.add(fname)
+                  selected.append(f"remediation/{fname}")
+          print("\n".join(selected))
+          PY
+              )
+              for f in $cat_files; do
                 [ -f "$f" ] || continue
                 cp "$f" "$work/"
                 file_count=$((file_count+1))
@@ -384,9 +407,32 @@ jobs:
             work=$(mktemp -d)
             state_key="remediation/${category}.tfstate"
 
-            # Copy ALL files for this category
+            # Copy only files listed in remediation/manifest.json for this category.
+            # This prevents stale category files from being applied accidentally.
             file_count=0
-            for f in remediation/fix-${category}_*.tf; do
+            cat_files=$(CATEGORY="$category" python3 - <<'PY'
+          import json
+          import os
+
+          category = os.environ.get("CATEGORY", "").strip()
+          manifest = "remediation/manifest.json"
+          selected = []
+          if category and os.path.exists(manifest):
+              with open(manifest, "r", encoding="utf-8") as f:
+                  items = json.load(f)
+              seen = set()
+              for item in items:
+                  if str(item.get("category", "")).strip() != category:
+                      continue
+                  fname = str(item.get("file", "")).strip()
+                  if not fname or fname in seen:
+                      continue
+                  seen.add(fname)
+                  selected.append(f"remediation/{fname}")
+          print("\n".join(selected))
+          PY
+            )
+            for f in $cat_files; do
               [ -f "$f" ] || continue
               cp "$f" "$work/"
               file_count=$((file_count+1))
