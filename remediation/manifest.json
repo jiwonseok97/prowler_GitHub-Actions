@@ -13,7 +13,7 @@
     "file": "fix-iam_password_policy.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_number",
