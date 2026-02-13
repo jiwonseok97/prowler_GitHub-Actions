@@ -79,6 +79,35 @@ USE_CATEGORY_SNIPPET = os.getenv("USE_CATEGORY_SNIPPET", "true").lower() == "tru
 ALLOW_IAM_CREATE = os.getenv("ALLOW_IAM_CREATE", "false").lower() == "true"
 # 검증 실패 시 스킵 허용 여부 (기본: false → 스텁 생성)
 ALLOW_SKIP = os.getenv("ALLOW_SKIP", "false").lower() == "true"
+# 자동 리메디에이션 허용 체크 ID 목록
+# - 기본값: 실제 개선 효과가 안정적으로 검증된 체크만 보수적으로 자동 적용
+# - "*"  : 허용 목록 제한 해제(모든 체크 대상)
+# - "none": 자동 적용 비활성
+AUTO_REMEDIATE_CHECKS_RAW = os.getenv("AUTO_REMEDIATE_CHECKS", "").strip()
+DEFAULT_AUTO_REMEDIATE_CHECKS = {
+    "iam_password_policy_expires_passwords_within_90_days_or_less",
+    "iam_password_policy_minimum_length_14",
+    "iam_password_policy_lowercase",
+    "iam_password_policy_number",
+    "iam_password_policy_reuse_24",
+    "iam_password_policy_symbol",
+    "iam_password_policy_uppercase",
+}
+
+
+def _parse_auto_remediate_allowlist(raw: str):
+    if not raw:
+        return set(DEFAULT_AUTO_REMEDIATE_CHECKS)
+    lowered = raw.lower()
+    if lowered == "*":
+        return None
+    if lowered in {"none", "off", "disabled"}:
+        return set()
+    values = {x.strip() for x in raw.split(",") if x.strip()}
+    return values
+
+
+AUTO_REMEDIATE_ALLOWLIST = _parse_auto_remediate_allowlist(AUTO_REMEDIATE_CHECKS_RAW)
 
 # -----------------------------------------------------------------------------
 # IaC 스니펫 매핑 로드 (Bedrock 실패 시 fallback)
@@ -3053,6 +3082,18 @@ unique_checks = high_priority.drop_duplicates(subset=['check_id'], keep='first')
 skipped_checks = [c for c in unique_checks['check_id'] if c in SKIP_CHECKS]
 unique_checks = unique_checks[~unique_checks['check_id'].isin(SKIP_CHECKS)]
 print(f"Unique check_ids: {len(unique_checks)} (skipped {len(skipped_checks)} non-terraform checks: {skipped_checks})")
+
+# 자동 적용 허용 목록 필터
+if AUTO_REMEDIATE_ALLOWLIST is None:
+    print("Auto-remediation allowlist: * (all checks enabled)")
+else:
+    before_count = len(unique_checks)
+    unique_checks = unique_checks[unique_checks["check_id"].isin(AUTO_REMEDIATE_ALLOWLIST)]
+    skipped_by_allowlist = before_count - len(unique_checks)
+    print(
+        f"Auto-remediation allowlist enabled: {len(AUTO_REMEDIATE_ALLOWLIST)} checks "
+        f"(filtered out {skipped_by_allowlist})"
+    )
 
 # 생성 결과/통계
 generated = []
