@@ -144,7 +144,8 @@ jobs:
           pip install pandas openpyxl boto3
 
       # Normalize ??Score ??AI Assist ??Runbook ??OCSF export
-      - name: Process findings pipeline        env:
+      - name: Process findings pipeline
+        env:
           BUCKET: ${{ env.PROWLER_DASHBOARD_BUCKET }}
           PREFIX: ${{ env.PROWLER_DASHBOARD_PREFIX }}
         run: |
