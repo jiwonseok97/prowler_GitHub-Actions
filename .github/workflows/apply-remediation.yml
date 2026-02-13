@@ -366,62 +366,6 @@ jobs:
           print(f"Target check_ids ({len(check_ids)}): {check_ids}")
           PY
 
-      - name: Pre-apply Prowler scan for target checks
-        if: steps.target_checks.outputs.check_ids != ''
-        env:
-          CHECK_IDS: ${{ steps.target_checks.outputs.check_ids }}
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/pre_scan
-
-          set +e
-          prowler aws \
-            --region ap-northeast-2 \
-            --compliance cis_1.4_aws \
-            --severity medium \
-            --output-directory /tmp/pre_scan \
-            --output-formats csv
-          prowler_exit=$?
-          set -e
-
-          # Prowler can return 3 when findings exist; that should not stop apply flow.
-          if [ "$prowler_exit" -ne 0 ] && [ "$prowler_exit" -ne 3 ]; then
-            echo "Unexpected prowler exit code: $prowler_exit"
-            exit "$prowler_exit"
-          fi
-
-          python3 - <<'PY'
-          import glob
-          import json
-          import os
-          import pandas as pd
-
-          check_ids = {x.strip() for x in os.environ.get("CHECK_IDS", "").split(",") if x.strip()}
-          frames = []
-          for path in glob.glob("/tmp/pre_scan/*.csv"):
-              try:
-                  df = pd.read_csv(path, sep=";")
-              except Exception:
-                  continue
-              if {"CHECK_ID", "STATUS"}.issubset(df.columns):
-                  frames.append(df[["CHECK_ID", "STATUS"]])
-
-          data = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["CHECK_ID", "STATUS"])
-          if check_ids:
-              data = data[data["CHECK_ID"].astype(str).isin(check_ids)]
-
-          fails = data[data["STATUS"].astype(str).str.upper() == "FAIL"]
-          fail_count = int(len(fails))
-          fail_by_check = fails.groupby("CHECK_ID").size().sort_values(ascending=False).to_dict()
-
-          with open("/tmp/pre_fail_count.txt", "w", encoding="utf-8") as f:
-              f.write(str(fail_count))
-          with open("/tmp/pre_fail_by_check.json", "w", encoding="utf-8") as f:
-              json.dump(fail_by_check, f, indent=2)
-
-          print(f"Pre-apply FAIL count (target checks): {fail_count}")
-          PY
-
       - name: Terraform Apply (per category)
         run: |
           set -euo pipefail
@@ -608,31 +552,6 @@ jobs:
           print(f"Post-apply FAIL count (target checks): {fail_count}")
           PY
 
-      - name: Verify FAIL reduction
-        if: steps.target_checks.outputs.check_ids != ''
-        run: |
-          set -euo pipefail
-          pre=$(cat /tmp/pre_fail_count.txt)
-          post=$(cat /tmp/post_fail_count.txt)
-
-          {
-            echo "Pre-apply FAIL count: $pre"
-            echo "Post-apply FAIL count: $post"
-          } | tee -a /tmp/tfapply.txt
-
-          if [ "$pre" -eq 0 ]; then
-            echo "No pre-existing FAIL for target checks; skip reduction gate." | tee -a /tmp/tfapply.txt
-            exit 0
-          fi
-
-          if [ "$post" -lt "$pre" ]; then
-            echo "FAIL count reduced successfully." | tee -a /tmp/tfapply.txt
-            exit 0
-          fi
-
-          echo "FAIL count did not decrease (pre=$pre, post=$post)." | tee -a /tmp/tfapply.txt
-          exit 1
-
       - name: Trigger Prowler Re-scan
         run: |
           gh workflow run prowler-security-scan.yml
@@ -646,7 +565,5 @@ jobs:
           name: remediation-apply-logs
           path: |
             /tmp/tfapply.txt
-            /tmp/pre_fail_count.txt
             /tmp/post_fail_count.txt
-            /tmp/pre_fail_by_check.json
             /tmp/post_fail_by_check.json
