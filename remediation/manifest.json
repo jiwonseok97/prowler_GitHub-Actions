@@ -1,50 +1,154 @@
 [
   {
-    "check_id": "iam_password_policy_expires_passwords_within_90_days_or_less",
-    "check_title": "IAM account password policy enforces password expiration within 90 days or less",
-    "file": "fix-iam_password_policy.tf",
+    "check_id": "cloudwatch_changes_to_network_acls_alarm_configured",
+    "check_title": "CloudWatch log metric filter and alarm exist for Network ACL (NACL) change events",
+    "file": "fix-cloudwatch_changes_to_network_acls_alarm_configured.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "cloudwatch",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_minimum_length_14",
-    "check_title": "IAM password policy requires passwords to be at least 14 characters long",
-    "file": "fix-iam_password_policy.tf",
+    "check_id": "cloudwatch_changes_to_network_gateways_alarm_configured",
+    "check_title": "CloudWatch Logs metric filter and alarm exist for changes to network gateways",
+    "file": "fix-cloudwatch_changes_to_network_gateways_alarm_configured.tf",
     "priority": "P2",
-    "category": "iam",
-    "source": "iac_snippet"
-  },
-  {
-    "check_id": "iam_password_policy_number",
-    "check_title": "IAM password policy requires at least one number",
-    "file": "fix-iam_password_policy.tf",
-    "priority": "P2",
-    "category": "iam",
+    "category": "cloudwatch",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_reuse_24",
-    "check_title": "IAM password policy prevents reuse of the last 24 passwords",
-    "file": "fix-iam_password_policy.tf",
+    "check_id": "cloudwatch_changes_to_network_route_tables_alarm_configured",
+    "check_title": "Account monitors VPC route table changes with a CloudWatch Logs metric filter and alarm",
+    "file": "fix-cloudwatch_changes_to_network_route_tables_alarm_configured.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "cloudwatch",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_symbol",
-    "check_title": "IAM password policy requires at least one symbol",
-    "file": "fix-iam_password_policy.tf",
+    "check_id": "cloudwatch_changes_to_vpcs_alarm_configured",
+    "check_title": "AWS account has a CloudWatch Logs metric filter and alarm for VPC changes",
+    "file": "fix-cloudwatch_changes_to_vpcs_alarm_configured.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "cloudwatch",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_uppercase",
-    "check_title": "IAM password policy requires at least one uppercase letter",
-    "file": "fix-iam_password_policy.tf",
+    "check_id": "cloudwatch_cross_account_sharing_disabled",
+    "check_title": "CloudWatch does not allow cross-account sharing",
+    "file": "fix-cloudwatch_cross_account_sharing_disabled.tf",
     "priority": "P2",
-    "category": "iam",
-    "source": "iac_snippet"
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_group_kms_encryption_enabled",
+    "check_title": "CloudWatch log group is encrypted with an AWS KMS key",
+    "file": "fix-cloudwatch_log_group_kms_encryption_enabled.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_group_no_secrets_in_logs",
+    "check_title": "CloudWatch log group contains no secrets in its log events",
+    "file": "fix-cloudwatch_log_group_no_secrets_in_logs.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_group_retention_policy_specific_days_enabled",
+    "check_title": "CloudWatch log group has a retention policy of at least the configured minimum days or never expires",
+    "file": "fix-cloudwatch_log_group_retention_policy_specific_days_enabled.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_and_alarm_for_aws_config_configuration_changes_enabled",
+    "check_title": "CloudWatch Logs metric filter and alarm exist for AWS Config configuration changes",
+    "file": "fix-cloudwatch_log_metric_filter_and_alarm_for_aws_config_configuration_changes_enabled.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_and_alarm_for_cloudtrail_configuration_changes_enabled",
+    "check_title": "CloudWatch Logs metric filter and alarm exist for CloudTrail configuration changes",
+    "file": "fix-cloudwatch_log_metric_filter_and_alarm_for_cloudtrail_configuration_changes_enabled.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_authentication_failures",
+    "check_title": "Account has a CloudWatch Logs metric filter and alarm for AWS Management Console authentication failures",
+    "file": "fix-cloudwatch_log_metric_filter_authentication_failures.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_aws_organizations_changes",
+    "check_title": "CloudWatch Logs metric filter and alarm exist for AWS Organizations changes",
+    "file": "fix-cloudwatch_log_metric_filter_aws_organizations_changes.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_disable_or_scheduled_deletion_of_kms_cmk",
+    "check_title": "Account has a CloudWatch log metric filter and alarm for disabling or scheduled deletion of customer-managed KMS keys",
+    "file": "fix-cloudwatch_log_metric_filter_disable_or_scheduled_deletion_of_kms_cmk.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_for_s3_bucket_policy_changes",
+    "check_title": "CloudWatch log metric filter and alarm exist for S3 bucket policy changes",
+    "file": "fix-cloudwatch_log_metric_filter_for_s3_bucket_policy_changes.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_policy_changes",
+    "check_title": "CloudWatch Logs metric filter and alarm exist for IAM policy changes",
+    "file": "fix-cloudwatch_log_metric_filter_policy_changes.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_root_usage",
+    "check_title": "Account has a CloudWatch Logs metric filter and alarm for root account usage",
+    "file": "fix-cloudwatch_log_metric_filter_root_usage.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_security_group_changes",
+    "check_title": "CloudWatch Logs metric filter and alarm exist for security group changes",
+    "file": "fix-cloudwatch_log_metric_filter_security_group_changes.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_sign_in_without_mfa",
+    "check_title": "CloudWatch log metric filter and alarm exist for Management Console sign-in without MFA",
+    "file": "fix-cloudwatch_log_metric_filter_sign_in_without_mfa.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "cloudwatch_log_metric_filter_unauthorized_api_calls",
+    "check_title": "CloudWatch Logs metric filter and alarm exist for unauthorized API calls",
+    "file": "fix-cloudwatch_log_metric_filter_unauthorized_api_calls.tf",
+    "priority": "P2",
+    "category": "cloudwatch",
+    "source": "bedrock"
   }
 ]
