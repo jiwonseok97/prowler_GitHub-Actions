@@ -1,19 +1,11 @@
 [
   {
-    "check_id": "iam_customer_unattached_policy_no_administrative_privileges",
-    "check_title": "Unattached customer managed IAM policy does not allow '*:*' administrative privileges",
-    "file": "fix-iam_customer_unattached_policy_no_administrative_privileges.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
     "check_id": "iam_password_policy_expires_passwords_within_90_days_or_less",
     "check_title": "IAM account password policy enforces password expiration within 90 days or less",
     "file": "fix-iam_password_policy.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "iac_snippet"
+    "source": "bedrock"
   },
   {
     "check_id": "iam_password_policy_minimum_length_14",
@@ -21,7 +13,7 @@
     "file": "fix-iam_password_policy.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "iam_password_policy_number",
@@ -53,22 +45,6 @@
     "file": "fix-iam_password_policy.tf",
     "priority": "P2",
     "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_policy_no_full_access_to_cloudtrail",
-    "check_title": "Customer managed IAM policy does not allow cloudtrail:* privileges",
-    "file": "fix-iam_policy_no_full_access_to_cloudtrail.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_policy_no_full_access_to_kms",
-    "check_title": "Custom IAM policy does not allow 'kms:*' privileges",
-    "file": "fix-iam_policy_no_full_access_to_kms.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
+    "source": "iac_snippet"
   }
 ]
