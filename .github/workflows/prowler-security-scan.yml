@@ -1,4 +1,4 @@
-﻿name: ProwlerSecurityScan
+name: ProwlerSecurityScan
 
 on:
   # PR에서는 보안 점검/ 리포트 생성
@@ -52,7 +52,7 @@ jobs:
 
       # GitHub OIDC → AWS IAM Role Assume
       - name: Configure AWS credentials (OIDC assume-role)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
@@ -133,7 +133,7 @@ jobs:
       # GitHub OIDC → AWS IAM Role Assume (AI Assist용, fork PR에서는 건너뜀)
       - name: Configure AWS credentials (OIDC assume-role)
         if: github.event_name == 'push' || github.event.pull_request.head.repo.fork != true
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
@@ -226,7 +226,7 @@ jobs:
 
       # GitHub OIDC → AWS IAM Role Assume (Bedrock 호출용)
       - name: Configure AWS credentials (OIDC assume-role)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
