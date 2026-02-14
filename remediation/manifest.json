@@ -1,50 +1,34 @@
 [
   {
-    "check_id": "iam_password_policy_expires_passwords_within_90_days_or_less",
-    "check_title": "IAM account password policy enforces password expiration within 90 days or less",
-    "file": "fix-iam_password_policy.tf",
+    "check_id": "cloudtrail_bucket_requires_mfa_delete",
+    "check_title": "CloudTrail trail S3 bucket has MFA delete enabled",
+    "file": "fix-cloudtrail_bucket_requires_mfa_delete.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "cloudtrail",
+    "source": "iac_snippet"
+  },
+  {
+    "check_id": "cloudtrail_kms_encryption_enabled",
+    "check_title": "CloudTrail trail logs are encrypted at rest with a KMS key",
+    "file": "fix-cloudtrail_kms_encryption_enabled.tf",
+    "priority": "P2",
+    "category": "cloudtrail",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_minimum_length_14",
-    "check_title": "IAM password policy requires passwords to be at least 14 characters long",
-    "file": "fix-iam_password_policy.tf",
+    "check_id": "cloudtrail_log_file_validation_enabled",
+    "check_title": "CloudTrail trail has log file validation enabled",
+    "file": "fix-cloudtrail_log_file_validation_enabled.tf",
     "priority": "P2",
-    "category": "iam",
+    "category": "cloudtrail",
     "source": "bedrock"
   },
   {
-    "check_id": "iam_password_policy_number",
-    "check_title": "IAM password policy requires at least one number",
-    "file": "fix-iam_password_policy.tf",
+    "check_id": "cloudtrail_logs_s3_bucket_access_logging_enabled",
+    "check_title": "CloudTrail trail destination S3 bucket has access logging enabled",
+    "file": "fix-cloudtrail_logs_s3_bucket_access_logging_enabled.tf",
     "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_password_policy_reuse_24",
-    "check_title": "IAM password policy prevents reuse of the last 24 passwords",
-    "file": "fix-iam_password_policy.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_password_policy_symbol",
-    "check_title": "IAM password policy requires at least one symbol",
-    "file": "fix-iam_password_policy.tf",
-    "priority": "P2",
-    "category": "iam",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "iam_password_policy_uppercase",
-    "check_title": "IAM password policy requires at least one uppercase letter",
-    "file": "fix-iam_password_policy.tf",
-    "priority": "P2",
-    "category": "iam",
+    "category": "cloudtrail",
     "source": "iac_snippet"
   }
 ]
