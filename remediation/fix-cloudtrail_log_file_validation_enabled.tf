@@ -1,63 +1,39 @@
-# Enable log file validation on the existing CloudTrail trail
-resource "aws_cloudtrail" "remediation_security_cloudtail" {
-  name = "security-cloudtail"
-  s3_bucket_name                = data.aws_s3_bucket.remediation_security_cloudtrail_logs.id
-  s3_key_prefix                 = "cloudtrail-logs"
-  is_multi_region_trail         = true
-  include_global_service_events = true
-  enable_log_file_validation    = true
+variable "s3_bucket_name" {
+  description = "Existing CloudTrail log bucket name"
+  type        = string
+  default     = ""
 }
 
-# Reference the existing S3 bucket for CloudTrail logs
-data "aws_s3_bucket" "remediation_security_cloudtrail_logs" {
-  bucket = "security-cloudtrail-logs"
+locals {
+  cloudtrail_bucket_enabled = var.s3_bucket_name != ""
 }
 
-# Ensure the S3 bucket has the appropriate access policy
-resource "aws_s3_bucket_policy" "remediation_security_cloudtrail_logs_policy" {
-  bucket = data.aws_s3_bucket.remediation_security_cloudtrail_logs.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        },
-        Action = "s3:GetBucketAcl",
-        Resource = "arn:aws:s3:::security-cloudtrail-logs"
-      },
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        },
-        Action = "s3:PutObject",
-        Resource = "arn:aws:s3:::security-cloudtrail-logs/cloudtrail-logs/*",
-        Condition = {
-          StringEquals = {
-            "s3:x-amz-acl" = "bucket-owner-full-control"
-          }
-        }
-      }
-    ]
-  })
-}
-
-# Enable S3 bucket versioning to protect the CloudTrail log files
-resource "aws_s3_bucket_versioning" "remediation_security_cloudtrail_logs_versioning" {
-  bucket = data.aws_s3_bucket.remediation_security_cloudtrail_logs.id
+# Enforce versioning on the target CloudTrail log bucket.
+resource "aws_s3_bucket_versioning" "remediation_cloudtrail_logs_versioning" {
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Enable S3 bucket encryption to protect the CloudTrail log files
-resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_security_cloudtrail_logs_encryption" {
-  bucket = data.aws_s3_bucket.remediation_security_cloudtrail_logs.id
+# Enforce default encryption (SSE-S3).
+resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloudtrail_logs_encryption" {
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
   }
+}
+
+# Block public access.
+resource "aws_s3_bucket_public_access_block" "remediation_cloudtrail_logs_public_access_block" {
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
 }
