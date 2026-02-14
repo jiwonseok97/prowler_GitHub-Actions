@@ -50,9 +50,6 @@ jobs:
       # 3️⃣ 자동 빌드 단계
       # Python은 보통 별도 빌드가 없지만
       # 다른 언어(Java, C# 등)에서는 필수 단계
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
       # 4️⃣ 실제 정적 분석 실행
       # 결과는 GitHub Security → Code scanning alerts 탭으로 전송
       - name: Perform CodeQL Analysis

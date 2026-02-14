@@ -42,7 +42,7 @@ jobs:
       # 결과 저장 디렉토리 생성
       - name: Create working directories
         run: |
-          mkdir -p output reports scripts mcp/output
+          mkdir -p output mcp/output
 
       # Python 환경 구성
       - name: Setup Python 3.11
@@ -57,10 +57,10 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
-      # Prowler 및 리포트 라이브러리 설치
-      - name: Install dependencies (Prowler + report tools)
+      # Prowler 설치
+      - name: Install dependencies (Prowler)
         run: |
-          pip install prowler pandas openpyxl boto3
+          pip install prowler
 
       # CIS 1.4 기준으로 AWS 스캔 실행
       - name: Run Prowler scan (CIS 1.4 / ap-northeast-2)
@@ -71,7 +71,7 @@ jobs:
             --compliance cis_1.4_aws \
             --severity medium \
             --output-directory output \
-            --output-formats json-ocsf html csv
+            --output-formats json-ocsf csv
 
       # S3 업로드 (대시보드 연동용, 설정된 경우에만 실행)
       - name: Upload CSV to S3 for dashboard (optional)
@@ -115,7 +115,7 @@ jobs:
       # 작업 디렉토리 생성
       - name: Create working directories
         run: |
-          mkdir -p output reports scripts mcp/output
+          mkdir -p output mcp/output
 
       # scan job에서 업로드한 원본 결과 다운로드
       - name: "Download artifacts: Prowler raw output"
@@ -141,7 +141,7 @@ jobs:
       # 파이프라인 처리용 라이브러리 설치
       - name: Install dependencies (pipeline tools)
         run: |
-          pip install pandas openpyxl boto3
+          pip install pandas boto3
 
       # Normalize → Score → AI Assist → Runbook → OCSF export
       - name: Process findings pipeline
@@ -197,8 +197,6 @@ jobs:
     name: 3) Remediate (Generate IaC + Create PR)
     runs-on: ubuntu-latest
     needs: process
-    # Gate 조건: main push일 때만 실행
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       pull-requests: write
