@@ -2211,28 +2211,80 @@ def _ensure_cloudtrail_s3_bucket_policy(lines):
     """
     # CloudTrail 리소스 존재 여부 확인
     has_cloudtrail = False
-    cloudtrail_bucket_name = None
+    cloudtrail_bucket_expr = None
     for line in lines:
         if re.match(r'^\s*resource\s+"aws_cloudtrail"\s+"[^"]+"\s*\{', line):
             has_cloudtrail = True
-        m = re.match(r'^\s*s3_bucket_name\s*=\s*"([^"]+)"', line)
+        m = re.match(r'^\s*s3_bucket_name\s*=\s*(.+?)\s*$', line)
         if m and has_cloudtrail:
-            cloudtrail_bucket_name = m.group(1)
+            cloudtrail_bucket_expr = m.group(1).strip()
 
-    if not has_cloudtrail or not cloudtrail_bucket_name:
+    if not has_cloudtrail or not cloudtrail_bucket_expr:
         return lines
 
-    # 이미 bucket policy가 있으면 건너뜀
+    if cloudtrail_bucket_expr.startswith('"') and cloudtrail_bucket_expr.endswith('"'):
+        cloudtrail_bucket_name = cloudtrail_bucket_expr.strip('"')
+        bucket_arn_expr = f'"arn:aws:s3:::{cloudtrail_bucket_name}"'
+        bucket_arn_object_expr = f'"arn:aws:s3:::{cloudtrail_bucket_name}/*"'
+    else:
+        bucket_arn_expr = f'"arn:aws:s3:::${{{cloudtrail_bucket_expr}}}"'
+        bucket_arn_object_expr = f'"arn:aws:s3:::${{{cloudtrail_bucket_expr}}}/*"'
+
+    # 이미 cloudtrail.amazonaws.com 권한이 있으면 건너뜀
+    has_cloudtrail_principal = any(
+        "cloudtrail.amazonaws.com" in line for line in lines
+    )
+    if has_cloudtrail_principal:
+        return lines
+
+    # 기존 bucket policy가 있으면 Statement 배열에 CloudTrail 권한 주입
+    has_existing_policy = False
     for line in lines:
         if re.match(r'^\s*resource\s+"aws_s3_bucket_policy"\s+"[^"]+"\s*\{', line):
-            return lines
+            has_existing_policy = True
+            break
 
-    # CloudTrail용 S3 bucket policy 추가
-    bucket_arn = f"arn:aws:s3:::{cloudtrail_bucket_name}"
+    if has_existing_policy:
+        # 기존 bucket policy의 Statement = [ 뒤에 CloudTrail 문 삽입
+        CT_STMTS = [
+            '      {',
+            '        Sid       = "AWSCloudTrailAclCheck"',
+            '        Effect    = "Allow"',
+            '        Principal = { Service = "cloudtrail.amazonaws.com" }',
+            '        Action    = "s3:GetBucketAcl"',
+            f"        Resource  = {bucket_arn_expr}",
+            '      },',
+            '      {',
+            '        Sid       = "AWSCloudTrailWrite"',
+            '        Effect    = "Allow"',
+            '        Principal = { Service = "cloudtrail.amazonaws.com" }',
+            '        Action    = "s3:PutObject"',
+            f"        Resource  = {bucket_arn_object_expr}",
+            '        Condition = {',
+            '          StringEquals = {',
+            '            "s3:x-amz-acl" = "bucket-owner-full-control"',
+            '          }',
+            '        }',
+            '      },',
+        ]
+        out = []
+        in_bucket_policy = False
+        injected = False
+        for line in lines:
+            out.append(line)
+            if not injected:
+                if re.match(r'^\s*resource\s+"aws_s3_bucket_policy"\s+"[^"]+"\s*\{', line):
+                    in_bucket_policy = True
+                if in_bucket_policy and re.match(r'.*Statement\s*=\s*\[', line):
+                    out.extend(CT_STMTS)
+                    injected = True
+        return out
+
+    # bucket policy가 없으면 새로 추가
     POLICY_TEMPLATE = [
         '',
         'resource "aws_s3_bucket_policy" "remediation_cloudtrail_bucket_policy" {',
-        f'  bucket = "{cloudtrail_bucket_name}"',
+        f"  bucket = {cloudtrail_bucket_expr}",
         '  policy = jsonencode({',
         '    Version = "2012-10-17"',
         '    Statement = [',
@@ -2241,14 +2293,14 @@ def _ensure_cloudtrail_s3_bucket_policy(lines):
         '        Effect    = "Allow"',
         '        Principal = { Service = "cloudtrail.amazonaws.com" }',
         '        Action    = "s3:GetBucketAcl"',
-        f'        Resource  = "{bucket_arn}"',
+        f"        Resource  = {bucket_arn_expr}",
         '      },',
         '      {',
         '        Sid       = "AWSCloudTrailWrite"',
         '        Effect    = "Allow"',
         '        Principal = { Service = "cloudtrail.amazonaws.com" }',
         '        Action    = "s3:PutObject"',
-        f'        Resource  = "{bucket_arn}/*"',
+        f"        Resource  = {bucket_arn_object_expr}",
         '        Condition = {',
         '          StringEquals = {',
         '            "s3:x-amz-acl" = "bucket-owner-full-control"',
@@ -2313,6 +2365,75 @@ def _fix_unsupported_data_attrs(lines):
     return out
 
 
+def _normalize_cloudtrail_bucket_inputs(lines, row=None):
+    """CloudTrail 코드의 placeholder 버킷을 입력 변수화하고 실제 버킷 기본값을 주입."""
+    check_id = _safe_str((row or {}).get("check_id", ""))
+    has_cloudtrail = any("aws_cloudtrail" in line for line in lines) or check_id.startswith("cloudtrail_")
+    if not has_cloudtrail:
+        return lines
+
+    target_bucket = _extract_s3_bucket_from_row(row) or ""
+
+    placeholder_pat = re.compile(
+        r'^(my-cloudtrail-bucket|remediation-cloudtrail-bucket|security-cloudtail[^"]*|security-cloudtrail[^"]*)$'
+    )
+    out = []
+    for line in lines:
+        m = re.match(r'^(\s*)(bucket|bucket_name|s3_bucket_name|target_bucket)\s*=\s*"([^"]+)"\s*$', line)
+        if m:
+            key = m.group(2)
+            val = m.group(3)
+            if placeholder_pat.match(val):
+                out.append(f"{m.group(1)}{key} = var.s3_bucket_name")
+                continue
+
+        line = re.sub(
+            r'arn:aws:s3:::(my-cloudtrail-bucket|remediation-cloudtrail-bucket|security-cloudtail[^"/* ]*|security-cloudtrail[^"/* ]*)(/\*)?',
+            lambda mo: f'arn:aws:s3:::${{var.s3_bucket_name}}{mo.group(2) or ""}',
+            line,
+        )
+        out.append(line)
+
+    var_start = None
+    var_end = None
+    brace = 0
+    for i, line in enumerate(out):
+        if re.match(r'^\s*variable\s+"s3_bucket_name"\s*\{', line):
+            var_start = i
+            brace = _brace_delta(line)
+            j = i + 1
+            while j < len(out):
+                brace += _brace_delta(out[j])
+                if brace <= 0:
+                    var_end = j
+                    break
+                j += 1
+            break
+
+    if var_start is None:
+        out.extend([
+            "",
+            'variable "s3_bucket_name" {',
+            '  description = "Target S3 bucket name for remediation"',
+            "  type        = string",
+            f'  default     = "{target_bucket}"',
+            "}",
+            "",
+        ])
+        return out
+
+    has_default = False
+    for idx in range(var_start, (var_end or var_start) + 1):
+        if re.match(r'^\s*default\s*=', out[idx]):
+            has_default = True
+            if target_bucket and re.match(r'^\s*default\s*=\s*""\s*$', out[idx]):
+                out[idx] = f'  default     = "{target_bucket}"'
+            break
+    if target_bucket and not has_default and var_end is not None:
+        out.insert(var_end, f'  default     = "{target_bucket}"')
+    return out
+
+
 def _ensure_required_resource_attrs(lines):
     """여러 리소스 타입에서 자주 누락되는 필수 속성을 자동 삽입."""
     # 1차 패스: 기존 리소스 이름 수집 (cross-reference용)
@@ -2339,7 +2460,7 @@ def _ensure_required_resource_attrs(lines):
         },
         "aws_cloudtrail": {
             "name": '"remediation-cloudtrail"',
-            "s3_bucket_name": '"remediation-cloudtrail-bucket"',
+            "s3_bucket_name": "var.s3_bucket_name",
         },
         "aws_inspector_assessment_target": {
             "name": '"remediation-inspector-target"',
@@ -2651,7 +2772,7 @@ def _auto_declare_variables(lines):
     return out
 
 
-def sanitize_tf_code(code, extra_unconfig_attrs=None):
+def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     if not code:
         return ""
     code = _strip_code_fences(code)
@@ -2725,6 +2846,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _replace_placeholder_ids(lines)
     # placeholder 이메일/키페어 → variable 참조로 치환
     lines = _replace_placeholder_values(lines)
+    # CloudTrail placeholder 버킷 제거 + 실제 버킷 기본값 주입
+    lines = _normalize_cloudtrail_bucket_inputs(lines, row=row)
     # S3 apply 오류 방지: 기존 버킷 resource → data 변환
     lines = _convert_s3_bucket_resource_to_data(lines)
     # S3 apply 오류 방지: BucketOwnerEnforced와 충돌하는 ACL 제거
@@ -3039,6 +3162,9 @@ Requirements:
 - NEVER use "import" blocks
 - NEVER set computed/read-only attributes (arn, id, key_id, owner_id, creation_date, unique_id) in resource blocks
 - Avoid hardcoded ARNs/IDs in resource blocks; use data sources to look up existing resources when needed
+- Do NOT use placeholder names like "my-cloudtrail-bucket", "security-cloudtrail-logs", or "remediation-cloudtrail-bucket"
+- For CloudTrail/S3 findings, always use input variables (for example var.s3_bucket_name) instead of hardcoded bucket names
+- If existing resource identifiers are available in the finding, prefer those values over placeholders
 - Do NOT define data "aws_caller_identity" "current", data "aws_region" "current", or data "aws_partition" "current" — these are pre-provided by the framework. Just reference them directly (e.g., data.aws_caller_identity.current.account_id)
 - Include a single provider "aws" block for ap-northeast-2 region WITHOUT alias
 - NEVER use provider aliases (no "alias" in provider, no "provider = aws.xxx" in resources)
@@ -3141,7 +3267,7 @@ for _, row in unique_checks.iterrows():
             print(f"Fallback IaC snippet used for: {check_id}")
 
     if tf_code:
-        tf_code = sanitize_tf_code(tf_code)
+        tf_code = sanitize_tf_code(tf_code, row=row)
 
         if not tf_code:
             print(f"SKIP (generated code was empty after cleanup): {check_id}")
@@ -3154,7 +3280,7 @@ for _, row in unique_checks.iterrows():
         if not ok and source == "bedrock":
             fallback = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # 체크 ID/카테고리 스니펫 조회
             if fallback:
-                fb_code = sanitize_tf_code(fallback)
+                fb_code = sanitize_tf_code(fallback, row=row)
                 ok, fb_code, err = validate_with_autofix(fb_code, row=row)
                 if ok:
                     tf_code = fb_code
@@ -3167,7 +3293,7 @@ for _, row in unique_checks.iterrows():
                 fix_response = call_bedrock(make_fix_prompt(original_prompt, tf_code, err))
                 if not fix_response:
                     continue
-                tf_code = sanitize_tf_code(fix_response)
+                tf_code = sanitize_tf_code(fix_response, row=row)
                 ok, tf_code, err = validate_with_autofix(tf_code, row=row)
                 if ok:
                     print(f"  validate OK (attempt {attempt})")
