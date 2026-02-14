@@ -461,14 +461,14 @@ jobs:
 
       - name: Upload quality gate logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: remediation-quality-gates
           path: /tmp/tfgate.txt
       
       - name: Upload cost estimate
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: remediation-cost-estimate
           path: |
@@ -774,7 +774,7 @@ jobs:
 
       - name: Upload apply logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: remediation-apply-logs
           path: |

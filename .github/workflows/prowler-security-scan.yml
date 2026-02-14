@@ -1,4 +1,4 @@
-﻿name: ProwlerSecurityScan
+name: ProwlerSecurityScan
 
 on:
   # PR에서는 보안 점검/ 리포트 생성
@@ -88,7 +88,7 @@ jobs:
       # 원본 결과 아티팩트 업로드 (다음 job에서 사용)
       - name: "Upload artifacts: Prowler raw output"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: prowler-output
           path: output/
@@ -183,7 +183,7 @@ jobs:
       # 가공된 결과 업로드
       - name: "Upload artifacts: MCP processed output"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mcp-output
           path: mcp/output/
