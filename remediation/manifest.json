@@ -1,34 +1,138 @@
 [
   {
-    "check_id": "cloudtrail_bucket_requires_mfa_delete",
-    "check_title": "CloudTrail trail S3 bucket has MFA delete enabled",
-    "file": "fix-cloudtrail_bucket_requires_mfa_delete.tf",
+    "check_id": "ec2_ebs_volume_protected_by_backup_plan",
+    "check_title": "EBS volume is protected by a backup plan",
+    "file": "fix-ec2_ebs_volume_protected_by_backup_plan.tf",
     "priority": "P2",
-    "category": "cloudtrail",
-    "source": "iac_snippet"
+    "category": "network-ec2-vpc",
+    "source": "fallback_stub"
   },
   {
-    "check_id": "cloudtrail_kms_encryption_enabled",
-    "check_title": "CloudTrail trail logs are encrypted at rest with a KMS key",
-    "file": "fix-cloudtrail_kms_encryption_enabled.tf",
+    "check_id": "ec2_instance_managed_by_ssm",
+    "check_title": "EC2 instance is managed by AWS Systems Manager or not running",
+    "file": "fix-ec2_instance_managed_by_ssm.tf",
     "priority": "P2",
-    "category": "cloudtrail",
+    "category": "network-ec2-vpc",
     "source": "bedrock"
   },
   {
-    "check_id": "cloudtrail_log_file_validation_enabled",
-    "check_title": "CloudTrail trail has log file validation enabled",
-    "file": "fix-cloudtrail_log_file_validation_enabled.tf",
+    "check_id": "ec2_instance_older_than_specific_days",
+    "check_title": "EC2 instance is not older than the configured maximum age or is not running",
+    "file": "fix-ec2_instance_older_than_specific_days.tf",
     "priority": "P2",
-    "category": "cloudtrail",
+    "category": "network-ec2-vpc",
     "source": "bedrock"
   },
   {
-    "check_id": "cloudtrail_logs_s3_bucket_access_logging_enabled",
-    "check_title": "CloudTrail trail destination S3 bucket has access logging enabled",
-    "file": "fix-cloudtrail_logs_s3_bucket_access_logging_enabled.tf",
+    "check_id": "ec2_instance_paravirtual_type",
+    "check_title": "EC2 instance virtualization type is HVM",
+    "file": "fix-ec2_instance_paravirtual_type.tf",
     "priority": "P2",
-    "category": "cloudtrail",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "ec2_instance_profile_attached",
+    "check_title": "EC2 instance is associated with an IAM instance profile role",
+    "file": "fix-ec2_instance_profile_attached.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "fallback_stub"
+  },
+  {
+    "check_id": "ec2_instance_public_ip",
+    "check_title": "EC2 instance does not have a public IP address",
+    "file": "fix-ec2_instance_public_ip.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "ec2_instance_with_outdated_ami",
+    "check_title": "EC2 instance uses a non-deprecated Amazon AMI",
+    "file": "fix-ec2_instance_with_outdated_ami.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "ec2_networkacl_allow_ingress_tcp_port_22",
+    "check_title": "Network ACL does not allow ingress from the Internet to TCP port 22 (SSH)",
+    "file": "fix-ec2_networkacl_allow_ingress_tcp_port_22.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "ec2_networkacl_allow_ingress_tcp_port_3389",
+    "check_title": "Network ACL does not allow ingress from the Internet to TCP port 3389 (RDP)",
+    "file": "fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "ec2_securitygroup_from_launch_wizard",
+    "check_title": "Security group not created using the EC2 Launch Wizard",
+    "file": "fix-ec2_securitygroup_from_launch_wizard.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "ec2_securitygroup_with_many_ingress_egress_rules",
+    "check_title": "Security group has 50 or fewer inbound rules and 50 or fewer outbound rules",
+    "file": "fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "networkfirewall_in_all_vpc",
+    "check_title": "VPC has Network Firewall enabled",
+    "file": "fix-networkfirewall_in_all_vpc.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
     "source": "iac_snippet"
+  },
+  {
+    "check_id": "vpc_different_regions",
+    "check_title": "VPCs are present in more than one region",
+    "file": "fix-vpc_different_regions.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "vpc_endpoint_for_ec2_enabled",
+    "check_title": "VPC has an Amazon EC2 VPC endpoint",
+    "file": "fix-vpc_endpoint_for_ec2_enabled.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "vpc_flow_logs_enabled",
+    "check_title": "VPC flow logs are enabled",
+    "file": "fix-vpc_flow_logs_enabled.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "vpc_subnet_different_az",
+    "check_title": "VPC has subnets in more than one Availability Zone",
+    "file": "fix-vpc_subnet_different_az.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "vpc_subnet_separate_private_public",
+    "check_title": "VPC has both public and private subnets",
+    "file": "fix-vpc_subnet_separate_private_public.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock"
   }
 ]
