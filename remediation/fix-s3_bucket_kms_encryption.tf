@@ -1,6 +1,11 @@
-# Enable default SSE-KMS encryption on the S3 bucket
-resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
+# Retrieve the existing S3 bucket
+data "aws_s3_bucket" "remediation_bucket" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+}
+
+# Enable default SSE-KMS encryption on the S3 bucket
+resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_bucket_encryption" {
+  bucket = data.aws_s3_bucket.remediation_bucket.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -9,39 +14,34 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
   }
 }
 
-# Attach a bucket policy to enforce KMS encryption
+# Retrieve the existing KMS key used for encryption
 data "aws_kms_key" "remediation_kms_key" {
   key_id = "alias/aws/s3"
 }
 
-resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Deny",
-        Principal = "*",
-        Action = "s3:PutObject",
-        Resource = "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*",
-        Condition = {
-          "StringNotEquals" = {
-            "s3:x-amz-server-side-encryption" = "aws:kms"
-          },
-          "Null" = {
-            "s3:x-amz-server-side-encryption" = "false"
-          }
-        }
-      }
+# Enforce KMS encryption via bucket policy
+data "aws_iam_policy_document" "remediation_bucket_policy" {
+  statement {
+    effect = "Deny"
+    actions = [
+      "s3:PutObject"
     ]
-  })
+    resources = [
+      "${data.aws_s3_bucket.remediation_bucket.arn}/*"
+    ]
+    condition {
+      test     = "StringNotEquals"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["aws:kms"]
+    }
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+  }
 }
 
-# Enable CloudTrail logging to the S3 bucket
-resource "aws_cloudtrail" "remediation_cloudtrail" {
-  name = "remediation-cloudtrail"
-  s3_bucket_name                = "aws-cloudtrail-logs-132410971304-0971c04b"
-  s3_key_prefix                 = "cloudtrail"
-  is_multi_region_trail         = true
-  include_global_service_events = true
+resource "aws_s3_bucket_policy" "remediation_bucket_policy" {
+  bucket = data.aws_s3_bucket.remediation_bucket.id
+  policy = data.aws_iam_policy_document.remediation_bucket_policy.json
 }

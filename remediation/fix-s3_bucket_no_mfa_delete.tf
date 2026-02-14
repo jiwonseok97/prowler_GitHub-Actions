@@ -7,18 +7,32 @@ resource "aws_s3_bucket_versioning" "remediation_s3_bucket_versioning" {
   }
 }
 
-# Apply least privilege to restrict version purge actions
-resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
-  rule {
-    object_ownership = "BucketOwnerPreferred"
+# Add a bucket policy to restrict version purge actions
+data "aws_iam_policy_document" "remediation_s3_bucket_policy" {
+  statement {
+    effect = "Deny"
+    actions = [
+      "s3:DeleteObjectVersion",
+      "s3:PutBucketVersioning",
+      "s3:PutBucketVersioning"
+    ]
+    resources = [
+      "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b",
+      "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*"
+    ]
+    principals {
+      type = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:MultiFactorAuthPresent"
+      values   = ["false"]
+    }
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access_block" {
+resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
-  block_public_acls       = true
-  block_public_policy    = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  policy = data.aws_iam_policy_document.remediation_s3_bucket_policy.json
 }
