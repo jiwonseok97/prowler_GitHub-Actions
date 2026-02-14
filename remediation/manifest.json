@@ -1,34 +1,10 @@
 [
   {
-    "check_id": "cloudtrail_bucket_requires_mfa_delete",
-    "check_title": "CloudTrail trail S3 bucket has MFA delete enabled",
-    "file": "fix-cloudtrail_bucket_requires_mfa_delete.tf",
+    "check_id": "kms_cmk_not_multi_region",
+    "check_title": "AWS KMS customer managed key is single-Region",
+    "file": "fix-kms_cmk_not_multi_region.tf",
     "priority": "P2",
-    "category": "cloudtrail",
-    "source": "iac_snippet"
-  },
-  {
-    "check_id": "cloudtrail_kms_encryption_enabled",
-    "check_title": "CloudTrail trail logs are encrypted at rest with a KMS key",
-    "file": "fix-cloudtrail_kms_encryption_enabled.tf",
-    "priority": "P2",
-    "category": "cloudtrail",
+    "category": "kms",
     "source": "bedrock"
-  },
-  {
-    "check_id": "cloudtrail_log_file_validation_enabled",
-    "check_title": "CloudTrail trail has log file validation enabled",
-    "file": "fix-cloudtrail_log_file_validation_enabled.tf",
-    "priority": "P2",
-    "category": "cloudtrail",
-    "source": "bedrock"
-  },
-  {
-    "check_id": "cloudtrail_logs_s3_bucket_access_logging_enabled",
-    "check_title": "CloudTrail trail destination S3 bucket has access logging enabled",
-    "file": "fix-cloudtrail_logs_s3_bucket_access_logging_enabled.tf",
-    "priority": "P2",
-    "category": "cloudtrail",
-    "source": "iac_snippet"
   }
 ]
