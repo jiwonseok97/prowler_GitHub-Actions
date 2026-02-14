@@ -2367,7 +2367,8 @@ def _fix_unsupported_data_attrs(lines):
 
 def _normalize_cloudtrail_bucket_inputs(lines, row=None):
     """CloudTrail 코드의 placeholder 버킷을 입력 변수화하고 실제 버킷 기본값을 주입."""
-    check_id = _safe_str((row or {}).get("check_id", ""))
+    row_obj = row if row is not None else {}
+    check_id = _safe_str(row_obj.get("check_id", ""))
     has_cloudtrail = any("aws_cloudtrail" in line for line in lines) or check_id.startswith("cloudtrail_")
     if not has_cloudtrail:
         return lines
