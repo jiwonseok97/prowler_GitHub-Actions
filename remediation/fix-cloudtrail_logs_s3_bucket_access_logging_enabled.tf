@@ -1,29 +1,32 @@
-# CloudTrail remediation for log bucket baseline
-# Target log bucket: aws-cloudtrail-logs-132410971304-0971c04b
-
-# Enforce versioning on the CloudTrail log bucket
-resource "aws_s3_bucket_versioning" "remediation_cloudtrail_logs_versioning" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
-  versioning_configuration {
-    status = "Enabled"
-  }
+# Enable S3 server access logging on the CloudTrail logs bucket
+data "aws_s3_bucket" "remediation_cloudtrail_logs_bucket" {
+  bucket = "remediation-cloudtrail-logs-bucket"
 }
 
-# Enforce default encryption (SSE-S3)
-resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloudtrail_logs_encryption" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
+# Create a separate, tightly controlled bucket for storing the S3 access logs
+data "aws_s3_bucket" "remediation_cloudtrail_logs_bucket_access_logs" {
+  bucket = "remediation-cloudtrail-logs-bucket-access-logs"
 }
 
-# Block public access
-resource "aws_s3_bucket_public_access_block" "remediation_cloudtrail_logs_public_access_block" {
-  bucket                  = "aws-cloudtrail-logs-132410971304-0971c04b"
-  block_public_acls       = true
-  ignore_public_acls      = true
-  block_public_policy     = true
-  restrict_public_buckets = true
+# Enable S3 server access logging on the CloudTrail logs bucket
+resource "aws_s3_bucket_logging" "remediation_cloudtrail_logs_bucket_logging" {
+  bucket = var.s3_bucket_name
+  target_bucket = data.aws_s3_bucket.remediation_cloudtrail_logs_bucket_access_logs.id
+  target_prefix = "cloudtrail-logs-bucket-access-logs/"
+}
+
+# Update the existing CloudTrail trail to use the new CloudTrail logs bucket
+resource "aws_cloudtrail" "remediation_security_cloudtail" {
+  name = "security-cloudtail"
+  s3_bucket_name                = data.aws_s3_bucket.remediation_cloudtrail_logs_bucket.id
+  s3_key_prefix                 = "cloudtrail-logs"
+  is_multi_region_trail         = true
+  include_global_service_events = true
+  enable_log_file_validation    = true
+}
+
+variable "s3_bucket_name" {
+  description = "Target S3 bucket name"
+  type        = string
+  default     = ""
 }
