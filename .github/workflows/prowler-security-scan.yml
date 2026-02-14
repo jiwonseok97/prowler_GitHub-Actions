@@ -245,14 +245,7 @@ jobs:
         env:
           PREFER_IAC_SNIPPET: "false"
           ALLOW_IAM_CREATE: "false"
-          AUTO_REMEDIATE_CHECKS: >-
-            iam_password_policy_expires_passwords_within_90_days_or_less,
-            iam_password_policy_minimum_length_14,
-            iam_password_policy_lowercase,
-            iam_password_policy_number,
-            iam_password_policy_reuse_24,
-            iam_password_policy_symbol,
-            iam_password_policy_uppercase
+          AUTO_REMEDIATE_CHECKS: "*"
           BEDROCK_MODEL_ID: ${{ env.BEDROCK_MODEL_ID }}
           BEDROCK_REGION: ap-northeast-2
           AWS_REGION: ap-northeast-2
