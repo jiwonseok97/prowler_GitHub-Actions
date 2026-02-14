@@ -1,9 +1,9 @@
-# Modify the existing S3 bucket to disable ACLs and enforce bucket owner access control
+# Modify the existing S3 bucket to disable ACLs and manage access with IAM and bucket policies
 data "aws_s3_bucket" "remediation_aws_cloudtrail_logs" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 }
 
-# Create a new S3 bucket policy to manage access using IAM and bucket policies
+# Create a new S3 bucket policy to manage access
 resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs_policy" {
   bucket = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.id
   policy = jsonencode({
@@ -22,8 +22,8 @@ resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs_policy" {
           "s3:PutBucketPolicy"
         ],
         Resource = [
-          "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b",
-          "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*"
+          data.aws_s3_bucket.remediation_aws_cloudtrail_logs.arn,
+          "${data.aws_s3_bucket.remediation_aws_cloudtrail_logs.arn}/*"
         ]
       }
     ]
