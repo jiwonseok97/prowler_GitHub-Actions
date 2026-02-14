@@ -38,7 +38,7 @@ jobs:
     steps:
       # 1️⃣ 레포지토리 코드 체크아웃
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # 2️⃣ CodeQL 초기화
       # 분석 대상 언어에 맞는 CodeQL 데이터베이스 준비
