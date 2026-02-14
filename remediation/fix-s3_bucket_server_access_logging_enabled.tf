@@ -1,21 +1,27 @@
 # Enable server access logging for the S3 bucket
-data "aws_s3_bucket" "remediation_aws_cloudtrail_logs_bucket" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+resource "aws_s3_bucket" "remediation_cloudtrail_logs" {
+  bucket = var.s3_bucket_name
+
+
+  logging {
+    target_bucket = aws_s3_bucket.remediation_cloudtrail_logs_logging.id
+    target_prefix = "s3-access-logs/"
+  }
 }
 
-# Create a dedicated log bucket with least privilege, retention, and monitoring
-data "aws_s3_bucket" "remediation_log_bucket" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b-logs"
+# Create a dedicated S3 bucket for storing the access logs
+resource "aws_s3_bucket" "remediation_cloudtrail_logs_logging" {
+  bucket = "remediation-cloudtrail-logs-${data.aws_caller_identity.current.account_id}"
+
 }
 
-# Enable CloudTrail data events for object-level visibility
+# Enable CloudTrail data events for the S3 bucket
 resource "aws_cloudtrail" "remediation_cloudtrail" {
-  name = "remediation-cloudtrail"
-  s3_bucket_name                = data.aws_s3_bucket.remediation_log_bucket.id
-  s3_key_prefix                 = "cloudtrail-logs"
+  name = "remediation-cloudtrail-data.aws_caller_identity.current.account_id"
+  s3_bucket_name                = aws_s3_bucket.remediation_cloudtrail_logs.id
+  s3_key_prefix                 = "cloudtrail"
   is_multi_region_trail         = true
   include_global_service_events = true
-  enable_log_file_validation    = true
 
   event_selector {
     read_write_type           = "All"
@@ -23,30 +29,41 @@ resource "aws_cloudtrail" "remediation_cloudtrail" {
 
     data_resource {
       type   = "AWS::S3::Object"
-      values = ["arn:aws:s3:::"]
+      values = ["arn:aws:s3:::${var.s3_bucket_name}/*"]
     }
   }
 }
 
-# Centralize and protect the logs from tampering
-resource "aws_kms_key" "remediation_log_bucket_key" {
-  description             = "KMS key for log bucket encryption"
-  deletion_window_in_days = 30
+variable "s3_bucket_name" {
+  description = "Name of the S3 bucket to enable server access logging and CloudTrail data events"
+  type        = string
+  default     = "aws-cloudtrail-logs-132410971304-0971c04b"
 }
 
-resource "aws_s3_bucket_ownership_controls" "remediation_log_bucket_ownership" {
-  bucket = data.aws_s3_bucket.remediation_log_bucket.id
-
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "remediation_log_bucket_public_access" {
-  bucket = data.aws_s3_bucket.remediation_log_bucket.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+resource "aws_s3_bucket_policy" "remediation_cloudtrail_bucket_policy" {
+  bucket = aws_s3_bucket.remediation_cloudtrail_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AWSCloudTrailAclCheck"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action    = "s3:GetBucketAcl"
+        Resource  = "arn:aws:s3:::${aws_s3_bucket.remediation_cloudtrail_logs.id}"
+      },
+      {
+        Sid       = "AWSCloudTrailWrite"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "arn:aws:s3:::${aws_s3_bucket.remediation_cloudtrail_logs.id}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
+      }
+    ]
+  })
 }

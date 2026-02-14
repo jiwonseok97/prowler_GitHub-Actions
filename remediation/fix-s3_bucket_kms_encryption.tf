@@ -1,6 +1,6 @@
-# Enable default SSE-KMS encryption on the S3 bucket
+# Enable default SSE-KMS encryption for the S3 bucket
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+  bucket = var.s3_bucket_name
 
   rule {
     apply_server_side_encryption_by_default {
@@ -9,13 +9,13 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
   }
 }
 
-# Attach a bucket policy to enforce KMS encryption
-data "aws_kms_key" "remediation_kms_key" {
+# Enforce KMS encryption via bucket policy
+data "aws_kms_key" "remediation_s3_bucket_kms_key" {
   key_id = "alias/aws/s3"
 }
 
 resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+  bucket = var.s3_bucket_name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -23,13 +23,10 @@ resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
         Effect = "Deny",
         Principal = "*",
         Action = "s3:PutObject",
-        Resource = "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*",
+        Resource = "arn:aws:s3:::${var.s3_bucket_name}/*",
         Condition = {
-          "StringNotEquals" = {
+          StringNotEquals = {
             "s3:x-amz-server-side-encryption" = "aws:kms"
-          },
-          "Null" = {
-            "s3:x-amz-server-side-encryption" = "false"
           }
         }
       }
@@ -37,11 +34,8 @@ resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
   })
 }
 
-# Enable CloudTrail logging to the S3 bucket
-resource "aws_cloudtrail" "remediation_cloudtrail" {
-  name = "remediation-cloudtrail"
-  s3_bucket_name                = "aws-cloudtrail-logs-132410971304-0971c04b"
-  s3_key_prefix                 = "cloudtrail"
-  is_multi_region_trail         = true
-  include_global_service_events = true
+
+variable "s3_bucket_name" {
+  description = "Name of the S3 bucket"
+  type        = string
 }

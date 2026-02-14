@@ -1,34 +1,58 @@
 [
   {
-    "check_id": "cloudtrail_bucket_requires_mfa_delete",
-    "check_title": "CloudTrail trail S3 bucket has MFA delete enabled",
-    "file": "fix-cloudtrail_bucket_requires_mfa_delete.tf",
+    "check_id": "s3_bucket_acl_prohibited",
+    "check_title": "S3 bucket has bucket ACLs disabled",
+    "file": "fix-s3_bucket_acl_prohibited.tf",
     "priority": "P2",
-    "category": "cloudtrail",
-    "source": "iac_snippet"
-  },
-  {
-    "check_id": "cloudtrail_kms_encryption_enabled",
-    "check_title": "CloudTrail trail logs are encrypted at rest with a KMS key",
-    "file": "fix-cloudtrail_kms_encryption_enabled.tf",
-    "priority": "P2",
-    "category": "cloudtrail",
+    "category": "s3",
     "source": "bedrock"
   },
   {
-    "check_id": "cloudtrail_log_file_validation_enabled",
-    "check_title": "CloudTrail trail has log file validation enabled",
-    "file": "fix-cloudtrail_log_file_validation_enabled.tf",
+    "check_id": "s3_bucket_default_encryption",
+    "check_title": "S3 bucket has default server-side encryption (SSE) enabled",
+    "file": "fix-s3_bucket_default_encryption.tf",
     "priority": "P2",
-    "category": "cloudtrail",
+    "category": "s3",
     "source": "bedrock"
   },
   {
-    "check_id": "cloudtrail_logs_s3_bucket_access_logging_enabled",
-    "check_title": "CloudTrail trail destination S3 bucket has access logging enabled",
-    "file": "fix-cloudtrail_logs_s3_bucket_access_logging_enabled.tf",
+    "check_id": "s3_bucket_kms_encryption",
+    "check_title": "S3 bucket has server-side encryption with AWS KMS",
+    "file": "fix-s3_bucket_kms_encryption.tf",
     "priority": "P2",
-    "category": "cloudtrail",
-    "source": "iac_snippet"
+    "category": "s3",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "s3_bucket_no_mfa_delete",
+    "check_title": "S3 bucket has MFA Delete enabled",
+    "file": "fix-s3_bucket_no_mfa_delete.tf",
+    "priority": "P2",
+    "category": "s3",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "s3_bucket_object_versioning",
+    "check_title": "S3 bucket has object versioning enabled",
+    "file": "fix-s3_bucket_object_versioning.tf",
+    "priority": "P2",
+    "category": "s3",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "s3_bucket_secure_transport_policy",
+    "check_title": "S3 bucket policy denies requests over insecure transport",
+    "file": "fix-s3_bucket_secure_transport_policy.tf",
+    "priority": "P2",
+    "category": "s3",
+    "source": "bedrock"
+  },
+  {
+    "check_id": "s3_bucket_server_access_logging_enabled",
+    "check_title": "S3 bucket has server access logging enabled",
+    "file": "fix-s3_bucket_server_access_logging_enabled.tf",
+    "priority": "P2",
+    "category": "s3",
+    "source": "bedrock"
   }
 ]
