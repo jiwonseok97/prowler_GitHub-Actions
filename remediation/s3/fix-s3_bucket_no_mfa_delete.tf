@@ -8,13 +8,42 @@ resource "aws_s3_bucket_versioning" "remediation_s3_bucket_versioning" {
 }
 
 # Restrict version purge actions on the S3 bucket
-resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
-  bucket = var.s3_bucket_name
-  rule {
-    object_ownership = "BucketOwnerPreferred"
+data "aws_iam_policy_document" "remediation_s3_bucket_policy" {
+  statement {
+    effect = "Deny"
+    actions = [
+      "s3:DeleteObjectVersion",
+      "s3:PutObjectVersionAcl",
+      "s3:GetObjectVersionAcl",
+      "s3:GetObjectVersionTagging",
+      "s3:PutObjectVersionTagging",
+      "s3:DeleteObjectVersionTagging"
+    ]
+    resources = [
+      "${var.s3_bucket_arn}/*"
+    ]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
   }
 }
 
+resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
+  bucket = var.s3_bucket_name
+  policy = data.aws_iam_policy_document.remediation_s3_bucket_policy.json
+}
+
+variable "s3_bucket_arn" {
+  description = "s3_bucket_arn"
+  type        = string
+  default     = ""
+}
 
 variable "s3_bucket_name" {
   description = "Target S3 bucket name"
