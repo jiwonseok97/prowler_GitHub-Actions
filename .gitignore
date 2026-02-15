@@ -7,3 +7,9 @@ iac/terraform/bootstrap/.terraform/
 iac/terraform/bootstrap/.terraform.lock.hcl
 iac/terraform/bootstrap/*.tfstate
 iac/terraform/bootstrap/*.tfstate.backup
+
+# Local installs / artifacts
+aws/
+awscliv2.zip
+output/
+.venv/
