@@ -70,17 +70,5 @@
     "validation_status": "ok",
     "error_message": "",
     "sanitizers_applied": []
-  },
-  {
-    "check_id": "s3_bucket_server_access_logging_enabled",
-    "check_title": "S3 bucket has server access logging enabled",
-    "output_path": "s3/fix-s3_bucket_server_access_logging_enabled.tf",
-    "file": "s3/fix-s3_bucket_server_access_logging_enabled.tf",
-    "priority": "P2",
-    "category": "s3",
-    "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
   }
 ]
