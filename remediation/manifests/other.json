@@ -1,0 +1,14 @@
+[
+  {
+    "check_id": "fms_policy_compliant",
+    "check_title": "All AWS FMS policies in the admin account are compliant for all accounts",
+    "output_path": "other/fix-fms_policy_compliant.tf",
+    "file": "other/fix-fms_policy_compliant.tf",
+    "priority": "P2",
+    "category": "other",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  }
+]
