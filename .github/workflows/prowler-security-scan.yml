@@ -8,6 +8,22 @@ on:
     branches: ["main"]
   # 수동 재실행(Apply 이후 재스캔 트리거용)
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Remediation generation mode"
+        type: choice
+        options:
+          - stable-only
+          - all-checks
+        default: stable-only
+      remediation_only:
+        description: "Skip scan/process and run remediation from existing artifact/workspace"
+        type: boolean
+        default: false
+      approve_apply:
+        description: "Reserved gate for apply workflows (this workflow does not auto-apply)"
+        type: boolean
+        default: false
 
 # 기본은 최소 권한 (읽기 전용)
 permissions:
@@ -25,7 +41,7 @@ jobs:
   # ================================
   scan:
     name: 1) Scan (Prowler CIS 1.4)
-    if: github.event_name == 'push' || github.actor != 'dependabot[bot]'
+    if: (github.event_name == 'push' || github.actor != 'dependabot[bot]') && !(github.event_name == 'workflow_dispatch' && github.event.inputs.remediation_only == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -102,7 +118,7 @@ jobs:
     name: 2) Process (Normalize/Score/AI/Runbook/OCSF)
     runs-on: ubuntu-latest
     needs: scan
-    if: needs.scan.result == 'success'
+    if: needs.scan.result == 'success' && !(github.event_name == 'workflow_dispatch' && github.event.inputs.remediation_only == 'true')
     permissions:
       contents: read
       id-token: write   # Bedrock 호출 시 OIDC assume-role 가능하도록
@@ -197,6 +213,7 @@ jobs:
     name: 3) Remediate (Generate IaC + Create PR)
     runs-on: ubuntu-latest
     needs: process
+    if: always() && ((github.event_name == 'workflow_dispatch' && github.event.inputs.remediation_only == 'true') || needs.process.result == 'success')
     permissions:
       contents: write
       pull-requests: write
@@ -211,6 +228,16 @@ jobs:
 
       # MCP 가공 결과 다운로드
       - name: "Download artifacts: MCP processed output"
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.remediation_only != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: mcp-output
+          path: mcp/output
+
+      # remediation_only 모드에서는 현재 run artifact 다운로드를 우선 시도
+      - name: "Download artifacts: MCP processed output (remediation-only current run)"
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.remediation_only == 'true'
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: mcp-output
@@ -243,25 +270,58 @@ jobs:
       # AI 기반 Terraform remediation 코드 생성
       - name: Generate Terraform remediation
         env:
-          PREFER_IAC_SNIPPET: "false"
+          PREFER_IAC_SNIPPET: "true"
           ALLOW_IAM_CREATE: "false"
-          AUTO_REMEDIATE_CHECKS: "*"
+          MODE_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode || 'stable-only' }}
           BEDROCK_MODEL_ID: ${{ env.BEDROCK_MODEL_ID }}
           BEDROCK_REGION: ap-northeast-2
           AWS_REGION: ap-northeast-2
           AWS_DEFAULT_REGION: ap-northeast-2
+          REMEDIATION_ONLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.remediation_only == 'true' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          MODE="${MODE_INPUT:-stable-only}"
+          if [ -z "$MODE" ]; then MODE="stable-only"; fi
+          STABLE_ALLOWLIST="iam_password_policy_expires_passwords_within_90_days_or_less,iam_password_policy_minimum_length_14,iam_password_policy_number,iam_password_policy_reuse_24,iam_password_policy_symbol,iam_password_policy_uppercase"
+          if [ "$MODE" = "all-checks" ]; then
+            export AUTO_REMEDIATE_CHECKS="*"
+          else
+            export AUTO_REMEDIATE_CHECKS="$STABLE_ALLOWLIST"
+          fi
+          export REMEDIATION_MODE="$MODE"
+
+          echo "Mode: $MODE"
+          echo "AUTO_REMEDIATE_CHECKS=$AUTO_REMEDIATE_CHECKS"
+          echo "approve_apply input is ignored in this workflow (no auto-apply)."
+
           mkdir -p remediation
           # 이번 실행에서 생성된 파일만 유지 (이전 결과 정리)
           find remediation -type f ! -name '.gitkeep' -delete
+
+          # remediation_only: 이전 성공 run의 mcp-output artifact를 우선 시도
+          if [ "${REMEDIATION_ONLY}" = "true" ] && [ ! -f mcp/output/findings-scored-ai.csv ] && [ ! -f mcp/output/findings-scored.csv ]; then
+            RUN_ID=$(gh run list --workflow "${{ github.workflow }}" -L 20 --json databaseId,status,conclusion --jq '.[] | select(.status=="completed" and .conclusion=="success") | .databaseId' | head -n1 || true)
+            if [ -n "${RUN_ID:-}" ]; then
+              mkdir -p /tmp/mcp-output && rm -rf /tmp/mcp-output/*
+              gh run download "$RUN_ID" -n mcp-output -D /tmp/mcp-output || true
+              if [ -d /tmp/mcp-output/mcp-output ]; then
+                cp -f /tmp/mcp-output/mcp-output/* mcp/output/ 2>/dev/null || true
+              fi
+            fi
+          fi
 
           if [ -f mcp/output/findings-scored-ai.csv ]; then
             python mcp/pipeline/generate_remediation.py \
               --input mcp/output/findings-scored-ai.csv \
               --output-dir remediation/
+          elif [ -f mcp/output/findings-scored.csv ]; then
+            python mcp/pipeline/generate_remediation.py \
+              --input mcp/output/findings-scored.csv \
+              --output-dir remediation/
           else
-            echo "No scored findings found. Skipping remediation."
-            exit 0
+            echo "No scored findings found (checked mcp/output/findings-scored-ai.csv and mcp/output/findings-scored.csv)."
+            exit 1
           fi
 
       # 생성된 .tf 파일이 있을 경우 카테고리별 PR 생성
@@ -304,12 +364,22 @@ jobs:
 
             # 해당 카테고리 파일명 목록 추출 (basename만)
             CAT_FILES=$(python3 -c "
-          import json
+          import json, os
           with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
+          selected = []
           for item in items:
-              if item['category'] == '$CATEGORY':
-                  print(item['file'])
+              if item.get('category') != '$CATEGORY':
+                  continue
+              if item.get('validation_status') == 'excluded':
+                  continue
+              p = str(item.get('file') or item.get('output_path') or '').strip()
+              if not p:
+                  continue
+              if os.path.exists(os.path.join('$TMPGEN', p)):
+                  selected.append(p)
+          for p in selected:
+              print(p)
           ")
 
             if [ -z "$CAT_FILES" ]; then
@@ -335,7 +405,7 @@ jobs:
           import json
           with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
-          filtered = [i for i in items if i['category'] == '$CATEGORY']
+          filtered = [i for i in items if i.get('category') == '$CATEGORY']
           with open('remediation/manifest.json', 'w') as f:
               json.dump(filtered, f, indent=2)
           "

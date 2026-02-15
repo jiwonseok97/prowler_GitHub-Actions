@@ -108,6 +108,8 @@ def _parse_auto_remediate_allowlist(raw: str):
 
 
 AUTO_REMEDIATE_ALLOWLIST = _parse_auto_remediate_allowlist(AUTO_REMEDIATE_CHECKS_RAW)
+REMEDIATION_MODE = os.getenv("REMEDIATION_MODE", "stable-only").strip().lower() or "stable-only"
+STABLE_ONLY_MODE = REMEDIATION_MODE != "all-checks"
 
 # -----------------------------------------------------------------------------
 # IaC 스니펫 매핑 로드 (Bedrock 실패 시 fallback)
@@ -3180,6 +3182,112 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     return sanitize_tf_code_v2(code, extra_unconfig_attrs=extra_unconfig_attrs, row=row)[0]
 
 
+def _ensure_variable_block(tf_code, name, type_expr="string", description=None):
+    if re.search(rf'^\s*variable\s+"{re.escape(name)}"\s*\{{', tf_code, re.MULTILINE):
+        return tf_code
+    block = [f'variable "{name}" {{']
+    if description:
+        block.append(f'  description = "{description}"')
+    block.append(f"  type        = {type_expr}")
+    block.append("}")
+    return tf_code.rstrip() + "\n\n" + "\n".join(block) + "\n"
+
+
+def _ensure_data_block(tf_code, dtype, dname, body_lines):
+    if re.search(rf'^\s*data\s+"{re.escape(dtype)}"\s+"{re.escape(dname)}"\s*\{{', tf_code, re.MULTILINE):
+        return tf_code
+    block = [f'data "{dtype}" "{dname}" {{']
+    block.extend([f"  {line}" for line in body_lines])
+    block.append("}")
+    return tf_code.rstrip() + "\n\n" + "\n".join(block) + "\n"
+
+
+def _patch_undeclared_instance_profile(tf_code, error_msg):
+    if "Reference to undeclared resource" not in error_msg or "instance_profile" not in error_msg:
+        return tf_code
+    patched = tf_code
+    # Prefer deterministic variable reference first.
+    patched = re.sub(
+        r'aws_iam_instance_profile\.[A-Za-z0-9_]+\.(name|id|arn)',
+        "var.iam_instance_profile_name",
+        patched,
+    )
+    # If still no usable value for iam_instance_profile attr, remove unsafe line.
+    patched = re.sub(
+        r'^\s*iam_instance_profile\s*=\s*aws_iam_instance_profile\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+\s*$',
+        "",
+        patched,
+        flags=re.MULTILINE,
+    )
+    patched = _ensure_variable_block(
+        patched,
+        "iam_instance_profile_name",
+        type_expr="string",
+        description="Existing IAM instance profile name",
+    )
+    return sanitize_tf_code(patched)
+
+
+def _patch_missing_data_declaration(tf_code, error_msg):
+    m = re.search(r'A data resource "([^"]+)" "([^"]+)" has not been declared', error_msg)
+    if not m:
+        return tf_code
+    dtype, dname = m.group(1), m.group(2)
+    patched = tf_code
+
+    # stable-only mode prefers direct var references for common identifiers
+    if STABLE_ONLY_MODE:
+        replacements = {
+            "aws_vpc": ("vpc_id", "string"),
+            "aws_subnet": ("subnet_id", "string"),
+            "aws_security_group": ("security_group_id", "string"),
+            "aws_iam_instance_profile": ("iam_instance_profile_name", "string"),
+        }
+        if dtype in replacements:
+            vname, vtype = replacements[dtype]
+            patched = re.sub(
+                rf'data\.{re.escape(dtype)}\.{re.escape(dname)}\.[A-Za-z0-9_]+',
+                f"var.{vname}",
+                patched,
+            )
+            patched = _ensure_variable_block(patched, vname, type_expr=vtype, description=f"Existing {dtype} reference")
+            return sanitize_tf_code(patched)
+
+    data_specs = {
+        "aws_vpc": (["id = var.vpc_id"], ("vpc_id", "string")),
+        "aws_subnet": (["id = var.subnet_id"], ("subnet_id", "string")),
+        "aws_security_group": (["id = var.security_group_id"], ("security_group_id", "string")),
+        "aws_iam_instance_profile": (['name = var.iam_instance_profile_name'], ("iam_instance_profile_name", "string")),
+    }
+    spec = data_specs.get(dtype)
+    if not spec:
+        return tf_code
+    body, (vname, vtype) = spec
+    patched = _ensure_variable_block(patched, vname, type_expr=vtype, description=f"Existing {dtype} identifier")
+    patched = _ensure_data_block(patched, dtype, dname, body)
+    return sanitize_tf_code(patched)
+
+
+def _patch_vpc_security_group_ids_mismatch(tf_code, error_msg):
+    if "Invalid function argument" not in error_msg or "tolist(" not in error_msg:
+        return tf_code
+    patched = tf_code
+    patched = re.sub(
+        r'^\s*vpc_security_group_ids\s*=\s*tolist\(\s*var\.[A-Za-z_][A-Za-z0-9_]*\s*\)\s*$',
+        "  vpc_security_group_ids = var.security_group_ids",
+        patched,
+        flags=re.MULTILINE,
+    )
+    if "var.security_group_ids" in patched:
+        patched = _ensure_variable_block(
+            patched,
+            "security_group_ids",
+            type_expr="list(string)",
+            description="Security group IDs for instance/network resources",
+        )
+    return sanitize_tf_code(patched)
+
+
 def apply_error_fixes(tf_code, error_msg, row=None):
     extra_attrs = set()
     for pat in [
@@ -3190,6 +3298,14 @@ def apply_error_fixes(tf_code, error_msg, row=None):
             extra_attrs.add(m)
     if extra_attrs:
         return sanitize_tf_code(tf_code, extra_unconfig_attrs=extra_attrs)
+    if "Reference to undeclared resource" in error_msg and "instance_profile" in error_msg:
+        return _patch_undeclared_instance_profile(tf_code, error_msg)
+    if "A data resource" in error_msg and "has not been declared" in error_msg:
+        return _patch_missing_data_declaration(tf_code, error_msg)
+    if "Invalid function argument" in error_msg and "tolist(" in error_msg:
+        patched = _patch_vpc_security_group_ids_mismatch(tf_code, error_msg)
+        if patched != tf_code:
+            return patched
     if "invalid value for name" in error_msg.lower():
         fixed_lines = _sanitize_invalid_name_values(tf_code.splitlines())
         return sanitize_tf_code("\n".join(fixed_lines))
@@ -3512,11 +3628,24 @@ def fallback_from_iac_snippet(check_id, category=None):
 def make_remediation_prompt(row):
     """finding 정보를 기반으로 Terraform 생성 프롬프트를 구성."""
     iam_guard = ""
+    no_iam_create_guard = ""
+    stable_guard = ""
+    if STABLE_ONLY_MODE:
+        stable_guard = (
+            "\nStable Mode Guardrails:\n"
+            "- Avoid introducing new data.aws_* blocks unless absolutely required\n"
+            "- Prefer direct variable inputs for identifiers in stable mode\n"
+        )
     if not ALLOW_IAM_CREATE:
         iam_guard = (
             "\nIAM Guardrails:\n"
             "- Do NOT create IAM policies, roles, or instance profiles\n"
-            "- Use data sources to reference existing IAM resources\n"
+            "- Prefer variable-based references (for example var.iam_role_name, var.iam_policy_arn, var.iam_instance_profile_name)\n"
+            "- Only use IAM data sources when absolutely required\n"
+        )
+        no_iam_create_guard = (
+            "- Do NOT create aws_iam_role, aws_iam_policy, aws_iam_instance_profile, or policy attachment resources\n"
+            "- If IAM references are needed, use variables and existing resources\n"
         )
     return f"""Generate Terraform code to fix this AWS security finding.
 
@@ -3535,6 +3664,7 @@ Requirements:
 - Output ONLY valid Terraform HCL code, nothing else
 - No markdown, no explanations, no code fences, no text before or after the code
 - Prefer modifying existing resources referenced by the finding; create new resources only when required
+- Do NOT add provider, backend, or terraform blocks
 - NEVER use "import" blocks
 - NEVER set computed/read-only attributes (arn, id, key_id, owner_id, creation_date, unique_id) in resource blocks
 - Avoid hardcoded ARNs/IDs in resource blocks; use data sources to look up existing resources when needed
@@ -3542,19 +3672,16 @@ Requirements:
 - For CloudTrail/S3 findings, always use input variables (for example var.s3_bucket_name) instead of hardcoded bucket names
 - If existing resource identifiers are available in the finding, prefer those values over placeholders
 - Do NOT define data "aws_caller_identity" "current", data "aws_region" "current", or data "aws_partition" "current" — these are pre-provided by the framework. Just reference them directly (e.g., data.aws_caller_identity.current.account_id)
-- Include a single provider "aws" block for ap-northeast-2 region WITHOUT alias
-- NEVER use provider aliases (no "alias" in provider, no "provider = aws.xxx" in resources)
+- NEVER use provider aliases (no "provider = aws.xxx" in resources)
 - For IAM policies, use jsonencode() instead of heredoc (<<EOF) to avoid string termination issues
 - Add HCL comments (lines starting with #) explaining what the code does
 - Make sure all required attributes are set for each resource type
 - Use unique resource names with a "remediation_" prefix to avoid conflicts
 - For aws_s3_bucket: do NOT use deprecated "acl" argument or inline "server_side_encryption_configuration" block. Use separate resources: aws_s3_bucket_acl, aws_s3_bucket_server_side_encryption_configuration
-- For EC2 instances needing IAM roles: create an aws_iam_instance_profile resource and reference it. Do NOT assign a role name directly to iam_instance_profile
 - For IAM user policy attachments: the "user" argument must be an IAM user name (string), NOT an ARN. Do NOT use data.aws_caller_identity.current.arn as a user name
 - For aws_iam_role_policy_attachment: use correct managed policy ARNs (e.g., "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"), NOT deprecated policy names
 - For aws_sns_topic_policy: the "arn" argument is REQUIRED — set it to the SNS topic ARN (e.g., aws_sns_topic.xxx.arn)
 - For aws_kms_key_policy: the "key_id" argument is REQUIRED — set it to the KMS key ID (e.g., aws_kms_key.xxx.id)
-- For aws_backup_selection: the "iam_role_arn" argument is REQUIRED — create an IAM role for AWS Backup and reference its ARN
 - For aws_wafv2_web_acl: the "visibility_config" block is REQUIRED inside both the web ACL and each rule
 - For aws_backup_vault: do NOT use "lifecycle_rule" block (it doesn't exist). Lifecycle rules go in aws_backup_plan
 - Do NOT use the deprecated "aws_subnet_ids" data source — use "aws_subnets" instead
@@ -3562,7 +3689,9 @@ Requirements:
 - For aws_instance: either "ami" or "launch_template" must be specified
 - For launch_template blocks inside aws_instance: either "id" or "name" must be specified
 - Do NOT index set-type attributes directly (e.g., vpc_security_group_ids[0]). Use tolist() first: tolist(data.xxx.vpc_security_group_ids)[0]
+{no_iam_create_guard}
 {iam_guard}
+{stable_guard}
 
 Output the Terraform code:"""
 
