@@ -92,24 +92,32 @@ jobs:
               work=$(mktemp -d)
               state_key="remediation/${category}.tfstate"
 
-              # Copy only files listed in remediation/manifest.json for this category.
-              # This prevents stale category files from being applied accidentally.
+              # Copy only files listed in category-specific manifest for this category.
+              # Fallback to remediation/manifest.json for backward compatibility.
               file_count=0
               cat_files=$(CATEGORY="$category" python3 - <<'PY'
           import json
           import os
 
           category = os.environ.get("CATEGORY", "").strip()
-          manifest = "remediation/manifest.json"
           selected = []
-          if category and os.path.exists(manifest):
-              with open(manifest, "r", encoding="utf-8") as f:
-                  items = json.load(f)
+          if category:
+              cat_manifest = f"remediation/manifests/{category}.json"
+              root_manifest = "remediation/manifest.json"
+              items = []
+              if os.path.exists(cat_manifest):
+                  with open(cat_manifest, "r", encoding="utf-8") as f:
+                      items = json.load(f)
+              elif os.path.exists(root_manifest):
+                  with open(root_manifest, "r", encoding="utf-8") as f:
+                      items = json.load(f)
               seen = set()
               for item in items:
                   if str(item.get("category", "")).strip() != category:
                       continue
-                  fname = str(item.get("file", "")).strip()
+                  if str(item.get("validation_status", "ok")).strip().lower() == "excluded":
+                      continue
+                  fname = str(item.get("file") or item.get("output_path") or "").strip()
                   if not fname or fname in seen:
                       continue
                   seen.add(fname)
@@ -538,22 +546,33 @@ jobs:
           import os
 
           categories = {c.strip() for c in os.environ.get("CATEGORIES", "").split() if c.strip()}
-          check_ids = []
-          if categories and os.path.exists("remediation/manifest.json"):
-              with open("remediation/manifest.json", "r", encoding="utf-8") as f:
-                  items = json.load(f)
-              check_ids = sorted({
-                  str(item.get("check_id", "")).strip()
-                  for item in items
-                  if str(item.get("category", "")).strip() in categories
-                  and str(item.get("check_id", "")).strip()
-              })
+          check_ids = set()
+
+          def load_items_for_category(category: str):
+              cat_manifest = f"remediation/manifests/{category}.json"
+              if os.path.exists(cat_manifest):
+                  with open(cat_manifest, "r", encoding="utf-8") as f:
+                      return json.load(f)
+              root_manifest = "remediation/manifest.json"
+              if os.path.exists(root_manifest):
+                  with open(root_manifest, "r", encoding="utf-8") as f:
+                      items = json.load(f)
+                  return [i for i in items if str(i.get("category", "")).strip() == category]
+              return []
+
+          for category in sorted(categories):
+              for item in load_items_for_category(category):
+                  if str(item.get("validation_status", "ok")).strip().lower() == "excluded":
+                      continue
+                  cid = str(item.get("check_id", "")).strip()
+                  if cid:
+                      check_ids.add(cid)
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-              out.write(f"check_ids={','.join(check_ids)}\n")
+              out.write(f"check_ids={','.join(sorted(check_ids))}\n")
 
           print(f"Target categories: {sorted(categories)}")
-          print(f"Target check_ids ({len(check_ids)}): {check_ids}")
+          print(f"Target check_ids ({len(check_ids)}): {sorted(check_ids)}")
           PY
 
       - name: Terraform Apply (per category)
@@ -574,24 +593,32 @@ jobs:
             work=$(mktemp -d)
             state_key="remediation/${category}.tfstate"
 
-            # Copy only files listed in remediation/manifest.json for this category.
-            # This prevents stale category files from being applied accidentally.
+            # Copy only files listed in category-specific manifest for this category.
+            # Fallback to remediation/manifest.json for backward compatibility.
             file_count=0
             cat_files=$(CATEGORY="$category" python3 - <<'PY'
           import json
           import os
 
           category = os.environ.get("CATEGORY", "").strip()
-          manifest = "remediation/manifest.json"
           selected = []
-          if category and os.path.exists(manifest):
-              with open(manifest, "r", encoding="utf-8") as f:
-                  items = json.load(f)
+          if category:
+              cat_manifest = f"remediation/manifests/{category}.json"
+              root_manifest = "remediation/manifest.json"
+              items = []
+              if os.path.exists(cat_manifest):
+                  with open(cat_manifest, "r", encoding="utf-8") as f:
+                      items = json.load(f)
+              elif os.path.exists(root_manifest):
+                  with open(root_manifest, "r", encoding="utf-8") as f:
+                      items = json.load(f)
               seen = set()
               for item in items:
                   if str(item.get("category", "")).strip() != category:
                       continue
-                  fname = str(item.get("file", "")).strip()
+                  if str(item.get("validation_status", "ok")).strip().lower() == "excluded":
+                      continue
+                  fname = str(item.get("file") or item.get("output_path") or "").strip()
                   if not fname or fname in seen:
                       continue
                   seen.add(fname)
@@ -715,6 +742,12 @@ jobs:
           CHECK_IDS: ${{ steps.target_checks.outputs.check_ids }}
         run: |
           set -euo pipefail
+          # IAM/global resources can have short propagation delay after apply.
+          # Wait before post-apply scan to reduce transient FAIL noise.
+          SLEEP_SECONDS="${POST_APPLY_SCAN_DELAY_SECONDS:-150}"
+          echo "Waiting ${SLEEP_SECONDS}s before post-apply verification scan..."
+          sleep "$SLEEP_SECONDS"
+
           mkdir -p /tmp/post_scan
 
           set +e
