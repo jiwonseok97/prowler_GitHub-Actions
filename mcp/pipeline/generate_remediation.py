@@ -144,6 +144,7 @@ SKIP_CHECKS = {
     "iam_user_console_access_unused",                 # 수동 비활성화 필요
     "iam_inline_policy_no_full_access_to_kms",        # 수동 정책 수정 필요
     "organizations_account_part_of_organizations",    # 조직 가입 필요 (자동 적용 어려움)
+    "fms_policy_compliant",                          # AWS Shield Advanced 구독 필요 (SubscriptionRequiredException)
 }
 
 # 동일 singleton AWS 리소스를 생성하는 체크들 → 하나의 파일로 통합
@@ -155,6 +156,12 @@ CONSOLIDATE_CHECKS = {
     "iam_password_policy_reuse_24": "fix-iam_password_policy.tf",
     "iam_password_policy_symbol": "fix-iam_password_policy.tf",
     "iam_password_policy_uppercase": "fix-iam_password_policy.tf",
+}
+
+# AWS 계정당 1개만 존재하는 싱글톤 리소스 → 고정 이름 사용
+# (매 실행마다 이름이 바뀌면 state에서 destroy → 설정 리셋 문제 발생)
+SINGLETON_RESOURCE_NAMES = {
+    "aws_iam_account_password_policy": "remediation_password_policy",
 }
 
 DATA_ONLY_RESOURCE_TYPES = {
@@ -1299,6 +1306,13 @@ def _normalize_block_names(lines):
         if m:
             # 캡처된 정보 추출
             indent, kind, rtype, name = m.groups()
+            # 싱글톤 리소스는 고정 이름 사용 (state 충돌 방지)
+            if kind == "resource" and rtype in SINGLETON_RESOURCE_NAMES:
+                new_name = SINGLETON_RESOURCE_NAMES[rtype]
+                mapping.append((kind, rtype, name, new_name))
+                line = f'{indent}{kind} "{rtype}" "{new_name}" {{'
+                out.append(line)
+                continue
             # resource는 remediation_ 접두어 강제
             prefix = "remediation_" if kind == "resource" else None
             # 라벨 정규화
@@ -1669,8 +1683,10 @@ def _fix_deprecated_interpolation(lines):
             continue
         # "${var.xxx}" → var.xxx  /  "${local.xxx}" → local.xxx
         # "${data.xxx.yyy.zzz}" → data.xxx.yyy.zzz
+        # "${aws_s3_bucket.xxx.arn}" → aws_s3_bucket.xxx.arn
+        # "${each.value}" → each.value  /  "${self.arn}" → self.arn
         line = re.sub(
-            r'"\$\{((?:var|local|data|module)\.[^}]+)\}"',
+            r'"\$\{([^}"]+)\}"',
             r'\1',
             line,
         )

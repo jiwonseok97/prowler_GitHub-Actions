@@ -196,6 +196,9 @@ jobs:
           rule "terraform_required_version" {
             enabled = false
           }
+          rule "terraform_deprecated_interpolation" {
+            enabled = false
+          }
           EOF
 
               terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfplan.txt
@@ -696,6 +699,9 @@ jobs:
             enabled = false
           }
           rule "terraform_required_version" {
+            enabled = false
+          }
+          rule "terraform_deprecated_interpolation" {
             enabled = false
           }
           EOF

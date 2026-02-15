@@ -9,6 +9,12 @@ Usage: python3 cleanup_hcl.py <file.tf> [<file2.tf> ...]
 """
 import re, sys, pathlib
 
+# arn 속성이 필수 입력인 리소스 타입
+_ARN_REQUIRED_RESOURCES = {
+    "aws_sns_topic_policy",
+    "aws_kms_key_policy",
+}
+
 FRAMEWORK_DATA = {
     ('aws_caller_identity', 'current'),
     ('aws_region', 'current'),
@@ -115,6 +121,8 @@ def cleanup(path):
     dep_brace = 0
     skip_data = False
     data_brace = 0
+    _in_arn_required_block = False
+    _arn_req_brace = 0
 
     for line in lines:
         if in_heredoc:
@@ -180,7 +188,19 @@ def cleanup(path):
             continue
         if re.match(r'^\s*provider\s*=\s*aws\.\S+', line):
             continue
-        if re.match(r'^\s*(arn|id|owner_id|unique_id|creation_date)\s*=', line):
+        # arn이 필수 입력인 리소스 블록 추적
+        _rm = re.match(r'^\s*resource\s+"([^"]+)"\s+"[^"]+"\s*\{', line)
+        if _rm and _rm.group(1) in _ARN_REQUIRED_RESOURCES:
+            _in_arn_required_block = True
+            _arn_req_brace = line.count('{') - line.count('}')
+        elif _in_arn_required_block:
+            _arn_req_brace += line.count('{') - line.count('}')
+            if _arn_req_brace <= 0:
+                _in_arn_required_block = False
+        # arn 속성은 aws_sns_topic_policy 등에서 필수 입력이므로 조건부 제거
+        if re.match(r'^\s*(id|owner_id|unique_id|creation_date)\s*=', line):
+            continue
+        if re.match(r'^\s*arn\s*=', line) and not _in_arn_required_block:
             continue
         if not in_s3_bucket and re.match(r'^\s*resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{', line):
             in_s3_bucket = True
