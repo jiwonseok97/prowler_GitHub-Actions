@@ -321,8 +321,8 @@ jobs:
             git checkout -B "$BRANCH" main
 
             # main에서 상속된 다른 카테고리 remediation 파일 제거
-            git rm -f remediation/*.tf remediation/manifest.json 2>/dev/null || true
-            mkdir -p remediation
+            git rm -rf "remediation/$CATEGORY/" remediation/manifest.json 2>/dev/null || true
+            mkdir -p "remediation/$CATEGORY"
             for fname in $CAT_FILES; do
               if [ -f "$TMPGEN/$fname" ]; then
                 cp "$TMPGEN/$fname" "remediation/$fname"

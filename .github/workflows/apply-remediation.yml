@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, closed]
     paths:
-      - 'remediation/*.tf'
+      - 'remediation/**/*.tf'
 
 env:
   TF_BACKEND_BUCKET: prowler-terraform-state-132410971304
@@ -59,16 +59,15 @@ jobs:
       - name: Collect changed files and group by category
         id: changed
         run: |
-          files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
+          files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/**/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
-          # Extract unique categories from changed files
-          # fix-iam_password_policy_xxx.tf -> iam
-          # fix-cloudwatch_log_group_xxx.tf -> cloudwatch
+          # Extract unique categories from directory structure
+          # remediation/iam/fix-iam_password_policy.tf -> iam
+          # remediation/cloudwatch/fix-cloudwatch_log_group.tf -> cloudwatch
           categories=""
           for file in $files; do
-            base=$(basename "$file" .tf | sed 's/^fix-//')
-            cat=$(echo "$base" | sed 's/_.*//')
+            cat=$(echo "$file" | cut -d'/' -f2)
             if ! echo "$categories" | grep -qw "$cat"; then
               categories="$categories $cat"
             fi
@@ -516,13 +515,13 @@ jobs:
       - name: Collect changed files and group by category
         id: changed
         run: |
-          files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
+          files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/**/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
+          # Extract unique categories from directory structure
           categories=""
           for file in $files; do
-            base=$(basename "$file" .tf | sed 's/^fix-//')
-            cat=$(echo "$base" | sed 's/_.*//')
+            cat=$(echo "$file" | cut -d'/' -f2)
             if ! echo "$categories" | grep -qw "$cat"; then
               categories="$categories $cat"
             fi

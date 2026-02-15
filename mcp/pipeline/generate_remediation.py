@@ -1195,6 +1195,33 @@ def _ensure_kms_key_policy_key_id(lines):
     return out
 
 
+def _fix_kms_alias_name(lines):
+    """aws_kms_alias의 name 속성이 'alias/'로 시작하도록 보장.
+
+    AI 모델이 KMS alias 이름을 "my-key" 형태로 생성하는 경우가 빈번하다.
+    AWS는 모든 KMS alias 이름이 "alias/"로 시작해야 한다.
+    """
+    out = []
+    in_alias_block = False
+    brace = 0
+    for line in lines:
+        if not in_alias_block:
+            if re.match(r'^\s*resource\s+"aws_kms_alias"\s+"[^"]+"\s*\{', line):
+                in_alias_block = True
+                brace = _brace_delta(line)
+            out.append(line)
+            continue
+
+        brace += _brace_delta(line)
+        nm = re.match(r'^(\s*name\s*=\s*)"([^"]*)"(.*)$', line)
+        if nm and not nm.group(2).startswith("alias/"):
+            line = f'{nm.group(1)}"alias/{nm.group(2)}"{nm.group(3)}'
+        out.append(line)
+        if brace <= 0:
+            in_alias_block = False
+    return out
+
+
 def _sanitize_label(name: str, prefix: str | None = None) -> str:
     # 라벨에 허용되지 않는 문자를 '_'로 치환
     label = re.sub(r"[^A-Za-z0-9_]", "_", name or "")
@@ -2617,6 +2644,87 @@ def _strip_unsupported_data_sources(lines):
     return out
 
 
+def _remove_unsafe_data_sources(lines):
+    """실제 인프라 존재를 가정하는 data source 블록 제거 + variable 참조로 치환.
+
+    AI가 data "aws_vpc", data "aws_instance" 등을 생성하면 plan 시점에
+    해당 리소스가 없으면 실패한다. 블록을 제거하고 참조를 var.xxx로 치환하여
+    _auto_declare_variables()가 variable 선언을 추가하도록 위임한다.
+
+    프레임워크 data source (aws_caller_identity, aws_region 등)는 보존한다.
+    """
+    UNSAFE_DATA_TYPES = {
+        "aws_vpc", "aws_instance", "aws_subnet",
+        "aws_security_group", "aws_ebs_volume",
+        "aws_ami", "aws_network_interface",
+    }
+    REF_MAP = {
+        "aws_vpc": {"id": "var.vpc_id", "cidr_block": "var.vpc_cidr_block",
+                     "default_security_group_id": "var.security_group_id"},
+        "aws_instance": {"id": "var.instance_id", "vpc_id": "var.vpc_id",
+                         "subnet_id": "var.subnet_id",
+                         "primary_network_interface_id": "var.network_interface_id"},
+        "aws_subnet": {"id": "var.subnet_id", "vpc_id": "var.vpc_id",
+                        "cidr_block": "var.subnet_cidr_block"},
+        "aws_security_group": {"id": "var.security_group_id", "vpc_id": "var.vpc_id"},
+        "aws_ebs_volume": {"id": "var.ebs_volume_id"},
+        "aws_ami": {"id": "var.ami_id"},
+        "aws_network_interface": {"id": "var.network_interface_id"},
+    }
+
+    # Pass 1: unsafe data 블록 이름 수집
+    blocks_to_remove = {}
+    for line in lines:
+        m = re.match(r'^\s*data\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+        if m and m.group(1) in UNSAFE_DATA_TYPES:
+            blocks_to_remove[(m.group(1), m.group(2))] = m.group(1)
+
+    if not blocks_to_remove:
+        return lines
+
+    # Pass 2: 블록 제거
+    out = []
+    skip_block = False
+    skip_brace = 0
+    for line in lines:
+        if skip_block:
+            skip_brace += _brace_delta(line)
+            if skip_brace <= 0:
+                skip_block = False
+            continue
+        m = re.match(r'^\s*data\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+        if m and (m.group(1), m.group(2)) in blocks_to_remove:
+            skip_block = True
+            skip_brace = _brace_delta(line)
+            if skip_brace <= 0:
+                skip_block = False
+            continue
+        out.append(line)
+
+    # Pass 3: 참조를 variable로 치환
+    result = []
+    for line in out:
+        stripped = line.lstrip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            result.append(line)
+            continue
+        for (dtype, dname), _ in blocks_to_remove.items():
+            attr_map = REF_MAP.get(dtype, {})
+            for attr, var_ref in attr_map.items():
+                line = re.sub(
+                    rf'data\.{re.escape(dtype)}\.{re.escape(dname)}\.{re.escape(attr)}',
+                    var_ref, line,
+                )
+            # 매핑되지 않은 속성 catch-all
+            fallback = attr_map.get("id", f"var.{dtype.replace('aws_', '')}_id")
+            line = re.sub(
+                rf'data\.{re.escape(dtype)}\.{re.escape(dname)}\.\w+',
+                fallback, line,
+            )
+        result.append(line)
+    return result
+
+
 def _fix_time_function_assignments(lines):
     """time() 함수가 포함된 할당은 0으로 치환."""
     out = []
@@ -2821,6 +2929,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     lines = _lift_resources_from_data_blocks(lines)
     # 지원하지 않는 data source 제거
     lines = _strip_unsupported_data_sources(lines)
+    # 실제 인프라를 가정하는 unsafe data source 제거 + variable 참조로 치환
+    lines = _remove_unsafe_data_sources(lines)
     # provider 스키마 기반 computed-only 속성 제거
     lines = _strip_schema_computed_attrs(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
@@ -2846,6 +2956,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     lines = _ensure_sns_topic_policy_arn(lines)
     # aws_kms_key_policy key_id 누락 보정
     lines = _ensure_kms_key_policy_key_id(lines)
+    # KMS alias name 보정 (alias/ 접두어 보장)
+    lines = _fix_kms_alias_name(lines)
     # aws_cloudwatch_metric_alarm evaluation_periods 누락 보정
     lines = _ensure_cloudwatch_alarm_required_attrs(lines)
     # WAFv2 visibility_config 누락 보정
@@ -3117,6 +3229,29 @@ def validate_terraform(tf_code):
 
 
 
+def _terraform_fmt(tf_code):
+    """terraform fmt로 코드를 포맷팅. 실패 시 원본 반환."""
+    import tempfile, subprocess, shutil
+
+    work = tempfile.mkdtemp(prefix="tf-fmt-")
+    try:
+        fpath = os.path.join(work, "candidate.tf")
+        with open(fpath, "w", encoding="utf-8") as f:
+            f.write(tf_code.rstrip("\n") + "\n")
+        result = subprocess.run(
+            ["terraform", "fmt", "-no-color", fpath],
+            cwd=work, capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode == 0:
+            with open(fpath, "r", encoding="utf-8") as f:
+                return f.read()
+        return tf_code
+    except Exception:
+        return tf_code
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def make_fix_prompt(original_prompt, tf_code, error_msg):
     """검증 실패 에러를 포함해 재생성용 프롬프트를 구성."""
     return f"""{original_prompt}
@@ -3299,6 +3434,9 @@ for _, row in unique_checks.iterrows():
             print(f"SKIP (generated code was empty after cleanup): {check_id}")
             continue
 
+        # terraform fmt로 포맷팅
+        tf_code = _terraform_fmt(tf_code)
+
         # 생성 코드 검증 + 자동 수정(가드레일) 적용
         ok, tf_code, err = validate_with_autofix(tf_code, row=row)
 
@@ -3320,6 +3458,7 @@ for _, row in unique_checks.iterrows():
                 if not fix_response:
                     continue
                 tf_code = sanitize_tf_code(fix_response, row=row)
+                tf_code = _terraform_fmt(tf_code)
                 ok, tf_code, err = validate_with_autofix(tf_code, row=row)
                 if ok:
                     print(f"  validate OK (attempt {attempt})")
@@ -3347,30 +3486,34 @@ for _, row in unique_checks.iterrows():
         consolidated_file = CONSOLIDATE_CHECKS.get(raw_check_id)
         if consolidated_file:
             filename = consolidated_file
-            if filename in _consolidated_files_written:
+            tracking_key = f"{category}/{filename}"
+            if tracking_key in _consolidated_files_written:
                 # 이미 기록됨 → manifest에만 추가
                 generated.append({
                     'check_id': row.get('check_id'),
                     'check_title': row.get('check_title'),
-                    'file': filename,
+                    'file': tracking_key,
                     'priority': row.get('priority'),
                     'category': category,
                     'source': source
                 })
-                print(f"Consolidated (already written): {check_id} -> {filename}")
+                print(f"Consolidated (already written): {check_id} -> {tracking_key}")
                 continue
-            _consolidated_files_written.add(filename)
+            _consolidated_files_written.add(tracking_key)
         else:
             filename = f"fix-{check_id}.tf"
 
-        # .tf 파일로 저장
-        filepath = os.path.join(args.output_dir, filename)
+        # .tf 파일로 카테고리 서브폴더에 저장
+        category_dir = os.path.join(args.output_dir, category)
+        os.makedirs(category_dir, exist_ok=True)
+        filepath = os.path.join(category_dir, filename)
         with open(filepath, 'w') as f:
-            f.write(tf_code)
+            f.write(tf_code.rstrip('\n') + '\n')
+        rel_file = f"{category}/{filename}"
         generated.append({
             'check_id': row.get('check_id'),
             'check_title': row.get('check_title'),
-            'file': filename,
+            'file': rel_file,
             'priority': row.get('priority'),
             'category': category,
             'source': source
