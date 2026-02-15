@@ -59,7 +59,15 @@ jobs:
       - name: Collect changed files and group by category
         id: changed
         run: |
-          files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/**/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
+          # Squash merge 시 head SHA가 main 히스토리에 없을 수 있으므로 fallback
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          if ! git cat-file -e "$HEAD" 2>/dev/null; then
+            echo "WARN: head SHA $HEAD not found; using merge commit diff"
+            HEAD="HEAD"
+            BASE="HEAD~1"
+          fi
+          files=$(git diff --name-status "$BASE" "$HEAD" -- 'remediation/**/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
           # Extract unique categories from directory structure
@@ -526,7 +534,15 @@ jobs:
       - name: Collect changed files and group by category
         id: changed
         run: |
-          files=$(git diff --name-status ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} -- 'remediation/**/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
+          # Squash merge 시 head SHA가 main 히스토리에 없을 수 있으므로 fallback
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          if ! git cat-file -e "$HEAD" 2>/dev/null; then
+            echo "WARN: head SHA $HEAD not found; using merge commit diff"
+            HEAD="HEAD"
+            BASE="HEAD~1"
+          fi
+          files=$(git diff --name-status "$BASE" "$HEAD" -- 'remediation/**/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
           # Extract unique categories from directory structure
