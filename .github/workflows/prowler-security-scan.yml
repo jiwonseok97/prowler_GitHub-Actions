@@ -387,7 +387,8 @@ jobs:
               continue
             fi
 
-            BRANCH="remediation/$CATEGORY"
+            # Always create a fresh branch per run to avoid force-push based PR updates.
+            BRANCH="remediation/${CATEGORY}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             git checkout -B "$BRANCH" main
 
             # main에서 상속된 같은 카테고리 remediation 파일만 정리
@@ -430,12 +431,19 @@ jobs:
 
             FILE_COUNT=$(echo "$CAT_FILES" | wc -l | tr -d ' ')
             git commit -m "fix($CATEGORY): auto-generated Terraform remediation [$FILE_COUNT files]"
-            git push origin "$BRANCH" --force
+            git push origin "$BRANCH"
 
-            # 기존 PR이 있으면 업데이트, 없으면 생성
-            EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
-            if [ -z "$EXISTING_PR" ]; then
-              PR_BODY=$(python3 -c "
+            # Close older open PRs for this category (created from remediation/<category>* heads),
+            # then create a fresh PR for the new branch.
+            OLD_PRS=$(gh pr list --state open --base main --json number,headRefName --jq '.[] | select(.headRefName | startswith("remediation/'"$CATEGORY"'")) | .number' 2>/dev/null || true)
+            if [ -n "${OLD_PRS:-}" ]; then
+              for pr in $OLD_PRS; do
+                echo "Closing stale PR #$pr for category $CATEGORY"
+                gh pr close "$pr" --comment "Superseded by fresh remediation branch \`$BRANCH\`."
+              done
+            fi
+
+            PR_BODY=$(python3 -c "
           import json, os
           with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
@@ -452,15 +460,12 @@ jobs:
                   lines.append(f\"- [{item['priority']}] {item['check_title']} (\`{item['check_id']}\`)\")
           print('\n'.join(lines))
           ")
-              gh pr create \
-                --title "Security Remediation: $CATEGORY ($FILE_COUNT files)" \
-                --body "$PR_BODY" \
-                --base main \
-                --head "$BRANCH"
-              echo "Created PR for category: $CATEGORY"
-            else
-              echo "PR #${EXISTING_PR} already exists for ${BRANCH} – updated via force-push."
-            fi
+            gh pr create \
+              --title "Security Remediation: $CATEGORY ($FILE_COUNT files)" \
+              --body "$PR_BODY" \
+              --base main \
+              --head "$BRANCH"
+            echo "Created fresh PR for category: $CATEGORY"
           done
 
           rm -rf "$TMPGEN"
