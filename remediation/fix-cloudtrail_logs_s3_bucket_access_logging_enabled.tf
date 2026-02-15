@@ -1,17 +1,26 @@
-# CloudTrail remediation for log bucket baseline
-# Target log bucket: aws-cloudtrail-logs-132410971304-0971c04b
+variable "s3_bucket_name" {
+  description = "Existing CloudTrail log bucket name"
+  type        = string
+  default     = ""
+}
 
-# Enforce versioning on the CloudTrail log bucket
+locals {
+  cloudtrail_bucket_enabled = var.s3_bucket_name != ""
+}
+
+# Enforce versioning on the target CloudTrail log bucket.
 resource "aws_s3_bucket_versioning" "remediation_cloudtrail_logs_versioning" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Enforce default encryption (SSE-S3)
+# Enforce default encryption (SSE-S3).
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloudtrail_logs_encryption" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
@@ -19,9 +28,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloud
   }
 }
 
-# Block public access
+# Block public access.
 resource "aws_s3_bucket_public_access_block" "remediation_cloudtrail_logs_public_access_block" {
-  bucket                  = "aws-cloudtrail-logs-132410971304-0971c04b"
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
   block_public_acls       = true
   ignore_public_acls      = true
   block_public_policy     = true

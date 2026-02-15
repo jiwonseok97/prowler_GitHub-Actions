@@ -1,55 +1,26 @@
-# Modify the existing CloudTrail trail to enable SSE-KMS encryption using a customer-managed KMS key
-resource "aws_cloudtrail" "remediation_security_cloudtail" {
-  name = "security-cloudtail"
-  s3_bucket_name                = "my-cloudtrail-bucket"
-  s3_key_prefix                 = "cloudtrail"
-  is_multi_region_trail         = true
-  enable_log_file_validation    = true
-  kms_key_id                    = aws_kms_key.remediation_cloudtrail_kms_key.arn
+variable "s3_bucket_name" {
+  description = "Existing CloudTrail log bucket name"
+  type        = string
+  default     = ""
 }
 
-# Create a customer-managed KMS key for CloudTrail log encryption
-resource "aws_kms_key" "remediation_cloudtrail_kms_key" {
-  description             = "Customer-managed KMS key for CloudTrail log encryption"
-  deletion_window_in_days = 30
-  enable_key_rotation     = true
+locals {
+  cloudtrail_bucket_enabled = var.s3_bucket_name != ""
 }
 
-# Attach a key policy to the KMS key to grant necessary permissions
-resource "aws_kms_key_policy" "remediation_cloudtrail_kms_key_policy" {
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        },
-        Action = "kms:*",
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        },
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-  key_id = aws_kms_key.remediation_cloudtrail_kms_key.key_id
+# Enforce versioning on the target CloudTrail log bucket.
+resource "aws_s3_bucket_versioning" "remediation_cloudtrail_logs_versioning" {
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
-# Ensure the S3 bucket used by CloudTrail has server-side encryption enabled
-resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloudtrail_bucket_encryption" {
-  bucket = "my-cloudtrail-bucket"
+# Enforce default encryption (SSE-S3).
+resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloudtrail_logs_encryption" {
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
@@ -57,32 +28,12 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloud
   }
 }
 
-# Ensure the S3 bucket used by CloudTrail has the correct ACL
-
-resource "aws_s3_bucket_policy" "remediation_cloudtrail_bucket_policy" {
-  bucket = "my-cloudtrail-bucket"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "AWSCloudTrailAclCheck"
-        Effect    = "Allow"
-        Principal = { Service = "cloudtrail.amazonaws.com" }
-        Action    = "s3:GetBucketAcl"
-        Resource  = "arn:aws:s3:::my-cloudtrail-bucket"
-      },
-      {
-        Sid       = "AWSCloudTrailWrite"
-        Effect    = "Allow"
-        Principal = { Service = "cloudtrail.amazonaws.com" }
-        Action    = "s3:PutObject"
-        Resource  = "arn:aws:s3:::my-cloudtrail-bucket/*"
-        Condition = {
-          StringEquals = {
-            "s3:x-amz-acl" = "bucket-owner-full-control"
-          }
-        }
-      }
-    ]
-  })
+# Block public access.
+resource "aws_s3_bucket_public_access_block" "remediation_cloudtrail_logs_public_access_block" {
+  count  = local.cloudtrail_bucket_enabled ? 1 : 0
+  bucket = var.s3_bucket_name
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
 }

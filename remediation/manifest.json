@@ -13,7 +13,7 @@
     "file": "fix-cloudtrail_kms_encryption_enabled.tf",
     "priority": "P2",
     "category": "cloudtrail",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "cloudtrail_log_file_validation_enabled",
@@ -21,7 +21,7 @@
     "file": "fix-cloudtrail_log_file_validation_enabled.tf",
     "priority": "P2",
     "category": "cloudtrail",
-    "source": "bedrock"
+    "source": "iac_snippet"
   },
   {
     "check_id": "cloudtrail_logs_s3_bucket_access_logging_enabled",
