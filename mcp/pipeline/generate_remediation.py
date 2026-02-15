@@ -75,6 +75,39 @@ USE_SCHEMA_GUARDRAIL = os.getenv("USE_SCHEMA_GUARDRAIL", "true").lower() == "tru
 IAC_SNIPPET_DIR = os.getenv("IAC_SNIPPET_DIR", "iac/terraform/snippets")
 # 카테고리 스니펫 fallback 사용 여부
 USE_CATEGORY_SNIPPET = os.getenv("USE_CATEGORY_SNIPPET", "true").lower() == "true"
+# IAM 리소스 생성 허용 여부 (기본: false → data source 참조로 전환)
+ALLOW_IAM_CREATE = os.getenv("ALLOW_IAM_CREATE", "false").lower() == "true"
+# 검증 실패 시 스킵 허용 여부 (기본: false → 스텁 생성)
+ALLOW_SKIP = os.getenv("ALLOW_SKIP", "false").lower() == "true"
+# 자동 리메디에이션 허용 체크 ID 목록
+# - 기본값: 실제 개선 효과가 안정적으로 검증된 체크만 보수적으로 자동 적용
+# - "*"  : 허용 목록 제한 해제(모든 체크 대상)
+# - "none": 자동 적용 비활성
+AUTO_REMEDIATE_CHECKS_RAW = os.getenv("AUTO_REMEDIATE_CHECKS", "").strip()
+DEFAULT_AUTO_REMEDIATE_CHECKS = {
+    "iam_password_policy_expires_passwords_within_90_days_or_less",
+    "iam_password_policy_minimum_length_14",
+    "iam_password_policy_lowercase",
+    "iam_password_policy_number",
+    "iam_password_policy_reuse_24",
+    "iam_password_policy_symbol",
+    "iam_password_policy_uppercase",
+}
+
+
+def _parse_auto_remediate_allowlist(raw: str):
+    if not raw:
+        return set(DEFAULT_AUTO_REMEDIATE_CHECKS)
+    lowered = raw.lower()
+    if lowered == "*":
+        return None
+    if lowered in {"none", "off", "disabled"}:
+        return set()
+    values = {x.strip() for x in raw.split(",") if x.strip()}
+    return values
+
+
+AUTO_REMEDIATE_ALLOWLIST = _parse_auto_remediate_allowlist(AUTO_REMEDIATE_CHECKS_RAW)
 
 # -----------------------------------------------------------------------------
 # IaC 스니펫 매핑 로드 (Bedrock 실패 시 fallback)
@@ -253,6 +286,152 @@ def _strip_code_fences(code: str) -> str:
             continue
         lines.append(line)
     return "\n".join(lines)
+
+
+def _safe_str(value) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    return str(value)
+
+
+def _row_values(row):
+    if row is None:
+        return []
+    values = []
+    for key in [
+        "resource_arn",
+        "resource_uid",
+        "resource_name",
+        "resource_id",
+        "resource_type",
+        "account_id",
+    ]:
+        val = _safe_str(row.get(key, ""))
+        if val:
+            values.append(val)
+    return values
+
+
+def _extract_id_from_text(text, prefix):
+    if not text:
+        return None
+    m = re.search(rf"{re.escape(prefix)}-[0-9a-f]{{8,17}}", text)
+    if m:
+        return m.group(0)
+    return None
+
+
+def _extract_id_from_row(row, prefix):
+    for val in _row_values(row):
+        found = _extract_id_from_text(val, prefix)
+        if found:
+            return found
+    return None
+
+
+def _extract_s3_bucket_from_row(row):
+    for val in _row_values(row):
+        m = re.search(r"arn:aws:s3:::([^/]+)", val)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _infer_attr_value(attr, row, resource_type=None):
+    attr = (attr or "").strip()
+    if not attr:
+        return None
+    rtype = (resource_type or "").strip()
+    if rtype == "aws_iam_policy":
+        for val in _row_values(row):
+            m = re.search(r"arn:aws:iam::\d{12}:policy/([^/]+)", val)
+            if m:
+                if attr == "arn":
+                    return f"\"{m.group(0)}\""
+                if attr == "name":
+                    return f"\"{m.group(1)}\""
+        return "var.iam_policy_arn" if attr == "arn" else "var.iam_policy_name"
+    if rtype == "aws_iam_role":
+        for val in _row_values(row):
+            m = re.search(r"arn:aws:iam::\d{12}:role/([^/]+)", val)
+            if m and attr == "name":
+                return f"\"{m.group(1)}\""
+        if attr == "name":
+            if row is not None:
+                name = _safe_str(row.get("resource_name", ""))
+                if name:
+                    return f"\"{name}\""
+            return "var.iam_role_name"
+    if rtype == "aws_iam_instance_profile":
+        for val in _row_values(row):
+            m = re.search(r"arn:aws:iam::\d{12}:instance-profile/([^/]+)", val)
+            if m and attr == "name":
+                return f"\"{m.group(1)}\""
+        if attr == "name":
+            if row is not None:
+                name = _safe_str(row.get("resource_name", ""))
+                if name:
+                    return f"\"{name}\""
+            return "var.iam_instance_profile_name"
+    if attr == "security_group_id":
+        sg = _extract_id_from_row(row, "sg")
+        if sg:
+            return f"\"{sg}\""
+        return "var.security_group_id"
+    if attr == "ami":
+        return "var.ami_id"
+    if attr == "instance_type":
+        return "var.instance_type"
+    if attr == "subnet_id":
+        subnet = _extract_id_from_row(row, "subnet")
+        if subnet:
+            return f"\"{subnet}\""
+        return "var.subnet_id"
+    if attr == "vpc_id":
+        vpc = _extract_id_from_row(row, "vpc")
+        if vpc:
+            return f"\"{vpc}\""
+        return "var.vpc_id"
+    if attr == "network_interface_id":
+        eni = _extract_id_from_row(row, "eni")
+        if eni:
+            return f"\"{eni}\""
+        return "var.network_interface_id"
+    if attr in ["bucket", "bucket_name", "s3_bucket_name"]:
+        bucket = _extract_s3_bucket_from_row(row)
+        if bucket:
+            return f"\"{bucket}\""
+        return "var.s3_bucket_name"
+    if attr == "log_group_name":
+        for val in _row_values(row):
+            name = _extract_log_group_name_from_arn(val)
+            if name:
+                return f"\"{name}\""
+        return "var.log_group_name"
+    return f"var.{attr}"
+
+
+def _fallback_stub(row, err):
+    check_id = _safe_str(row.get("check_id", "unknown"))
+    resource_uid = _safe_str(row.get("resource_uid", ""))
+    title = _safe_str(row.get("check_title", ""))
+    note = _safe_str(err)[:200].replace("\n", " ")
+    return (
+        f'# TODO: Manual remediation required for {check_id}\n'
+        f'# Title: {title}\n'
+        f'# Last validation error: {note}\n'
+        f'resource "null_resource" "remediation_{_sanitize_label(check_id)}" {{\n'
+        f'  triggers = {{\n'
+        f'    check_id     = "{check_id}"\n'
+        f'    resource_uid = "{resource_uid}"\n'
+        f'  }}\n'
+        f'}}\n'
+    )
 
 
 def _comment_explanations(lines):
@@ -1115,6 +1294,131 @@ def _normalize_block_names(lines):
     return _replace_refs(out, mapping)
 
 
+def _convert_iam_resources_to_data(lines):
+    """IAM 리소스 생성이 금지된 경우 resource → data로 전환."""
+    if ALLOW_IAM_CREATE:
+        return lines
+    IAM_TYPES = {
+        "aws_iam_policy",
+        "aws_iam_role",
+        "aws_iam_instance_profile",
+    }
+    out = []
+    for line in lines:
+        m = re.match(r'^(\s*)resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+        if m and m.group(2) in IAM_TYPES:
+            indent, rtype, name = m.group(1), m.group(2), m.group(3)
+            out.append(f'{indent}data "{rtype}" "{name}" {{')
+            continue
+        out.append(line)
+    return out
+
+
+def _strip_iam_resource_only_attrs(lines):
+    """data IAM 블록에서 resource 전용 속성 제거."""
+    if ALLOW_IAM_CREATE:
+        return lines
+    REMOVE_ATTRS = {
+        "aws_iam_policy": {
+            "policy",
+            "description",
+            "path",
+            "tags",
+        },
+        "aws_iam_role": {
+            "assume_role_policy",
+            "managed_policy_arns",
+            "inline_policy",
+            "permissions_boundary",
+            "max_session_duration",
+            "force_detach_policies",
+            "path",
+            "tags",
+        },
+        "aws_iam_instance_profile": {
+            "role",
+            "path",
+            "tags",
+        },
+    }
+    out = []
+    in_block = False
+    brace = 0
+    current_type = None
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^\s*data\s+"([^"]+)"\s+"[^"]+"\s*\{', line)
+            if m and m.group(1) in REMOVE_ATTRS:
+                in_block = True
+                current_type = m.group(1)
+                brace = _brace_delta(line)
+                out.append(line)
+                continue
+            out.append(line)
+            continue
+        next_brace = brace + _brace_delta(line)
+        remove_set = REMOVE_ATTRS.get(current_type, set())
+        if any(re.match(rf'^\s*{re.escape(attr)}\s*=', line) for attr in remove_set):
+            brace = next_brace
+            if next_brace <= 0:
+                in_block = False
+                current_type = None
+            continue
+        out.append(line)
+        brace = next_brace
+        if brace <= 0:
+            in_block = False
+            current_type = None
+    return out
+
+
+def _ensure_iam_data_required_attrs(lines):
+    """IAM data 소스에 필수 인자(name/arn) 자동 삽입."""
+    if ALLOW_IAM_CREATE:
+        return lines
+    REQUIRED = {
+        "aws_iam_policy": ("arn", "var.iam_policy_arn"),
+        "aws_iam_role": ("name", "var.iam_role_name"),
+        "aws_iam_instance_profile": ("name", "var.iam_instance_profile_name"),
+    }
+    out = []
+    in_block = False
+    brace = 0
+    current_type = None
+    has_attr = False
+    insert_idx = -1
+    block_indent = ""
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^\s*data\s+"([^"]+)"\s+"[^"]+"\s*\{', line)
+            if m and m.group(1) in REQUIRED:
+                in_block = True
+                current_type = m.group(1)
+                brace = _brace_delta(line)
+                has_attr = False
+                insert_idx = len(out)
+                block_indent = re.match(r'^(\s*)', line).group(1)
+                out.append(line)
+                continue
+            out.append(line)
+            continue
+        attr, value = REQUIRED.get(current_type, (None, None))
+        if attr and re.match(rf'^\s*{re.escape(attr)}\s*=', line):
+            has_attr = True
+        next_brace = brace + _brace_delta(line)
+        if next_brace <= 0:
+            if not has_attr and insert_idx >= 0 and attr:
+                out.insert(insert_idx + 1, f"{block_indent}  {attr} = {value}")
+            out.append(line)
+            in_block = False
+            current_type = None
+            brace = 0
+            continue
+        out.append(line)
+        brace = next_brace
+    return out
+
+
 # AWS 계정 ID 패턴 (12자리 숫자, ARN 내부에서만 매칭)
 _ACCOUNT_ID_RE = re.compile(r"(?<=:)\d{12}(?=:)")
 
@@ -1696,6 +2000,42 @@ def _ensure_lifecycle_rule_id(lines):
     return out
 
 
+def _ensure_noncurrent_days_in_lifecycle(lines):
+    """noncurrent_version_expiration 블록에 noncurrent_days 누락 시 기본값 추가."""
+    out = []
+    in_block = False
+    brace = 0
+    has_days = False
+    insert_idx = -1
+    block_indent = ""
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^(\s*)noncurrent_version_expiration\s*\{', line)
+            if m:
+                in_block = True
+                brace = _brace_delta(line)
+                has_days = False
+                insert_idx = len(out)
+                block_indent = m.group(1)
+                out.append(line)
+                continue
+            out.append(line)
+            continue
+        if re.match(r'^\s*noncurrent_days\s*=', line):
+            has_days = True
+        next_brace = brace + _brace_delta(line)
+        out.append(line)
+        if next_brace <= 0:
+            if not has_days and insert_idx >= 0:
+                out.insert(insert_idx + 1, f"{block_indent}  noncurrent_days = 90")
+            in_block = False
+            brace = 0
+            insert_idx = -1
+        else:
+            brace = next_brace
+    return out
+
+
 def _replace_placeholder_values(lines):
     """placeholder 이메일, 키페어 등을 variable 참조로 치환."""
     REPLACEMENTS = [
@@ -1871,28 +2211,80 @@ def _ensure_cloudtrail_s3_bucket_policy(lines):
     """
     # CloudTrail 리소스 존재 여부 확인
     has_cloudtrail = False
-    cloudtrail_bucket_name = None
+    cloudtrail_bucket_expr = None
     for line in lines:
         if re.match(r'^\s*resource\s+"aws_cloudtrail"\s+"[^"]+"\s*\{', line):
             has_cloudtrail = True
-        m = re.match(r'^\s*s3_bucket_name\s*=\s*"([^"]+)"', line)
+        m = re.match(r'^\s*s3_bucket_name\s*=\s*(.+?)\s*$', line)
         if m and has_cloudtrail:
-            cloudtrail_bucket_name = m.group(1)
+            cloudtrail_bucket_expr = m.group(1).strip()
 
-    if not has_cloudtrail or not cloudtrail_bucket_name:
+    if not has_cloudtrail or not cloudtrail_bucket_expr:
         return lines
 
-    # 이미 bucket policy가 있으면 건너뜀
+    if cloudtrail_bucket_expr.startswith('"') and cloudtrail_bucket_expr.endswith('"'):
+        cloudtrail_bucket_name = cloudtrail_bucket_expr.strip('"')
+        bucket_arn_expr = f'"arn:aws:s3:::{cloudtrail_bucket_name}"'
+        bucket_arn_object_expr = f'"arn:aws:s3:::{cloudtrail_bucket_name}/*"'
+    else:
+        bucket_arn_expr = f'"arn:aws:s3:::${{{cloudtrail_bucket_expr}}}"'
+        bucket_arn_object_expr = f'"arn:aws:s3:::${{{cloudtrail_bucket_expr}}}/*"'
+
+    # 이미 cloudtrail.amazonaws.com 권한이 있으면 건너뜀
+    has_cloudtrail_principal = any(
+        "cloudtrail.amazonaws.com" in line for line in lines
+    )
+    if has_cloudtrail_principal:
+        return lines
+
+    # 기존 bucket policy가 있으면 Statement 배열에 CloudTrail 권한 주입
+    has_existing_policy = False
     for line in lines:
         if re.match(r'^\s*resource\s+"aws_s3_bucket_policy"\s+"[^"]+"\s*\{', line):
-            return lines
+            has_existing_policy = True
+            break
 
-    # CloudTrail용 S3 bucket policy 추가
-    bucket_arn = f"arn:aws:s3:::{cloudtrail_bucket_name}"
+    if has_existing_policy:
+        # 기존 bucket policy의 Statement = [ 뒤에 CloudTrail 문 삽입
+        CT_STMTS = [
+            '      {',
+            '        Sid       = "AWSCloudTrailAclCheck"',
+            '        Effect    = "Allow"',
+            '        Principal = { Service = "cloudtrail.amazonaws.com" }',
+            '        Action    = "s3:GetBucketAcl"',
+            f"        Resource  = {bucket_arn_expr}",
+            '      },',
+            '      {',
+            '        Sid       = "AWSCloudTrailWrite"',
+            '        Effect    = "Allow"',
+            '        Principal = { Service = "cloudtrail.amazonaws.com" }',
+            '        Action    = "s3:PutObject"',
+            f"        Resource  = {bucket_arn_object_expr}",
+            '        Condition = {',
+            '          StringEquals = {',
+            '            "s3:x-amz-acl" = "bucket-owner-full-control"',
+            '          }',
+            '        }',
+            '      },',
+        ]
+        out = []
+        in_bucket_policy = False
+        injected = False
+        for line in lines:
+            out.append(line)
+            if not injected:
+                if re.match(r'^\s*resource\s+"aws_s3_bucket_policy"\s+"[^"]+"\s*\{', line):
+                    in_bucket_policy = True
+                if in_bucket_policy and re.match(r'.*Statement\s*=\s*\[', line):
+                    out.extend(CT_STMTS)
+                    injected = True
+        return out
+
+    # bucket policy가 없으면 새로 추가
     POLICY_TEMPLATE = [
         '',
         'resource "aws_s3_bucket_policy" "remediation_cloudtrail_bucket_policy" {',
-        f'  bucket = "{cloudtrail_bucket_name}"',
+        f"  bucket = {cloudtrail_bucket_expr}",
         '  policy = jsonencode({',
         '    Version = "2012-10-17"',
         '    Statement = [',
@@ -1901,14 +2293,14 @@ def _ensure_cloudtrail_s3_bucket_policy(lines):
         '        Effect    = "Allow"',
         '        Principal = { Service = "cloudtrail.amazonaws.com" }',
         '        Action    = "s3:GetBucketAcl"',
-        f'        Resource  = "{bucket_arn}"',
+        f"        Resource  = {bucket_arn_expr}",
         '      },',
         '      {',
         '        Sid       = "AWSCloudTrailWrite"',
         '        Effect    = "Allow"',
         '        Principal = { Service = "cloudtrail.amazonaws.com" }',
         '        Action    = "s3:PutObject"',
-        f'        Resource  = "{bucket_arn}/*"',
+        f"        Resource  = {bucket_arn_object_expr}",
         '        Condition = {',
         '          StringEquals = {',
         '            "s3:x-amz-acl" = "bucket-owner-full-control"',
@@ -1940,7 +2332,106 @@ def _fix_unsupported_data_attrs(lines):
             'var.vpc_id',
             line,
         )
+        # data.aws_subnets.<name>.vpc_id / data.aws_security_groups.<name>.vpc_id → var.vpc_id
+        line = re.sub(
+            r'data\.aws_subnets\.\w+\.vpc_id',
+            'var.vpc_id',
+            line,
+        )
+        line = re.sub(
+            r'data\.aws_security_groups\.\w+\.vpc_id',
+            'var.vpc_id',
+            line,
+        )
+        # data.aws_instance.<name>.primary_network_interface_id → var.network_interface_id
+        line = re.sub(
+            r'data\.aws_instance\.\w+\.primary_network_interface_id',
+            'var.network_interface_id',
+            line,
+        )
+        # data.aws_instance.<name>.launch_time (string) used in math → 0
+        line = re.sub(
+            r'data\.aws_instance\.\w+\.launch_time',
+            '0',
+            line,
+        )
+        # data.aws_date_time.<name>.<attr> → 0 (unsupported data source)
+        line = re.sub(
+            r'data\.aws_date_time\.\w+\.\w+',
+            '0',
+            line,
+        )
         out.append(line)
+    return out
+
+
+def _normalize_cloudtrail_bucket_inputs(lines, row=None):
+    """CloudTrail 코드의 placeholder 버킷을 입력 변수화하고 실제 버킷 기본값을 주입."""
+    row_obj = row if row is not None else {}
+    check_id = _safe_str(row_obj.get("check_id", ""))
+    has_cloudtrail = any("aws_cloudtrail" in line for line in lines) or check_id.startswith("cloudtrail_")
+    if not has_cloudtrail:
+        return lines
+
+    target_bucket = _extract_s3_bucket_from_row(row) or ""
+
+    placeholder_pat = re.compile(
+        r'^(my-cloudtrail-bucket|remediation-cloudtrail-bucket|security-cloudtail[^"]*|security-cloudtrail[^"]*)$'
+    )
+    out = []
+    for line in lines:
+        m = re.match(r'^(\s*)(bucket|bucket_name|s3_bucket_name|target_bucket)\s*=\s*"([^"]+)"\s*$', line)
+        if m:
+            key = m.group(2)
+            val = m.group(3)
+            if placeholder_pat.match(val):
+                out.append(f"{m.group(1)}{key} = var.s3_bucket_name")
+                continue
+
+        line = re.sub(
+            r'arn:aws:s3:::(my-cloudtrail-bucket|remediation-cloudtrail-bucket|security-cloudtail[^"/* ]*|security-cloudtrail[^"/* ]*)(/\*)?',
+            lambda mo: f'arn:aws:s3:::${{var.s3_bucket_name}}{mo.group(2) or ""}',
+            line,
+        )
+        out.append(line)
+
+    var_start = None
+    var_end = None
+    brace = 0
+    for i, line in enumerate(out):
+        if re.match(r'^\s*variable\s+"s3_bucket_name"\s*\{', line):
+            var_start = i
+            brace = _brace_delta(line)
+            j = i + 1
+            while j < len(out):
+                brace += _brace_delta(out[j])
+                if brace <= 0:
+                    var_end = j
+                    break
+                j += 1
+            break
+
+    if var_start is None:
+        out.extend([
+            "",
+            'variable "s3_bucket_name" {',
+            '  description = "Target S3 bucket name for remediation"',
+            "  type        = string",
+            f'  default     = "{target_bucket}"',
+            "}",
+            "",
+        ])
+        return out
+
+    has_default = False
+    for idx in range(var_start, (var_end or var_start) + 1):
+        if re.match(r'^\s*default\s*=', out[idx]):
+            has_default = True
+            if target_bucket and re.match(r'^\s*default\s*=\s*""\s*$', out[idx]):
+                out[idx] = f'  default     = "{target_bucket}"'
+            break
+    if target_bucket and not has_default and var_end is not None:
+        out.insert(var_end, f'  default     = "{target_bucket}"')
     return out
 
 
@@ -1970,7 +2461,7 @@ def _ensure_required_resource_attrs(lines):
         },
         "aws_cloudtrail": {
             "name": '"remediation-cloudtrail"',
-            "s3_bucket_name": '"remediation-cloudtrail-bucket"',
+            "s3_bucket_name": "var.s3_bucket_name",
         },
         "aws_inspector_assessment_target": {
             "name": '"remediation-inspector-target"',
@@ -1984,6 +2475,17 @@ def _ensure_required_resource_attrs(lines):
         },
         "aws_ssm_activation": {
             "iam_role": "var.ssm_iam_role",
+        },
+        "aws_network_interface_sg_attachment": {
+            "security_group_id": "var.security_group_id",
+            "network_interface_id": "var.network_interface_id",
+        },
+        "aws_s3_bucket_lifecycle_configuration": {
+            "bucket": "var.s3_bucket_name",
+        },
+        "aws_instance": {
+            "ami": "var.ami_id",
+            "instance_type": "var.instance_type",
         },
     }
 
@@ -2047,6 +2549,161 @@ def _ensure_required_resource_attrs(lines):
     return out
 
 
+def _ensure_default_vpc_data(lines):
+    """data.aws_vpc.default 참조가 있으면 data 블록을 자동 추가."""
+    has_ref = any("data.aws_vpc.default" in line for line in lines)
+    if not has_ref:
+        return lines
+    has_block = any(re.match(r'^\s*data\s+"aws_vpc"\s+"default"\s*\{', line) for line in lines)
+    if has_block:
+        return lines
+    out = list(lines)
+    out.append("")
+    out.append('data "aws_vpc" "default" {')
+    out.append("  default = true")
+    out.append("}")
+    out.append("")
+    return out
+
+
+def _strip_unsupported_data_sources(lines):
+    """지원하지 않는 data source 블록 제거."""
+    UNSUPPORTED = {"aws_date_time"}
+    out = []
+    in_block = False
+    brace = 0
+    current_type = None
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^\s*data\s+"([^"]+)"\s+"[^"]+"\s*\{', line)
+            if m and m.group(1) in UNSUPPORTED:
+                in_block = True
+                current_type = m.group(1)
+                brace = _brace_delta(line)
+                if brace <= 0:
+                    in_block = False
+                    current_type = None
+                continue
+            out.append(line)
+            continue
+        brace += _brace_delta(line)
+        if brace <= 0:
+            in_block = False
+            current_type = None
+        continue
+    return out
+
+
+def _fix_time_function_assignments(lines):
+    """time() 함수가 포함된 할당은 0으로 치환."""
+    out = []
+    for line in lines:
+        if "time()" in line:
+            m = re.match(r'^(\s*)([A-Za-z0-9_]+)\s*=', line)
+            if m:
+                indent, name = m.group(1), m.group(2)
+                out.append(f"{indent}{name} = 0")
+                continue
+        out.append(line)
+    return out
+
+
+def _ensure_flow_log_target(lines):
+    """aws_flow_log에 필수 대상(vpc_id/eni_id/...)이 없으면 vpc_id를 추가."""
+    out = []
+    in_block = False
+    brace = 0
+    has_target = False
+    block_indent = ""
+    targets = {
+        "eni_id",
+        "vpc_id",
+        "subnet_id",
+        "transit_gateway_id",
+        "transit_gateway_attachment_id",
+        "regional_nat_gateway_id",
+    }
+    for line in lines:
+        if not in_block:
+            m = re.match(r'^\s*resource\s+"aws_flow_log"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_block = True
+                brace = _brace_delta(line)
+                has_target = False
+                block_indent = re.match(r'^(\s*)', line).group(1)
+                out.append(line)
+                continue
+            out.append(line)
+            continue
+        next_brace = brace + _brace_delta(line)
+        for attr in targets:
+            if re.match(rf'^\s*{re.escape(attr)}\s*=', line):
+                has_target = True
+                break
+        if next_brace <= 0:
+            if not has_target:
+                out.append(f"{block_indent}  vpc_id = var.vpc_id")
+            out.append(line)
+            in_block = False
+            brace = 0
+            continue
+        out.append(line)
+        brace = next_brace
+    return out
+
+
+def _sanitize_invalid_name_values(lines):
+    """name 속성에 허용되지 않는 문자가 있으면 안전한 값으로 치환."""
+    out = []
+    for line in lines:
+        m = re.match(r'^(\s*)name\s*=\s*"([^"]+)"\s*$', line)
+        if m:
+            indent = m.group(1)
+            raw = m.group(2)
+            cleaned = re.sub(r"[^A-Za-z0-9_+=,.@-]", "-", raw)
+            cleaned = re.sub(r"-+", "-", cleaned).strip("-")
+            if cleaned:
+                line = f'{indent}name = "{cleaned}"'
+        out.append(line)
+    return out
+
+
+def _inject_required_attr(tf_code, resource_type, attr, value_expr):
+    lines = tf_code.splitlines()
+    out = []
+    in_block = False
+    brace = 0
+    found = False
+    insert_idx = -1
+    block_indent = ""
+    for line in lines:
+        if not in_block:
+            m = re.match(rf'^(\s*)resource\s+"{re.escape(resource_type)}"\s+"[^"]+"\s*\{{', line)
+            if m:
+                in_block = True
+                brace = _brace_delta(line)
+                found = False
+                insert_idx = len(out)
+                block_indent = m.group(1)
+                out.append(line)
+                continue
+            out.append(line)
+            continue
+        next_brace = brace + _brace_delta(line)
+        if re.match(rf'^\s*{re.escape(attr)}\s*=', line):
+            found = True
+        if next_brace <= 0:
+            if not found and insert_idx >= 0 and value_expr:
+                out.insert(insert_idx + 1, f"{block_indent}  {attr} = {value_expr}")
+            out.append(line)
+            in_block = False
+            brace = 0
+            continue
+        out.append(line)
+        brace = next_brace
+    return "\n".join(out)
+
+
 def _auto_declare_variables(lines):
     """코드에서 참조되는 var.xxx 중 선언되지 않은 variable 블록을 자동 추가."""
     # 기존 variable 선언 수집
@@ -2086,7 +2743,16 @@ def _auto_declare_variables(lines):
         "subnet_id": ('description = "Target subnet ID"\n  type        = string\n  default     = ""', None),
         "subnet_ids": ('description = "Target subnet IDs"\n  type        = list(string)\n  default     = []', None),
         "security_group_id": ('description = "Target security group ID"\n  type        = string\n  default     = ""', None),
+        "network_interface_id": ('description = "Target network interface ID"\n  type        = string\n  default     = ""', None),
+        "ami_id": ('description = "AMI ID for new or managed instances"\n  type        = string\n  default     = ""', None),
+        "instance_type": ('description = "EC2 instance type"\n  type        = string\n  default     = ""', None),
         "launch_template_name": ('description = "EC2 launch template name"\n  type        = string\n  default     = ""', None),
+        "s3_bucket_name": ('description = "Target S3 bucket name"\n  type        = string\n  default     = ""', None),
+        "log_group_name": ('description = "CloudWatch log group name"\n  type        = string\n  default     = ""', None),
+        "iam_policy_arn": ('description = "Existing IAM policy ARN"\n  type        = string', None),
+        "iam_policy_name": ('description = "Existing IAM policy name"\n  type        = string', None),
+        "iam_role_name": ('description = "Existing IAM role name"\n  type        = string', None),
+        "iam_instance_profile_name": ('description = "Existing IAM instance profile name"\n  type        = string', None),
         "ssm_iam_role": ('description = "IAM role for SSM activation"\n  type        = string', None),
         "inspector_target_arn": ('description = "Inspector assessment target ARN"\n  type        = string', None),
     }
@@ -2107,7 +2773,7 @@ def _auto_declare_variables(lines):
     return out
 
 
-def sanitize_tf_code(code, extra_unconfig_attrs=None):
+def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     if not code:
         return ""
     code = _strip_code_fences(code)
@@ -2128,11 +2794,19 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _remove_duplicate_data_blocks(lines)
     # data 블록 내부에 중첩된 resource 블록 추출
     lines = _lift_resources_from_data_blocks(lines)
+    # 지원하지 않는 data source 제거
+    lines = _strip_unsupported_data_sources(lines)
     # provider 스키마 기반 computed-only 속성 제거
     lines = _strip_schema_computed_attrs(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
     # resource/data 이름 정규화 및 참조 동기화
     lines = _normalize_block_names(lines)
+    # IAM 생성 금지 시 resource → data 전환 및 필수 인자 보강
+    lines = _convert_iam_resources_to_data(lines)
+    lines = _strip_iam_resource_only_attrs(lines)
+    lines = _ensure_iam_data_required_attrs(lines)
+    # name 속성의 허용되지 않는 문자 치환
+    lines = _sanitize_invalid_name_values(lines)
     # 미닫힌 heredoc 보정
     lines = _repair_unclosed_heredoc(lines)
     # 백틱 포함 라인 주석 처리
@@ -2163,6 +2837,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _lift_resources_from_resource_blocks(lines)
     # S3 lifecycle rule에 id 누락 보정
     lines = _ensure_lifecycle_rule_id(lines)
+    # S3 lifecycle noncurrent_version_expiration noncurrent_days 누락 보정
+    lines = _ensure_noncurrent_days_in_lifecycle(lines)
     # 하드코딩된 AWS 계정 ID → data source 참조로 치환
     lines = _replace_hardcoded_account_id(lines)
     # 하드코딩된 리전 → data source 참조로 치환
@@ -2171,6 +2847,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _replace_placeholder_ids(lines)
     # placeholder 이메일/키페어 → variable 참조로 치환
     lines = _replace_placeholder_values(lines)
+    # CloudTrail placeholder 버킷 제거 + 실제 버킷 기본값 주입
+    lines = _normalize_cloudtrail_bucket_inputs(lines, row=row)
     # S3 apply 오류 방지: 기존 버킷 resource → data 변환
     lines = _convert_s3_bucket_resource_to_data(lines)
     # S3 apply 오류 방지: BucketOwnerEnforced와 충돌하는 ACL 제거
@@ -2181,8 +2859,14 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     lines = _ensure_cloudtrail_s3_bucket_policy(lines)
     # data source에서 지원하지 않는 속성 참조 치환
     lines = _fix_unsupported_data_attrs(lines)
+    # time() 함수 포함 할당 보정
+    lines = _fix_time_function_assignments(lines)
     # 리소스별 필수 속성 누락 보정
     lines = _ensure_required_resource_attrs(lines)
+    # data.aws_vpc.default 참조 보정
+    lines = _ensure_default_vpc_data(lines)
+    # aws_flow_log 대상 누락 보정
+    lines = _ensure_flow_log_target(lines)
     # 선언 없이 참조된 variable 자동 선언
     lines = _auto_declare_variables(lines)
     # 미닫힌 따옴표 보정
@@ -2200,7 +2884,7 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None):
     return "\n".join(lines).strip()
 
 
-def apply_error_fixes(tf_code, error_msg):
+def apply_error_fixes(tf_code, error_msg, row=None):
     extra_attrs = set()
     for pat in [
         r'Can\'t configure a value for "([^"]+)"',
@@ -2210,6 +2894,9 @@ def apply_error_fixes(tf_code, error_msg):
             extra_attrs.add(m)
     if extra_attrs:
         return sanitize_tf_code(tf_code, extra_unconfig_attrs=extra_attrs)
+    if "invalid value for name" in error_msg.lower():
+        fixed_lines = _sanitize_invalid_name_values(tf_code.splitlines())
+        return sanitize_tf_code("\n".join(fixed_lines))
     # Unsupported argument 오류일 경우 해당 인자 제거
     m = re.search(r"Error: Unsupported argument.*?\n.*?:\s+([A-Za-z0-9_]+)\s*=", error_msg, flags=re.DOTALL)
     if m:
@@ -2245,6 +2932,15 @@ def apply_error_fixes(tf_code, error_msg):
         return sanitize_tf_code(tf_code)
     # Missing required argument → sanitize 재적용 (visibility_config 등)
     if "Missing required argument" in error_msg:
+        m_attr = re.search(r'The argument "([^"]+)" is required', error_msg)
+        m_res = re.search(r'in resource "([^"]+)"', error_msg)
+        if m_attr and m_res:
+            attr = m_attr.group(1)
+            rtype = m_res.group(1)
+            value_expr = _infer_attr_value(attr, row, rtype)
+            if value_expr:
+                tf_code = _inject_required_attr(tf_code, rtype, attr, value_expr)
+                return sanitize_tf_code(tf_code)
         return sanitize_tf_code(tf_code)
     # Insufficient blocks (visibility_config 등) → sanitize 재적용
     if "Insufficient" in error_msg and "blocks" in error_msg:
@@ -2262,14 +2958,14 @@ def apply_error_fixes(tf_code, error_msg):
     return tf_code
 
 
-def validate_with_autofix(tf_code, max_auto_fixes=2):
+def validate_with_autofix(tf_code, max_auto_fixes=2, row=None):
     last_err = ""
     for _ in range(max_auto_fixes + 1):
         ok, err = validate_terraform(tf_code)
         if ok:
             return True, tf_code, ""
         last_err = err
-        fixed = apply_error_fixes(tf_code, err)
+        fixed = apply_error_fixes(tf_code, err, row=row)
         if fixed == tf_code:
             break
         tf_code = fixed
@@ -2440,12 +3136,23 @@ def fallback_from_iac_snippet(check_id, category=None):
 
 def make_remediation_prompt(row):
     """finding 정보를 기반으로 Terraform 생성 프롬프트를 구성."""
+    iam_guard = ""
+    if not ALLOW_IAM_CREATE:
+        iam_guard = (
+            "\nIAM Guardrails:\n"
+            "- Do NOT create IAM policies, roles, or instance profiles\n"
+            "- Use data sources to reference existing IAM resources\n"
+        )
     return f"""Generate Terraform code to fix this AWS security finding.
 
 Check ID: {row.get('check_id', '')}
 Title: {row.get('check_title', '')}
 Severity: {row.get('severity', '')}
 Resource UID: {row.get('resource_uid', '')}
+Resource ARN: {row.get('resource_arn', '')}
+Resource Name: {row.get('resource_name', '')}
+Resource Type: {row.get('resource_type', '')}
+Account ID: {row.get('account_id', '')}
 Region: {row.get('region', 'ap-northeast-2')}
 Recommendation: {row.get('recommendation_text', '')}
 
@@ -2456,6 +3163,9 @@ Requirements:
 - NEVER use "import" blocks
 - NEVER set computed/read-only attributes (arn, id, key_id, owner_id, creation_date, unique_id) in resource blocks
 - Avoid hardcoded ARNs/IDs in resource blocks; use data sources to look up existing resources when needed
+- Do NOT use placeholder names like "my-cloudtrail-bucket", "security-cloudtrail-logs", or "remediation-cloudtrail-bucket"
+- For CloudTrail/S3 findings, always use input variables (for example var.s3_bucket_name) instead of hardcoded bucket names
+- If existing resource identifiers are available in the finding, prefer those values over placeholders
 - Do NOT define data "aws_caller_identity" "current", data "aws_region" "current", or data "aws_partition" "current" — these are pre-provided by the framework. Just reference them directly (e.g., data.aws_caller_identity.current.account_id)
 - Include a single provider "aws" block for ap-northeast-2 region WITHOUT alias
 - NEVER use provider aliases (no "alias" in provider, no "provider = aws.xxx" in resources)
@@ -2477,6 +3187,7 @@ Requirements:
 - For aws_instance: either "ami" or "launch_template" must be specified
 - For launch_template blocks inside aws_instance: either "id" or "name" must be specified
 - Do NOT index set-type attributes directly (e.g., vpc_security_group_ids[0]). Use tolist() first: tolist(data.xxx.vpc_security_group_ids)[0]
+{iam_guard}
 
 Output the Terraform code:"""
 
@@ -2498,6 +3209,18 @@ unique_checks = high_priority.drop_duplicates(subset=['check_id'], keep='first')
 skipped_checks = [c for c in unique_checks['check_id'] if c in SKIP_CHECKS]
 unique_checks = unique_checks[~unique_checks['check_id'].isin(SKIP_CHECKS)]
 print(f"Unique check_ids: {len(unique_checks)} (skipped {len(skipped_checks)} non-terraform checks: {skipped_checks})")
+
+# 자동 적용 허용 목록 필터
+if AUTO_REMEDIATE_ALLOWLIST is None:
+    print("Auto-remediation allowlist: * (all checks enabled)")
+else:
+    before_count = len(unique_checks)
+    unique_checks = unique_checks[unique_checks["check_id"].isin(AUTO_REMEDIATE_ALLOWLIST)]
+    skipped_by_allowlist = before_count - len(unique_checks)
+    print(
+        f"Auto-remediation allowlist enabled: {len(AUTO_REMEDIATE_ALLOWLIST)} checks "
+        f"(filtered out {skipped_by_allowlist})"
+    )
 
 # 생성 결과/통계
 generated = []
@@ -2545,21 +3268,21 @@ for _, row in unique_checks.iterrows():
             print(f"Fallback IaC snippet used for: {check_id}")
 
     if tf_code:
-        tf_code = sanitize_tf_code(tf_code)
+        tf_code = sanitize_tf_code(tf_code, row=row)
 
         if not tf_code:
             print(f"SKIP (generated code was empty after cleanup): {check_id}")
             continue
 
         # 생성 코드 검증 + 자동 수정(가드레일) 적용
-        ok, tf_code, err = validate_with_autofix(tf_code)
+        ok, tf_code, err = validate_with_autofix(tf_code, row=row)
 
         # Bedrock 코드가 실패하면 IaC 스니펫으로 재시도
         if not ok and source == "bedrock":
             fallback = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # 체크 ID/카테고리 스니펫 조회
             if fallback:
-                fb_code = sanitize_tf_code(fallback)
-                ok, fb_code, err = validate_with_autofix(fb_code)
+                fb_code = sanitize_tf_code(fallback, row=row)
+                ok, fb_code, err = validate_with_autofix(fb_code, row=row)
                 if ok:
                     tf_code = fb_code
                     source = "iac_snippet"
@@ -2571,20 +3294,28 @@ for _, row in unique_checks.iterrows():
                 fix_response = call_bedrock(make_fix_prompt(original_prompt, tf_code, err))
                 if not fix_response:
                     continue
-                tf_code = sanitize_tf_code(fix_response)
-                ok, tf_code, err = validate_with_autofix(tf_code)
+                tf_code = sanitize_tf_code(fix_response, row=row)
+                ok, tf_code, err = validate_with_autofix(tf_code, row=row)
                 if ok:
                     print(f"  validate OK (attempt {attempt})")
                     break
 
         if not ok:
-            print(f"SKIP {check_id}: failed validation after {MAX_RETRIES} attempts")
-            continue
+            if ALLOW_SKIP:
+                print(f"SKIP {check_id}: failed validation after {MAX_RETRIES} attempts")
+                continue
+            tf_code = _fallback_stub(row, err)
+            ok, tf_code, _ = validate_with_autofix(tf_code, row=row)
+            source = "fallback_stub"
 
         # resource/data 블록이 하나도 없으면 skip (주석만 남은 경우)
         if not re.search(r'^\s*(resource|data)\s+"', tf_code, re.MULTILINE):
-            print(f"SKIP (no resource/data blocks after sanitize): {check_id}")
-            continue
+            if ALLOW_SKIP:
+                print(f"SKIP (no resource/data blocks after sanitize): {check_id}")
+                continue
+            tf_code = _fallback_stub(row, "no resource/data blocks")
+            ok, tf_code, _ = validate_with_autofix(tf_code, row=row)
+            source = "fallback_stub"
 
         # singleton 통합 대상이면 하나의 파일로 병합
         raw_check_id = str(row.get('check_id', ''))

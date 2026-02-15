@@ -53,6 +53,30 @@ def extract_blocks(text):
                     current_lines = []
                     depth = 0
                 continue
+            # variable "name" { ... }
+            mv = re.match(r'^\s*variable\s+"([^"]+)"\s*\{', line)
+            if mv:
+                current_sig = ("variable", mv.group(1))
+                current_lines = [line]
+                depth = line.count('{') - line.count('}')
+                if depth <= 0:
+                    blocks.append((current_sig, "\n".join(current_lines)))
+                    current_sig = None
+                    current_lines = []
+                    depth = 0
+                continue
+            # locals { ... }
+            ml = re.match(r'^\s*locals\s*\{', line)
+            if ml:
+                current_sig = ("locals",)
+                current_lines = [line]
+                depth = line.count('{') - line.count('}')
+                if depth <= 0:
+                    blocks.append((current_sig, "\n".join(current_lines)))
+                    current_sig = None
+                    current_lines = []
+                    depth = 0
+                continue
             # Non-block line at depth 0 (comments, blank lines)
             blocks.append((None, line))
         else:
@@ -88,12 +112,16 @@ def dedup_directory(directory):
         kept = []
         for sig, content in blocks:
             if sig is not None:
-                kind, rtype, name = sig
-                dedup_key = sig
-                if kind == "resource" and rtype in SINGLETON_RESOURCE_TYPES:
-                    dedup_key = (kind, rtype)
+                if sig[0] in ("variable", "locals"):
+                    # variable ("variable", name) / locals ("locals",)
+                    dedup_key = sig
+                else:
+                    kind, rtype, name = sig
+                    dedup_key = sig
+                    if kind == "resource" and rtype in SINGLETON_RESOURCE_TYPES:
+                        dedup_key = (kind, rtype)
                 if dedup_key in seen_sigs:
-                    continue  # duplicate ??skip
+                    continue  # duplicate — skip
                 seen_sigs.add(dedup_key)
             kept.append(content)
 
