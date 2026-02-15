@@ -33,7 +33,9 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": []
+    "sanitizers_applied": [
+      "_fix_incorrect_tolist_usage"
+    ]
   },
   {
     "check_id": "ec2_instance_paravirtual_type",
@@ -57,7 +59,9 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": []
+    "sanitizers_applied": [
+      "_fix_invalid_ec2_resource_type"
+    ]
   },
   {
     "check_id": "ec2_instance_public_ip",
@@ -160,6 +164,18 @@
     "check_title": "VPC has an Amazon EC2 VPC endpoint",
     "output_path": "network-ec2-vpc/fix-vpc_endpoint_for_ec2_enabled.tf",
     "file": "network-ec2-vpc/fix-vpc_endpoint_for_ec2_enabled.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "vpc_flow_logs_enabled",
+    "check_title": "VPC flow logs are enabled",
+    "output_path": "network-ec2-vpc/fix-vpc_flow_logs_enabled.tf",
+    "file": "network-ec2-vpc/fix-vpc_flow_logs_enabled.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
