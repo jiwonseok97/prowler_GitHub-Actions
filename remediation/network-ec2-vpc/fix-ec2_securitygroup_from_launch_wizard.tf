@@ -26,27 +26,20 @@ resource "aws_security_group" "remediation_sg" {
 }
 
 # Use the new security group in the existing EC2 instance
-
-resource "aws_network_interface_sg_attachment" "remediation_sg_attachment" {
-  security_group_id    = aws_security_group.remediation_sg.id
-  network_interface_id = var.network_interface_id
-}
-
-# Optionally, you can also create a new EC2 instance with the remediation security group
-resource "aws_instance" "remediation_instance" {
-  ami                    = "ami-0c94755bb95c71c99"
+resource "aws_instance" "remediation_existing_instance" {
+  ami                    = var.ami_id
   instance_type          = "t2.micro"
   vpc_security_group_ids = [aws_security_group.remediation_sg.id]
 
   tags = {
-    Name = "remediation-instance"
+    Name = "existing-instance"
   }
 }
 
-# Look up the default VPC
+# Data sources to look up existing resources
 
-variable "network_interface_id" {
-  description = "Target network interface ID"
+variable "ami_id" {
+  description = "AMI ID for new or managed instances"
   type        = string
   default     = ""
 }
