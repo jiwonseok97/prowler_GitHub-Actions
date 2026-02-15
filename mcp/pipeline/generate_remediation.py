@@ -3436,15 +3436,48 @@ def _terraform_fmt(tf_code):
 
 def make_fix_prompt(original_prompt, tf_code, error_msg):
     """검증 실패 에러를 포함해 재생성용 프롬프트를 구성."""
-    return f"""{original_prompt}
+    return f"""You are a senior Terraform engineer.
 
-The previous attempt generated this code:
+Task:
+Fix Terraform remediation code so it passes `terraform validate` with minimal, production-safe changes.
+Do not change remediation intent.
+
+Output rules:
+- Output ONLY valid HCL (no markdown, no explanation).
+- Do NOT add `provider`, `terraform`, or `backend` blocks.
+- Do NOT declare these framework-provided data sources:
+  - data.aws_caller_identity.current
+  - data.aws_region.current
+  - data.aws_partition.current
+- Do NOT hardcode placeholder values (e.g., my-cloudtrail-bucket, security-cloudtrail-logs).
+  Use variables (`var.*`) for real infrastructure identifiers.
+
+Auto-fix rules:
+1) Undeclared references:
+- If referencing existing infra (VPC, subnet, IAM instance profile, SG, etc.), prefer `variable + data` pattern.
+- Add required variable blocks with explicit types.
+
+2) Missing data source declarations:
+- Add correct `data "aws_*"` blocks and required input variables.
+
+3) List/type mismatch (e.g., tolist(var.string)):
+- Fix type consistency safely:
+  - use `list(string)` when appropriate, or
+  - wrap single string as `[var.name]`.
+
+4) Malformed/truncated HCL:
+- Close all blocks, remove invalid expressions, keep minimal valid structure.
+
+Safety:
+- Never fabricate infrastructure values.
+- If a safe deterministic fix is not possible, return the minimal valid HCL version with unsafe parts removed.
+
+Previous generated code:
 {tf_code}
 
-But terraform validate returned this error:
+terraform validate error:
 {error_msg}
-
-Fix the code to resolve this error. Output ONLY the corrected Terraform HCL code, nothing else."""
+"""
 
 
 def _read_snippet_file(path):
