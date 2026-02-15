@@ -2921,7 +2921,7 @@ def _merge_sanitize_flags(base, extra):
 
 def _fix_invalid_ec2_resource_type(code):
     """Replace invalid aws_ec2_instance resource type with aws_instance."""
-    pattern = r'^(\s*resource\s+")aws_ec2_instance("'
+    pattern = r'^(\s*resource\s+")aws_ec2_instance(")'
     fixed, count = re.subn(pattern, r"\1aws_instance\2", code, flags=re.MULTILINE)
     flags = {"exclude": False, "exclude_reason": "", "sanitizers_applied": []}
     if count > 0:
