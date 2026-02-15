@@ -390,9 +390,10 @@ jobs:
             BRANCH="remediation/$CATEGORY"
             git checkout -B "$BRANCH" main
 
-            # main에서 상속된 다른 카테고리 remediation 파일 제거
-            git rm -rf "remediation/$CATEGORY/" remediation/manifest.json 2>/dev/null || true
+            # main에서 상속된 같은 카테고리 remediation 파일만 정리
+            git rm -rf "remediation/$CATEGORY/" "remediation/manifests/$CATEGORY.json" 2>/dev/null || true
             mkdir -p "remediation/$CATEGORY"
+            mkdir -p "remediation/manifests"
             for fname in $CAT_FILES; do
               if [ -f "$TMPGEN/$fname" ]; then
                 cp "$TMPGEN/$fname" "remediation/$fname"
@@ -400,16 +401,27 @@ jobs:
               fi
             done
 
-            # 카테고리별 manifest 생성 (머지 충돌 방지)
+            # 카테고리별 manifest 생성 (머지 충돌 방지: shared remediation/manifest.json 미사용)
             python3 -c "
-          import json
+          import json, os
           with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
-          filtered = [i for i in items if i.get('category') == '$CATEGORY']
-          with open('remediation/manifest.json', 'w') as f:
+          filtered = []
+          for i in items:
+              if i.get('category') != '$CATEGORY':
+                  continue
+              p = str(i.get('file') or i.get('output_path') or '').strip()
+              if not p:
+                  continue
+              if i.get('validation_status') == 'excluded':
+                  continue
+              if not os.path.exists(os.path.join('$TMPGEN', p)):
+                  continue
+              filtered.append(i)
+          with open('remediation/manifests/$CATEGORY.json', 'w') as f:
               json.dump(filtered, f, indent=2)
           "
-            git add remediation/manifest.json
+            git add "remediation/manifests/$CATEGORY.json"
 
             if [ -z "$(git diff --cached --name-only)" ]; then
               echo "No changes for $CATEGORY; skipping."
@@ -424,11 +436,18 @@ jobs:
             EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
             if [ -z "$EXISTING_PR" ]; then
               PR_BODY=$(python3 -c "
-          import json
+          import json, os
           with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
           lines = ['## Category: \`$CATEGORY\`', '', 'Auto-generated Terraform remediation from Prowler pipeline.', '', '**Files:** $FILE_COUNT remediation(s)', '', '### Included checks:']
           for item in items:
+              if item.get('category') != '$CATEGORY':
+                  continue
+              if item.get('validation_status') == 'excluded':
+                  continue
+              p = str(item.get('file') or item.get('output_path') or '').strip()
+              if not p or not os.path.exists(os.path.join('$TMPGEN', p)):
+                  continue
               if item['category'] == '$CATEGORY':
                   lines.append(f\"- [{item['priority']}] {item['check_title']} (\`{item['check_id']}\`)\")
           print('\n'.join(lines))
