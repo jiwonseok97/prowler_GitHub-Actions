@@ -1669,6 +1669,51 @@ def _fix_set_indexing(lines):
     return out
 
 
+def _fix_spurious_index(lines):
+    """count/for_each가 없는 리소스에 대한 [0] 인덱스를 제거.
+
+    AI가 aws_eip.nat_eip[0].id 같은 참조를 생성하지만 해당 리소스에
+    count가 없으면 Terraform validate가 실패한다.
+    """
+    # 1) count 또는 for_each가 있는 리소스/데이터 블록 수집
+    has_count = set()
+    for line in lines:
+        m = re.match(r'^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+        if m:
+            _cur_block = (m.group(1), m.group(2), m.group(3))
+        if re.match(r'^\s*(count|for_each)\s*=', line):
+            if _cur_block:
+                has_count.add(_cur_block)
+    # 2) [0] 참조에서 해당 리소스가 count가 없으면 인덱스 제거
+    out = []
+    _cur_block = None
+    for line in lines:
+        m = re.match(r'^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
+        if m:
+            _cur_block = (m.group(1), m.group(2), m.group(3))
+        # aws_xxx.yyy[0].attr 또는 data.aws_xxx.yyy[0].attr 패턴
+        def _strip_idx(match):
+            prefix = match.group(1)
+            rtype = match.group(2)
+            rname = match.group(3)
+            suffix = match.group(4)
+            # data.xxx.yyy[0] 형태
+            if prefix.startswith("data."):
+                key = ("data", rtype, rname)
+            else:
+                key = ("resource", rtype, rname)
+            if key not in has_count:
+                return f"{prefix}{rtype}.{rname}{suffix}"
+            return match.group(0)
+        line = re.sub(
+            r'((?:data\.)?)(aws_\w+)\.(\w+)\[0\](\.\w+)',
+            _strip_idx,
+            line,
+        )
+        out.append(line)
+    return out
+
+
 def _fix_deprecated_interpolation(lines):
     """Interpolation-only 표현식을 단순 참조로 변환.
 
@@ -3077,6 +3122,8 @@ def sanitize_tf_code_v2(code, extra_unconfig_attrs=None, row=None):
     lines = _fix_deprecated_resource_types(lines)
     # set 인덱싱 오류 수정
     lines = _fix_set_indexing(lines)
+    # count/for_each 없는 리소스의 [0] 인덱스 제거
+    lines = _fix_spurious_index(lines)
     # deprecated interpolation-only 표현식 수정
     lines = _fix_deprecated_interpolation(lines)
     # deprecated S3 bucket 속성 제거 (acl, inline encryption)
