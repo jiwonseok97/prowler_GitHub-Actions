@@ -2904,9 +2904,149 @@ def _auto_declare_variables(lines):
     return out
 
 
-def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
+def _merge_sanitize_flags(base, extra):
+    """Merge sanitizer flags deterministically."""
+    out = dict(base or {})
+    extra = extra or {}
+    out["exclude"] = bool(out.get("exclude")) or bool(extra.get("exclude"))
+    if extra.get("exclude_reason"):
+        out["exclude_reason"] = str(extra.get("exclude_reason", "")).strip()
+    applied = list(out.get("sanitizers_applied", []))
+    for name in extra.get("sanitizers_applied", []) or []:
+        if name not in applied:
+            applied.append(name)
+    out["sanitizers_applied"] = applied
+    return out
+
+
+def _fix_invalid_ec2_resource_type(code):
+    """Replace invalid aws_ec2_instance resource type with aws_instance."""
+    pattern = r'^(\s*resource\s+")aws_ec2_instance("'
+    fixed, count = re.subn(pattern, r"\1aws_instance\2", code, flags=re.MULTILINE)
+    flags = {"exclude": False, "exclude_reason": "", "sanitizers_applied": []}
+    if count > 0:
+        flags["sanitizers_applied"].append("_fix_invalid_ec2_resource_type")
+    return fixed, flags
+
+
+def _remove_invalid_variable_defaults(code):
+    """Remove default = var.* lines inside variable blocks."""
+    lines = code.splitlines()
+    out = []
+    in_var = False
+    brace = 0
+    changed = False
+    for line in lines:
+        if not in_var:
+            if re.match(r'^\s*variable\s+"[^"]+"\s*\{', line):
+                in_var = True
+                brace = _brace_delta(line)
+            out.append(line)
+            continue
+        if re.match(r'^\s*default\s*=\s*var\.[A-Za-z_][A-Za-z0-9_]*\s*(#.*)?$', line):
+            changed = True
+            brace += _brace_delta(line)
+            if brace <= 0:
+                in_var = False
+                brace = 0
+            continue
+        out.append(line)
+        brace += _brace_delta(line)
+        if brace <= 0:
+            in_var = False
+            brace = 0
+    flags = {"exclude": False, "exclude_reason": "", "sanitizers_applied": []}
+    if changed:
+        flags["sanitizers_applied"].append("_remove_invalid_variable_defaults")
+    return "\n".join(out), flags
+
+
+def _fix_incorrect_tolist_usage(code):
+    """Fix unsafe tolist(var.instance_id) patterns with deterministic behavior."""
+    lines = code.splitlines()
+    out = []
+    replaced = False
+    removed = False
+    for line in lines:
+        if "tolist(var.instance_id)" not in line:
+            out.append(line)
+            continue
+        m = re.match(r'^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$', line)
+        if m and m.group(2) == "vpc_security_group_ids":
+            out.append(f"{m.group(1)}vpc_security_group_ids = var.vpc_security_group_ids")
+            replaced = True
+        else:
+            # Unsafe mapping: remove and force exclusion.
+            removed = True
+    fixed = "\n".join(out)
+    if replaced and not re.search(r'^\s*variable\s+"vpc_security_group_ids"\s*\{', fixed, re.MULTILINE):
+        fixed = (
+            fixed.rstrip()
+            + "\n\n"
+            + 'variable "vpc_security_group_ids" {\n'
+            + "  type = list(string)\n"
+            + "}\n"
+        )
+    flags = {"exclude": False, "exclude_reason": "", "sanitizers_applied": []}
+    if replaced:
+        flags["sanitizers_applied"].append("_fix_incorrect_tolist_usage")
+    if removed:
+        flags["exclude"] = True
+        flags["exclude_reason"] = "unsafe mapping: tolist(var.instance_id)"
+        if "_fix_incorrect_tolist_usage" not in flags["sanitizers_applied"]:
+            flags["sanitizers_applied"].append("_fix_incorrect_tolist_usage")
+    return fixed, flags
+
+
+def _has_unterminated_double_quote(code):
+    escaped = False
+    in_quote = False
+    for ch in code:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if ch == '"':
+            in_quote = not in_quote
+    return in_quote
+
+
+def _normalize_block_termination(code):
+    """Try minimal brace correction; mark malformed/truncated content for exclusion."""
+    opens = code.count("{")
+    closes = code.count("}")
+    fixed = code
+    flags = {"exclude": False, "exclude_reason": "", "sanitizers_applied": []}
+    if opens > closes:
+        fixed = fixed.rstrip() + "\n" + ("}\n" * (opens - closes))
+        flags["sanitizers_applied"].append("_normalize_block_termination")
+    elif closes > opens:
+        flags["exclude"] = True
+        flags["exclude_reason"] = "malformed/truncated HCL"
+        flags["sanitizers_applied"].append("_normalize_block_termination")
+        return fixed, flags
+
+    if _has_unterminated_double_quote(fixed):
+        flags["exclude"] = True
+        flags["exclude_reason"] = "malformed/truncated HCL"
+        if "_normalize_block_termination" not in flags["sanitizers_applied"]:
+            flags["sanitizers_applied"].append("_normalize_block_termination")
+        return fixed, flags
+
+    if fixed.count("{") != fixed.count("}"):
+        flags["exclude"] = True
+        flags["exclude_reason"] = "malformed/truncated HCL"
+        if "_normalize_block_termination" not in flags["sanitizers_applied"]:
+            flags["sanitizers_applied"].append("_normalize_block_termination")
+    return fixed, flags
+
+
+def sanitize_tf_code_v2(code, extra_unconfig_attrs=None, row=None):
     if not code:
-        return ""
+        return "", {"exclude": False, "exclude_reason": "", "sanitizers_applied": []}
+    sanitize_flags = {"exclude": False, "exclude_reason": "", "sanitizers_applied": []}
     code = _strip_code_fences(code)
     lines = code.splitlines()
     lines = _comment_explanations(lines)
@@ -2931,6 +3071,14 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     lines = _strip_unsupported_data_sources(lines)
     # 실제 인프라를 가정하는 unsafe data source 제거 + variable 참조로 치환
     lines = _remove_unsafe_data_sources(lines)
+    code = "\n".join(lines)
+    code, flags = _fix_invalid_ec2_resource_type(code)
+    sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
+    code, flags = _remove_invalid_variable_defaults(code)
+    sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
+    code, flags = _fix_incorrect_tolist_usage(code)
+    sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
+    lines = code.splitlines()
     # provider 스키마 기반 computed-only 속성 제거
     lines = _strip_schema_computed_attrs(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
@@ -2956,8 +3104,6 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     lines = _ensure_sns_topic_policy_arn(lines)
     # aws_kms_key_policy key_id 누락 보정
     lines = _ensure_kms_key_policy_key_id(lines)
-    # KMS alias name 보정 (alias/ 접두어 보장)
-    lines = _fix_kms_alias_name(lines)
     # aws_cloudwatch_metric_alarm evaluation_periods 누락 보정
     lines = _ensure_cloudwatch_alarm_required_attrs(lines)
     # WAFv2 visibility_config 누락 보정
@@ -3006,19 +3152,32 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     lines = _ensure_flow_log_target(lines)
     # 선언 없이 참조된 variable 자동 선언
     lines = _auto_declare_variables(lines)
+    code = "\n".join(lines)
     # 미닫힌 따옴표 보정
-    lines = _repair_unbalanced_quotes(lines)
+    code = "\n".join(_repair_unbalanced_quotes(code.splitlines()))
     # 괄호/대괄호 균형 보정
-    lines = _balance_parens_brackets(lines)
-    # 중괄호 균형 보정
-    lines = _balance_braces(lines)
+    code = "\n".join(_balance_parens_brackets(code.splitlines()))
+    # KMS alias name 보정 (alias/ 접두어 보장)
+    code = "\n".join(_fix_kms_alias_name(code.splitlines()))
+    # 중괄호 균형/블록 종료 보정 및 malformed 감지
+    code, flags = _normalize_block_termination(code)
+    sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
 
+    lines = code.splitlines()
     # 앞/뒤 공백 라인 제거
     while lines and lines[0].strip() == "":
         lines.pop(0)
     while lines and lines[-1].strip() == "":
         lines.pop()
-    return "\n".join(lines).strip()
+    sanitized = "\n".join(lines).rstrip()
+    if sanitized:
+        sanitized += "\n"
+    return sanitized, sanitize_flags
+
+
+def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
+    """Legacy wrapper: keep existing callers receiving string output only."""
+    return sanitize_tf_code_v2(code, extra_unconfig_attrs=extra_unconfig_attrs, row=row)[0]
 
 
 def apply_error_fixes(tf_code, error_msg, row=None):
@@ -3107,6 +3266,29 @@ def validate_with_autofix(tf_code, max_auto_fixes=2, row=None):
             break
         tf_code = fixed
     return False, tf_code, last_err
+
+
+def _normalize_terraform_error(error_msg, max_len=200):
+    """Normalize terraform errors deterministically for manifest logging."""
+    msg = str(error_msg or "")
+    if not msg.strip():
+        return "terraform validate failed"
+    lines = []
+    for raw in msg.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        # remove noisy prefixes and temp paths
+        line = re.sub(r'^[0-9T:\-\.]+Z?\s*', "", line)
+        line = re.sub(r'[A-Za-z]:\\\\[^ ]+|/tmp/[^ ]+|/var/folders/[^ ]+', "<path>", line)
+        if line not in lines:
+            lines.append(line)
+        if len(lines) >= 2:
+            break
+    normalized = " | ".join(lines) if lines else "terraform validate failed"
+    if len(normalized) > max_len:
+        normalized = normalized[:max_len].rstrip()
+    return normalized
 
 
 def categorize_check_id(check_id: str) -> str:
@@ -3387,6 +3569,23 @@ generated = []
 bedrock_failures = 0
 _consolidated_files_written = set()   # CONSOLIDATE_CHECKS용: 이미 기록한 파일 추적
 
+
+def _manifest_entry(row, category, source, output_path, validation_status="ok", error_message="", sanitizers_applied=None):
+    # output_path is canonical; file is deprecated alias for workflow compatibility.
+    return {
+        'check_id': row.get('check_id'),
+        'check_title': row.get('check_title'),
+        'output_path': output_path,
+        'file': output_path,
+        'priority': row.get('priority'),
+        'category': category,
+        'source': source,
+        'validation_status': validation_status,
+        'error_message': error_message,
+        'sanitizers_applied': list(sanitizers_applied or []),
+    }
+
+
 for _, row in unique_checks.iterrows():
     # check_id를 파일명에 안전하게 사용하도록 문자 치환
     check_id = str(row.get('check_id', 'unknown')).replace('/', '-').replace(':', '-')
@@ -3428,10 +3627,34 @@ for _, row in unique_checks.iterrows():
             print(f"Fallback IaC snippet used for: {check_id}")
 
     if tf_code:
-        tf_code = sanitize_tf_code(tf_code, row=row)
+        tf_code, sanitize_flags = sanitize_tf_code_v2(tf_code, row=row)
 
         if not tf_code:
             print(f"SKIP (generated code was empty after cleanup): {check_id}")
+            continue
+
+        filename = f"fix-{check_id}.tf"
+        raw_check_id = str(row.get('check_id', ''))
+        consolidated_file = CONSOLIDATE_CHECKS.get(raw_check_id)
+        if consolidated_file:
+            filename = consolidated_file
+        rel_file = f"{category}/{filename}"
+
+        # Exclusion must be enforced before writing candidate file.
+        if sanitize_flags.get("exclude"):
+            reason = sanitize_flags.get("exclude_reason", "excluded by sanitizer")
+            generated.append(
+                _manifest_entry(
+                    row=row,
+                    category=category,
+                    source=source,
+                    output_path=rel_file,
+                    validation_status="excluded",
+                    error_message=reason,
+                    sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
+                )
+            )
+            print(f"SKIP {check_id}: {reason}")
             continue
 
         # terraform fmt로 포맷팅
@@ -3444,11 +3667,16 @@ for _, row in unique_checks.iterrows():
         if not ok and source == "bedrock":
             fallback = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # 체크 ID/카테고리 스니펫 조회
             if fallback:
-                fb_code = sanitize_tf_code(fallback, row=row)
-                ok, fb_code, err = validate_with_autofix(fb_code, row=row)
-                if ok:
-                    tf_code = fb_code
-                    source = "iac_snippet"
+                fb_code, fb_flags = sanitize_tf_code_v2(fallback, row=row)
+                sanitize_flags = _merge_sanitize_flags(sanitize_flags, fb_flags)
+                if sanitize_flags.get("exclude"):
+                    ok = False
+                    err = sanitize_flags.get("exclude_reason", "excluded by sanitizer")
+                else:
+                    ok, fb_code, err = validate_with_autofix(fb_code, row=row)
+                    if ok:
+                        tf_code = fb_code
+                        source = "iac_snippet"
 
         # 여전히 실패하면 Bedrock 수정 요청 재시도
         if not ok:
@@ -3457,7 +3685,12 @@ for _, row in unique_checks.iterrows():
                 fix_response = call_bedrock(make_fix_prompt(original_prompt, tf_code, err))
                 if not fix_response:
                     continue
-                tf_code = sanitize_tf_code(fix_response, row=row)
+                tf_code, retry_flags = sanitize_tf_code_v2(fix_response, row=row)
+                sanitize_flags = _merge_sanitize_flags(sanitize_flags, retry_flags)
+                if sanitize_flags.get("exclude"):
+                    err = sanitize_flags.get("exclude_reason", "excluded by sanitizer")
+                    ok = False
+                    break
                 tf_code = _terraform_fmt(tf_code)
                 ok, tf_code, err = validate_with_autofix(tf_code, row=row)
                 if ok:
@@ -3465,43 +3698,55 @@ for _, row in unique_checks.iterrows():
                     break
 
         if not ok:
-            if ALLOW_SKIP:
-                print(f"SKIP {check_id}: failed validation after {MAX_RETRIES} attempts")
-                continue
-            tf_code = _fallback_stub(row, err)
-            ok, tf_code, _ = validate_with_autofix(tf_code, row=row)
-            source = "fallback_stub"
+            generated.append(
+                _manifest_entry(
+                    row=row,
+                    category=category,
+                    source=source,
+                    output_path=rel_file,
+                    validation_status="excluded",
+                    error_message=_normalize_terraform_error(err),
+                    sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
+                )
+            )
+            print(f"SKIP {check_id}: plan/validate failed")
+            continue
 
         # resource/data 블록이 하나도 없으면 skip (주석만 남은 경우)
         if not re.search(r'^\s*(resource|data)\s+"', tf_code, re.MULTILINE):
-            if ALLOW_SKIP:
-                print(f"SKIP (no resource/data blocks after sanitize): {check_id}")
-                continue
-            tf_code = _fallback_stub(row, "no resource/data blocks")
-            ok, tf_code, _ = validate_with_autofix(tf_code, row=row)
-            source = "fallback_stub"
+            generated.append(
+                _manifest_entry(
+                    row=row,
+                    category=category,
+                    source=source,
+                    output_path=rel_file,
+                    validation_status="excluded",
+                    error_message="no resource/data blocks",
+                    sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
+                )
+            )
+            print(f"SKIP {check_id}: no resource/data blocks")
+            continue
 
         # singleton 통합 대상이면 하나의 파일로 병합
-        raw_check_id = str(row.get('check_id', ''))
-        consolidated_file = CONSOLIDATE_CHECKS.get(raw_check_id)
         if consolidated_file:
-            filename = consolidated_file
             tracking_key = f"{category}/{filename}"
             if tracking_key in _consolidated_files_written:
                 # 이미 기록됨 → manifest에만 추가
-                generated.append({
-                    'check_id': row.get('check_id'),
-                    'check_title': row.get('check_title'),
-                    'file': tracking_key,
-                    'priority': row.get('priority'),
-                    'category': category,
-                    'source': source
-                })
+                generated.append(
+                    _manifest_entry(
+                        row=row,
+                        category=category,
+                        source=source,
+                        output_path=tracking_key,
+                        validation_status="ok",
+                        error_message="",
+                        sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
+                    )
+                )
                 print(f"Consolidated (already written): {check_id} -> {tracking_key}")
                 continue
             _consolidated_files_written.add(tracking_key)
-        else:
-            filename = f"fix-{check_id}.tf"
 
         # .tf 파일로 카테고리 서브폴더에 저장
         category_dir = os.path.join(args.output_dir, category)
@@ -3509,15 +3754,17 @@ for _, row in unique_checks.iterrows():
         filepath = os.path.join(category_dir, filename)
         with open(filepath, 'w') as f:
             f.write(tf_code.rstrip('\n') + '\n')
-        rel_file = f"{category}/{filename}"
-        generated.append({
-            'check_id': row.get('check_id'),
-            'check_title': row.get('check_title'),
-            'file': rel_file,
-            'priority': row.get('priority'),
-            'category': category,
-            'source': source
-        })
+        generated.append(
+            _manifest_entry(
+                row=row,
+                category=category,
+                source=source,
+                output_path=rel_file,
+                validation_status="ok",
+                error_message="",
+                sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
+            )
+        )
         print(f"Generated: {filename}")
     else:
         print(f"SKIP (no Bedrock response and no IaC snippet): {check_id}")
