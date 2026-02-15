@@ -1,0 +1,14 @@
+[
+  {
+    "check_id": "organizations_opt_out_ai_services_policy",
+    "check_title": "AWS Organization has opted out of all AI services and child accounts cannot override the policy",
+    "output_path": "org-account/fix-organizations_opt_out_ai_services_policy.tf",
+    "file": "org-account/fix-organizations_opt_out_ai_services_policy.tf",
+    "priority": "P2",
+    "category": "org-account",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  }
+]
