@@ -1,0 +1,110 @@
+[
+  {
+    "check_id": "iam_customer_unattached_policy_no_administrative_privileges",
+    "check_title": "Unattached customer managed IAM policy does not allow '*:*' administrative privileges",
+    "output_path": "iam/fix-iam_customer_unattached_policy_no_administrative_privileges.tf",
+    "file": "iam/fix-iam_customer_unattached_policy_no_administrative_privileges.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "iam_password_policy_expires_passwords_within_90_days_or_less",
+    "check_title": "IAM account password policy enforces password expiration within 90 days or less",
+    "output_path": "iam/fix-iam_password_policy.tf",
+    "file": "iam/fix-iam_password_policy.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "iam_password_policy_minimum_length_14",
+    "check_title": "IAM password policy requires passwords to be at least 14 characters long",
+    "output_path": "iam/fix-iam_password_policy.tf",
+    "file": "iam/fix-iam_password_policy.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "iam_password_policy_number",
+    "check_title": "IAM password policy requires at least one number",
+    "output_path": "iam/fix-iam_password_policy.tf",
+    "file": "iam/fix-iam_password_policy.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "iam_password_policy_reuse_24",
+    "check_title": "IAM password policy prevents reuse of the last 24 passwords",
+    "output_path": "iam/fix-iam_password_policy.tf",
+    "file": "iam/fix-iam_password_policy.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "iam_password_policy_symbol",
+    "check_title": "IAM password policy requires at least one symbol",
+    "output_path": "iam/fix-iam_password_policy.tf",
+    "file": "iam/fix-iam_password_policy.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "iam_password_policy_uppercase",
+    "check_title": "IAM password policy requires at least one uppercase letter",
+    "output_path": "iam/fix-iam_password_policy.tf",
+    "file": "iam/fix-iam_password_policy.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "iam_policy_no_full_access_to_cloudtrail",
+    "check_title": "Customer managed IAM policy does not allow cloudtrail:* privileges",
+    "output_path": "iam/fix-iam_policy_no_full_access_to_cloudtrail.tf",
+    "file": "iam/fix-iam_policy_no_full_access_to_cloudtrail.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "iam_policy_no_full_access_to_kms",
+    "check_title": "Custom IAM policy does not allow 'kms:*' privileges",
+    "output_path": "iam/fix-iam_policy_no_full_access_to_kms.tf",
+    "file": "iam/fix-iam_policy_no_full_access_to_kms.tf",
+    "priority": "P2",
+    "category": "iam",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  }
+]
