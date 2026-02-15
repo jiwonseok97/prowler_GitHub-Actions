@@ -1,7 +1,7 @@
 # CIS AWS Foundations Benchmark - Account password policy
 # Covers: expires_passwords, minimum_length_14, number, reuse_24, symbol, uppercase
 
-resource "aws_iam_account_password_policy" "remediation_account_password_policy" {
+resource "aws_iam_account_password_policy" "remediation_password_policy" {
   minimum_password_length        = 14
   require_uppercase_characters   = true
   require_lowercase_characters   = true
