@@ -1,43 +1,33 @@
-# Create an AWS Backup plan to protect the EBS volume
+#
+# Remediate the finding by including the EBS volume in an AWS Backup plan
+#
+
+resource "aws_backup_vault" "remediation_backup_vault" {
+  name = "remediation-backup-vault"
+}
+
 resource "aws_backup_plan" "remediation_backup_plan" {
   name = "remediation-backup-plan"
 
   rule {
-    rule_name         = "daily-backup"
+    rule_name         = "remediation-backup-rule"
     target_vault_name = aws_backup_vault.remediation_backup_vault.name
-    schedule          = "cron(0 5 ? * MON-FRI *)"
+    schedule          = "cron(0 5 ? * MON *)"
     start_window      = 60
     completion_window = 360
   }
 
   tags = {
     Environment = "production"
-    Backup      = "enabled"
   }
 }
 
-# Create an AWS Backup vault to store the backups
-resource "aws_backup_vault" "remediation_backup_vault" {
-  name = "remediation-backup-vault"
-
-  kms_key_arn = aws_kms_key.remediation_kms_key.arn
-}
-
-# Create a KMS key to encrypt the backup vault
-resource "aws_kms_key" "remediation_kms_key" {
-  description             = "Remediation KMS key for Backup Vault"
-  deletion_window_in_days = 10
-}
-
-# Add the EBS volume to the backup plan
 resource "aws_backup_selection" "remediation_backup_selection" {
-  iam_role_arn = var.iam_role_arn
-  name = "remediation-backup-selection"
+  name         = "remediation-backup-selection"
+  iam_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-backup-role"
   plan_id      = aws_backup_plan.remediation_backup_plan.id
-}
 
-variable "iam_role_arn" {
-  description = "iam_role_arn"
-  type        = string
-  default     = ""
+  resources = [
+    "arn:aws:ec2:ap-northeast-2:${data.aws_caller_identity.current.account_id}:volume/vol-0278f268cad754e55",
+  ]
 }

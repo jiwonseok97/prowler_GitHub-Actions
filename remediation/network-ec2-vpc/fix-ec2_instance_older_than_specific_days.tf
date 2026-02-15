@@ -1,42 +1,40 @@
-# Modify the existing EC2 instance to set a new maximum age
+#
+# Remediate the EC2 instance that is not older than the configured maximum age or is not running
+#
+
 resource "aws_instance" "remediation_ec2_instance" {
-  ami           = var.ami_id
-  instance_type = "t2.micro"
+  ami                    = var.ami_id
+  instance_type          = "t2.micro"
+  subnet_id              = tolist(data.aws_subnets.default.ids)[0]
+  vpc_security_group_ids = tolist(data.aws_security_groups.default.ids)
 
-  # Attach the existing IAM instance profile
-  iam_instance_profile = var.iam_instance_profile_name
-
-  # Attach the existing security groups
-  vpc_security_group_ids = var.vpc_security_group_ids
-
-  # Set the maximum age for the instance
   tags = {
-    Name   = "Remediated EC2 Instance"
-    MaxAge = var.max_ec2_instance_age_in_days
+    Name = "Remediated EC2 Instance"
   }
 }
 
-# Use a data source to get the latest Amazon Linux AMI
 
-# Use a data source to get the existing EC2 instance details
-
-# Input variables for the IAM instance profile and maximum instance age
-variable "iam_instance_profile_name" {
-  type        = string
-  description = "Name of the IAM instance profile to attach to the EC2 instance"
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
 }
 
-variable "max_ec2_instance_age_in_days" {
-  type        = number
-  description = "Maximum age in days for the EC2 instance"
-}
-
-variable "vpc_security_group_ids" {
-  type = list(string)
+data "aws_security_groups" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
 }
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
   type        = string
   default     = ""
+}
+
+variable "vpc_id" {
+  description = "Target VPC ID"
+  type        = string
 }

@@ -33,9 +33,7 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": [
-      "_fix_incorrect_tolist_usage"
-    ]
+    "sanitizers_applied": []
   },
   {
     "check_id": "ec2_instance_paravirtual_type",
@@ -59,9 +57,7 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": [
-      "_fix_invalid_ec2_resource_type"
-    ]
+    "sanitizers_applied": []
   },
   {
     "check_id": "ec2_instance_public_ip",
