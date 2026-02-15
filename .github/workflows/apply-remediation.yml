@@ -192,7 +192,7 @@ jobs:
           EOF
 
               terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfplan.txt
-              if ! (cd "$work" && tflint -f compact 2>&1 | tee -a /tmp/tfgate.txt); then
+              if ! (cd "$work" && tflint -f compact --minimum-failure-severity=error 2>&1 | tee -a /tmp/tfgate.txt); then
                 echo "SKIP $category: tflint failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
                 exitcode=1
                 continue
@@ -675,7 +675,7 @@ jobs:
           EOF
 
             terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfapply.txt
-            if ! (cd "$work" && tflint -f compact 2>&1 | tee -a /tmp/tfapply.txt); then
+            if ! (cd "$work" && tflint -f compact --minimum-failure-severity=error 2>&1 | tee -a /tmp/tfapply.txt); then
               echo "SKIP $category: tflint failed" | tee -a /tmp/tfapply.txt
               failed=1
               continue

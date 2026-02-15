@@ -1626,6 +1626,29 @@ def _fix_set_indexing(lines):
     return out
 
 
+def _fix_deprecated_interpolation(lines):
+    """Interpolation-only 표현식을 단순 참조로 변환.
+
+    Terraform 0.12+에서 "${var.x}" 형태의 interpolation-only 표현식은
+    deprecated이다. var.x, local.x, data.x 등으로 변환한다.
+    """
+    out = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            out.append(line)
+            continue
+        # "${var.xxx}" → var.xxx  /  "${local.xxx}" → local.xxx
+        # "${data.xxx.yyy.zzz}" → data.xxx.yyy.zzz
+        line = re.sub(
+            r'"\$\{((?:var|local|data|module)\.[^}]+)\}"',
+            r'\1',
+            line,
+        )
+        out.append(line)
+    return out
+
+
 def _ensure_visibility_config(lines):
     """aws_wafv2_web_acl 리소스에 visibility_config 블록이 없으면 추가."""
     out = []
@@ -2788,6 +2811,8 @@ def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
     lines = _fix_deprecated_resource_types(lines)
     # set 인덱싱 오류 수정
     lines = _fix_set_indexing(lines)
+    # deprecated interpolation-only 표현식 수정
+    lines = _fix_deprecated_interpolation(lines)
     # deprecated S3 bucket 속성 제거 (acl, inline encryption)
     lines = _strip_deprecated_s3_bucket_attrs(lines)
     # 프레임워크 중복 data 블록 제거
