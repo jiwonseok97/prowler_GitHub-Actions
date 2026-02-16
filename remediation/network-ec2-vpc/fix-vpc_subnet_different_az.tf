@@ -14,5 +14,5 @@ resource "aws_vpc_endpoint" "remediation_vpc_endpoint" {
   vpc_id            = "vpc-0565167ce4f7cc871"
   service_name      = "com.amazonaws.ap-northeast-2.s3"
   vpc_endpoint_type = "Gateway"
-  route_table_ids   = ["rtb-0123456789abcdef"]
+  route_table_ids   = ["rtb-0a1b2c3d4e5f6g7h8"]
 }

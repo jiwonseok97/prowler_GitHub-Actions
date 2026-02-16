@@ -57,7 +57,9 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": []
+    "sanitizers_applied": [
+      "_fix_invalid_ec2_resource_type"
+    ]
   },
   {
     "check_id": "ec2_instance_public_ip",

@@ -1,9 +1,8 @@
 # Modify the existing Network ACL to remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
-resource "aws_network_acl" "remediation_acl" {
+resource "aws_network_acl" "remediation_network_acl" {
   vpc_id = var.vpc_id
-  subnet_ids = data.aws_subnets.current.ids
+  subnet_ids = data.aws_subnets.existing_subnets.ids
 
-  # Remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
   ingress {
     from_port  = 0
     to_port    = 0
@@ -11,16 +10,6 @@ resource "aws_network_acl" "remediation_acl" {
     action     = "allow"
     protocol   = "-1"
     cidr_block = "0.0.0.0/0"
-  }
-
-  # Add a new ingress rule to allow RDP access from a specific IP range
-  ingress {
-    from_port  = 3389
-    to_port    = 3389
-    rule_no    = 200
-    action     = "allow"
-    protocol   = "tcp"
-    cidr_block = var.allowed_rdp_cidr
   }
 
   egress {
@@ -31,18 +20,15 @@ resource "aws_network_acl" "remediation_acl" {
     protocol   = "-1"
     cidr_block = "0.0.0.0/0"
   }
+
+  tags = {
+    Name = "remediation-network-acl"
+  }
 }
 
-# Data sources to look up the current VPC and subnets
+# Data sources to look up existing VPC and subnets
 
-data "aws_subnets" "current" {
-}
-
-# Input variable to specify the allowed RDP CIDR range
-variable "allowed_rdp_cidr" {
-  description = "CIDR block allowed for RDP access"
-  type        = string
-  default     = "10.0.0.0/16"
+data "aws_subnets" "existing_subnets" {
 }
 
 variable "vpc_id" {

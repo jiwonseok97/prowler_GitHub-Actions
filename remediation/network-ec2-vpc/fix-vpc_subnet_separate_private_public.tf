@@ -67,9 +67,8 @@ resource "aws_route_table" "remediation_private_rt" {
   vpc_id = "vpc-0565167ce4f7cc871"
 
   route {
-    cidr_block     = "0.0.0.0/0"
-    gateway_id     = aws_nat_gateway.remediation_nat_gw.id
-    nat_gateway_id = aws_nat_gateway.remediation_nat_gw.id
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.remediation_nat_gw.id
   }
 
   tags = {

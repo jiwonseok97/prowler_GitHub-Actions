@@ -1,5 +1,5 @@
 #
-# Enroll the EC2 instance as an AWS Systems Manager managed node
+# Enroll the EC2 instance as a Systems Manager managed node
 #
 resource "aws_ssm_activation" "remediation_ssm_activation" {
   name               = "remediation-ssm-activation"
@@ -12,11 +12,11 @@ resource "aws_ssm_activation" "remediation_ssm_activation" {
 }
 
 #
-# Attach the AWS Systems Manager managed instance core policy to the instance
+# Attach the Systems Manager managed instance core policy to the instance
 #
 
 #
-# Update the EC2 instance to use the SSM-enabled IAM role
+# Update the EC2 instance to use the Systems Manager managed instance profile
 #
 resource "aws_instance" "remediation_ec2_instance" {
   ami                  = var.ami_id
