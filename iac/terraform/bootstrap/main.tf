@@ -146,6 +146,14 @@ resource "aws_iam_role_policy" "remediation_iam" {
           "iam:ListRoles",
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "ServiceLinkedRoleDiscovery"
+        Effect = "Allow"
+        Action = [
+          "iam:ListRoles",
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -381,13 +389,27 @@ resource "aws_iam_role_policy" "remediation_kms" {
       }
       ,
       {
-        Sid      = "AllowKmsServiceLinkedRole"
+        Sid      = "AllowServiceLinkedRoles"
         Effect   = "Allow"
-        Action   = "iam:CreateServiceLinkedRole"
+        Action   = [
+          "iam:CreateServiceLinkedRole",
+          "iam:GetServiceLinkedRoleDeletionStatus",
+        ]
         Resource = "*"
         Condition = {
           StringLike = {
-            "iam:AWSServiceName" = ["kms.amazonaws.com", "mrk.kms.amazonaws.com"]
+            "iam:AWSServiceName" = [
+              "kms.amazonaws.com",
+              "mrk.kms.amazonaws.com",
+              "config.amazonaws.com",
+              "guardduty.amazonaws.com",
+              "securityhub.amazonaws.com",
+              "cloudtrail.amazonaws.com",
+              "ssm.amazonaws.com",
+              "elasticloadbalancing.amazonaws.com",
+              "autoscaling.amazonaws.com",
+              "ec2.amazonaws.com",
+            ]
           }
         }
       }
@@ -585,6 +607,56 @@ resource "aws_iam_role_policy" "remediation_ssm" {
           "ssm:DescribeInstanceInformation",
           "ssm:GetParameter",
           "ssm:PutParameter",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# -----------------------------------------------------
+# Pre-flight Discovery Permissions
+# (AWS API read-only calls for auto-import & SLR check)
+# -----------------------------------------------------
+resource "aws_iam_role_policy" "preflight_discovery" {
+  name = "PreflightDiscovery"
+  role = data.aws_iam_role.github_actions.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DiscoveryReadOnly"
+        Effect = "Allow"
+        Action = [
+          "cloudtrail:DescribeTrails",
+          "cloudtrail:GetTrailStatus",
+          "config:DescribeConfigurationRecorders",
+          "config:DescribeConfigurationRecorderStatus",
+          "config:DescribeDeliveryChannels",
+          "guardduty:ListDetectors",
+          "guardduty:GetDetector",
+          "securityhub:DescribeHub",
+          "organizations:DescribeOrganization",
+          "kms:ListAliases",
+          "kms:ListKeys",
+          "kms:DescribeKey",
+          "s3:ListAllMyBuckets",
+          "s3:GetBucketLocation",
+          "iam:GetAccountPasswordPolicy",
+          "iam:ListRoles",
+          "sts:GetCallerIdentity",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "TerraformImport"
+        Effect = "Allow"
+        Action = [
+          "cloudtrail:GetTrail",
+          "config:DescribeConfigurationRecorders",
+          "guardduty:GetDetector",
+          "securityhub:DescribeHub",
         ]
         Resource = "*"
       }
