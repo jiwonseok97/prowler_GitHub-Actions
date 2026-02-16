@@ -4,34 +4,34 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.remediation_s3_bucket_key.arn
     }
   }
 }
 
-# Attach a bucket policy to enforce encryption
-data "aws_iam_policy_document" "remediation_s3_bucket_encryption_policy" {
-  statement {
-    effect = "Deny"
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-    actions = [
-      "s3:PutObject",
-    ]
-    resources = [
-      "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*",
-    ]
-    condition {
-      test     = "StringNotEquals"
-      variable = "s3:x-amz-server-side-encryption"
-      values   = ["AES256"]
-    }
-  }
+# Create a new KMS key for encrypting the S3 bucket
+resource "aws_kms_key" "remediation_s3_bucket_key" {
+  description             = "KMS key for encrypting S3 bucket aws-cloudtrail-logs-132410971304-0971c04b"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
 }
 
-resource "aws_s3_bucket_policy" "remediation_s3_bucket_encryption_policy" {
-  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
-  policy = data.aws_iam_policy_document.remediation_s3_bucket_encryption_policy.json
+# Attach the KMS key policy to the new KMS key
+resource "aws_kms_key_policy" "remediation_s3_bucket_key_policy" {
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        Action   = "kms:*",
+        Resource = "*"
+      }
+    ]
+  })
+  key_id = aws_kms_key.remediation_s3_bucket_key.key_id
 }
