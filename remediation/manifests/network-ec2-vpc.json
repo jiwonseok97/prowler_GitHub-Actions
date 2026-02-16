@@ -21,7 +21,9 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": []
+    "sanitizers_applied": [
+      "_fix_incorrect_tolist_usage"
+    ]
   },
   {
     "check_id": "ec2_instance_older_than_specific_days",
@@ -76,18 +78,6 @@
     "check_title": "EC2 instance uses a non-deprecated Amazon AMI",
     "output_path": "network-ec2-vpc/fix-ec2_instance_with_outdated_ami.tf",
     "file": "network-ec2-vpc/fix-ec2_instance_with_outdated_ami.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
-    "check_id": "ec2_networkacl_allow_ingress_tcp_port_22",
-    "check_title": "Network ACL does not allow ingress from the Internet to TCP port 22 (SSH)",
-    "output_path": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_22.tf",
-    "file": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_22.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",

@@ -8,8 +8,10 @@ resource "aws_instance" "remediation_ec2_instance" {
   subnet_id              = tolist(data.aws_subnets.default.ids)[0]
   vpc_security_group_ids = tolist(data.aws_security_groups.default.ids)
 
+  iam_instance_profile = var.iam_instance_profile_name
+
   tags = {
-    Name = "Remediated EC2 Instance"
+    Name = "Remediation-EC2-Instance"
   }
 }
 
@@ -26,6 +28,12 @@ data "aws_security_groups" "default" {
     name   = "vpc-id"
     values = [var.vpc_id]
   }
+}
+
+
+variable "iam_instance_profile_name" {
+  type        = string
+  description = "Name of the IAM instance profile to use for the EC2 instance"
 }
 
 variable "ami_id" {

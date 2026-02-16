@@ -4,20 +4,18 @@ resource "aws_security_group" "remediation_sg" {
   description = "Remediation security group"
   vpc_id      = var.vpc_id
 
-  # Restrict inbound traffic to only the required sources
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
+    cidr_blocks = ["10.0.0.0/16"] # Restrict SSH access to a specific VPC CIDR
   }
 
-  # Restrict outbound traffic to only the required destinations
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # Allow all outbound traffic
   }
 
   tags = {
@@ -25,24 +23,13 @@ resource "aws_security_group" "remediation_sg" {
   }
 }
 
-# Use the new security group in the existing EC2 instance
-resource "aws_instance" "remediation_existing_instance" {
-  ami                    = var.ami_id
-  instance_type          = "t2.micro"
-  vpc_security_group_ids = [aws_security_group.remediation_sg.id]
-
-  tags = {
-    Name = "existing-instance"
-  }
+# Attach the new security group to the existing resource
+resource "aws_network_interface_sg_attachment" "remediation_sg_attachment" {
+  security_group_id    = aws_security_group.remediation_sg.id
+  network_interface_id = "sg-0a48adc1c033afb1f" # Use the existing security group ID
 }
 
-# Data sources to look up existing resources
-
-variable "ami_id" {
-  description = "AMI ID for new or managed instances"
-  type        = string
-  default     = ""
-}
+# Data source to look up the default VPC
 
 variable "vpc_id" {
   description = "Target VPC ID"

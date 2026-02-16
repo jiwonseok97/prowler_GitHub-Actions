@@ -1,5 +1,5 @@
 #
-# Remediate the finding by including the EBS volume in an AWS Backup plan
+# Remediate the finding: "EBS volume is protected by a backup plan"
 #
 
 resource "aws_backup_vault" "remediation_backup_vault" {
@@ -24,7 +24,7 @@ resource "aws_backup_plan" "remediation_backup_plan" {
 
 resource "aws_backup_selection" "remediation_backup_selection" {
   name         = "remediation-backup-selection"
-  iam_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-backup-role"
+  iam_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-backup-service-role"
   plan_id      = aws_backup_plan.remediation_backup_plan.id
 
   resources = [

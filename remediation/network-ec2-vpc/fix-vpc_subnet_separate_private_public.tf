@@ -68,7 +68,6 @@ resource "aws_route_table" "remediation_private_rt" {
 
   route {
     cidr_block     = "0.0.0.0/0"
-    gateway_id     = aws_nat_gateway.remediation_nat_gw.id
     nat_gateway_id = aws_nat_gateway.remediation_nat_gw.id
   }
 

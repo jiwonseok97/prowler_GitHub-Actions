@@ -1,54 +1,56 @@
-# Attach an IAM instance profile to the EC2 instance
 data "aws_iam_instance_profile" "remediation_instance_profile" {
-  name = "remediation-instance-profile"
+  name = var.iam_instance_profile_name
 }
 
-resource "aws_instance" "remediation_ec2_instance" {
+resource "aws_instance" "remediation_i_0fbecaba3c48e7c79" {
   ami                  = var.ami_id
-  instance_type        = "t2.micro"
-  iam_instance_profile = var.iam_instance_profile_name
-
-  vpc_security_group_ids = tolist(data.aws_security_groups.default.ids)
-  subnet_id              = tolist(data.aws_subnets.default.ids)[0]
-
-  tags = {
-    Name = "Remediated EC2 Instance"
-  }
+  instance_type        = var.instance_type
+  iam_instance_profile = data.aws_iam_instance_profile.remediation_instance_profile.name
 }
 
-# Use an existing IAM role with the required permissions
-data "aws_iam_role" "existing_role" {
-  name = var.iam_role_name
+resource "aws_cloudwatch_log_group" "remediation_log_group" {
+  name = "remediation-log-group-var.iam_role_name"
 }
 
-# Use an existing Amazon Linux AMI
-
-# Use the default VPC and security groups
-data "aws_security_groups" "default" {
+resource "aws_cloudwatch_log_stream" "remediation_log_stream" {
+  name           = "remediation-log-stream-var.iam_role_name"
+  log_group_name = aws_cloudwatch_log_group.remediation_log_group.name
 }
 
-
-data "aws_subnets" "default" {
-}
-
-# Use input variables for IAM role and instance profile names
-variable "iam_role_name" {
-  description = "Name of the IAM role to use for the EC2 instance"
-  type        = string
-}
-
-variable "iam_instance_profile_name" {
-  description = "Name of the IAM instance profile to create"
-  type        = string
+resource "aws_cloudwatch_metric_alarm" "remediation_role_usage_alarm" {
+  alarm_name          = "remediation-role-usage-alarm-${var.iam_role_name}"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "RoleUsage"
+  namespace           = "AWS/IAM"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  alarm_description   = "Alarm when the remediation role is used"
+  alarm_actions       = [var.sns_topic_arn]
 }
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
   type        = string
-  default     = ""
 }
 
-variable "vpc_id" {
-  description = "Target VPC ID"
+variable "iam_instance_profile_name" {
+  description = "Existing IAM instance profile name"
+  type        = string
+}
+
+variable "iam_role_name" {
+  description = "Existing IAM role name"
+  type        = string
+}
+
+variable "instance_type" {
+  description = "EC2 instance type"
+  type        = string
+}
+
+variable "sns_topic_arn" {
+  description = "SNS topic ARN"
   type        = string
 }
