@@ -1,37 +1,30 @@
-# Modify the existing Network ACL to remove the ingress rule allowing TCP port 22 from 0.0.0.0/0
+# Modify the existing Network ACL to restrict SSH access from the internet
 resource "aws_network_acl" "remediation_network_acl" {
-  vpc_id     = var.vpc_id
-  subnet_ids = [var.subnet_id]
+  vpc_id = var.vpc_id
+  subnet_ids = data.aws_subnets.current.ids
 
   ingress {
-    from_port  = 0
-    to_port    = 0
+    from_port  = 22
+    to_port    = 22
     rule_no    = 100
+    protocol   = "tcp"
+    cidr_block = "10.0.0.0/8"
     action     = "allow"
-    protocol   = "-1"
-    cidr_block = "0.0.0.0/0"
   }
 
   egress {
     from_port  = 0
     to_port    = 0
     rule_no    = 100
-    action     = "allow"
     protocol   = "-1"
     cidr_block = "0.0.0.0/0"
-  }
-
-  tags = {
-    Name = "remediation-network-acl"
+    action     = "allow"
   }
 }
 
-# Look up the existing subnet using the Network ACL ID from the finding
+# Look up the existing Network ACL
 
-variable "subnet_id" {
-  description = "Target subnet ID"
-  type        = string
-  default     = ""
+data "aws_subnets" "current" {
 }
 
 variable "vpc_id" {
