@@ -272,7 +272,7 @@ jobs:
         env:
           PREFER_IAC_SNIPPET: "true"
           ALLOW_IAM_CREATE: "false"
-          MODE_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode || 'stable-only' }}
+          MODE_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode || 'all-checks' }}
           BEDROCK_MODEL_ID: ${{ env.BEDROCK_MODEL_ID }}
           BEDROCK_REGION: ap-northeast-2
           AWS_REGION: ap-northeast-2
