@@ -16,7 +16,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
   }
 }
 
-# Apply a lifecycle rule to manage noncurrent object versions
+# Enable S3 bucket lifecycle rules to manage noncurrent versions
 resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycle" {
   bucket = var.s3_bucket_name
   rule {
@@ -26,6 +26,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycl
       noncurrent_days = 90
     }
   }
+}
+
+# Enable MFA delete for stronger protection
+resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
+  bucket = var.s3_bucket_name
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access_block" {
+  bucket                  = var.s3_bucket_name
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 variable "s3_bucket_name" {
