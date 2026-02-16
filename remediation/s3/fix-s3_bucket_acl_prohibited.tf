@@ -3,7 +3,7 @@ data "aws_s3_bucket" "remediation_aws_cloudtrail_logs" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 }
 
-# Create a new S3 bucket policy to manage access
+# Create an S3 bucket policy to manage access
 resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs_policy" {
   bucket = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.id
   policy = jsonencode({
@@ -12,7 +12,7 @@ resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs_policy" {
       {
         Effect = "Allow",
         Principal = {
-          AWS = "*"
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
         },
         Action = [
           "s3:GetBucketAcl",
@@ -30,7 +30,7 @@ resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs_policy" {
   })
 }
 
-# Create a new S3 bucket server-side encryption configuration
+# Enable server-side encryption for the S3 bucket
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_aws_cloudtrail_logs_encryption" {
   bucket = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.id
 

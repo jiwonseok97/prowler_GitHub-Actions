@@ -1,6 +1,4 @@
-#
-# Remediate the S3 bucket policy to enforce HTTPS-only access
-#
+#Enforce HTTPS-only access to the S3 bucket
 resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
   bucket = var.s3_bucket_name
   policy = jsonencode({
