@@ -25,7 +25,7 @@ resource "aws_internet_gateway" "remediation_igw" {
   vpc_id = "vpc-0565167ce4f7cc871"
 
   tags = {
-    Name = "remediation-igw"
+    Name = "remediation-internet-gateway"
   }
 }
 
@@ -39,7 +39,7 @@ resource "aws_route_table" "remediation_public_rt" {
   }
 
   tags = {
-    Name = "remediation-public-rt"
+    Name = "remediation-public-route-table"
   }
 }
 
@@ -56,10 +56,6 @@ resource "aws_eip" "remediation_nat_eip" {
 resource "aws_nat_gateway" "remediation_nat_gw" {
   allocation_id = aws_eip.remediation_nat_eip[0].id
   subnet_id     = aws_subnet.remediation_public_subnet.id
-
-  tags = {
-    Name = "remediation-nat-gw"
-  }
 }
 
 #Create a new route table for the private subnet and associate it with the NAT gateway
@@ -67,13 +63,12 @@ resource "aws_route_table" "remediation_private_rt" {
   vpc_id = "vpc-0565167ce4f7cc871"
 
   route {
-    cidr_block     = "0.0.0.0/0"
-    gateway_id     = aws_nat_gateway.remediation_nat_gw.id
-    nat_gateway_id = aws_nat_gateway.remediation_nat_gw.id
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.remediation_nat_gw.id
   }
 
   tags = {
-    Name = "remediation-private-rt"
+    Name = "remediation-private-route-table"
   }
 }
 
