@@ -3,32 +3,42 @@ data "aws_iam_instance_profile" "remediation_instance_profile" {
   name = "remediation-instance-profile"
 }
 
-resource "aws_instance" "remediation_ec2_instance" {
+resource "aws_instance" "remediation_instance" {
   ami                  = var.ami_id
   instance_type        = "t2.micro"
   iam_instance_profile = var.iam_instance_profile_name
 
-  vpc_security_group_ids = [
-    var.security_group_id
-  ]
+  vpc_security_group_ids = tolist(data.aws_security_groups.instance_security_groups.ids)
+  subnet_id              = data.aws_subnets.private_subnets.ids[0]
 
   tags = {
-    Name = "Remediated EC2 Instance"
+    Name = "Remediated Instance"
   }
 }
 
-# Use an existing IAM role with the required permissions
-data "aws_iam_role" "remediation_role" {
-  name = var.iam_role_name
+
+data "aws_security_groups" "instance_security_groups" {
+  filter {
+    name = "vpc-id"
+    values = [var.vpc_id]
+  }
 }
 
-# Use an existing Amazon Linux AMI
+data "aws_subnets" "private_subnets" {
+  filter {
+    name = "vpc-id"
+    values = [var.vpc_id]
+  }
 
-# Use the default VPC security group
+  filter {
+    name = "tag-Tier"
+    values = ["private"]
+  }
+}
 
 
 variable "iam_role_name" {
-  description = "Name of the IAM role to attach to the EC2 instance"
+  description = "Name of the IAM role to attach to the instance profile"
   type        = string
   default     = ""
 }
@@ -39,8 +49,8 @@ variable "ami_id" {
   default     = ""
 }
 
-variable "security_group_id" {
-  description = "Target security group ID"
+variable "vpc_id" {
+  description = "Target VPC ID"
   type        = string
   default     = ""
 }

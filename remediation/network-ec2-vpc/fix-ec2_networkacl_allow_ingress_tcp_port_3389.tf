@@ -1,53 +1,62 @@
-# Modify the existing Network ACL to remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
+# Modify the existing Network ACL to restrict RDP access from the internet
 resource "aws_network_acl" "remediation_acl" {
   vpc_id = var.vpc_id
   subnet_ids = data.aws_subnets.current.ids
 
-  # Remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
-  ingress {
-    from_port  = 0
-    to_port    = 0
-    rule_no    = 100
-    action     = "allow"
-    protocol   = "-1"
-    cidr_block = "0.0.0.0/0"
-  }
-
-  # Add a new ingress rule to allow RDP access only from a specific IP range
   ingress {
     from_port  = 3389
     to_port    = 3389
-    rule_no    = 200
-    action     = "allow"
-    protocol   = "tcp"
-    cidr_block = var.allowed_rdp_cidr
-  }
-
-  egress {
-    from_port  = 0
-    to_port    = 0
     rule_no    = 100
-    action     = "allow"
-    protocol   = "-1"
+    action     = "deny"
     cidr_block = "0.0.0.0/0"
+    protocol   = "tcp"
   }
 
   tags = {
-    Name = "remediation_acl"
+    Name = "Remediated Network ACL"
   }
 }
 
-# Use a data source to look up the existing VPC
+# Use a bastion host or AWS Session Manager for secure RDP access
+resource "aws_security_group" "remediation_bastion_sg" {
+  name = "Remediation-Bastion-Host-SG"
 
-# Use a data source to look up the existing subnets
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "remediation_bastion_host" {
+  ami           = var.ami_id
+  instance_type = "t2.micro"
+  subnet_id     = tolist(data.aws_subnets.current.ids)[0]
+
+  vpc_security_group_ids = [aws_security_group.remediation_bastion_sg.id]
+
+  tags = {
+    Name = "Remediation Bastion Host"
+  }
+}
+
+# Lookup existing VPC and subnets
+
 data "aws_subnets" "current" {
 }
 
-# Define an input variable for the allowed RDP CIDR range
-variable "allowed_rdp_cidr" {
-  description = "CIDR range allowed for RDP access"
+variable "ami_id" {
+  description = "AMI ID for new or managed instances"
   type        = string
-  default     = "10.0.0.0/16"
+  default     = ""
 }
 
 variable "vpc_id" {
