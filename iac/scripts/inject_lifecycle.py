@@ -23,10 +23,23 @@ SINGLETON_TYPES = frozenset({
     "aws_config_configuration_recorder_status",
 })
 
-# Fields safe to ignore (cosmetic, not security-relevant).
-# We do NOT ignore: encryption settings, policy docs, versioning, ACLs, logging,
-# key_rotation, mfa_delete, or any security configuration.
-IGNORE_FIELDS = ["tags", "tags_all"]
+# Resource types that do NOT support tags — use ignore_changes = [] for these.
+# Most AWS resources support tags, but IAM account-level and config sub-resources don't.
+NO_TAGS_TYPES = frozenset({
+    "aws_iam_account_password_policy",
+    "aws_config_configuration_recorder",
+    "aws_config_configuration_recorder_status",
+    "aws_config_delivery_channel",
+    "aws_s3_bucket_server_side_encryption_configuration",
+    "aws_s3_bucket_versioning",
+    "aws_s3_bucket_public_access_block",
+    "aws_s3_bucket_ownership_controls",
+    "aws_s3_bucket_policy",
+    "aws_s3_bucket_lifecycle_configuration",
+    "aws_s3_bucket_logging",
+    "aws_kms_key_policy",
+    "aws_kms_alias",
+})
 
 RESOURCE_START_RE = re.compile(
     r'^\s*resource\s+"([^"]+)"\s+"([^"]+)"\s*\{')
@@ -40,9 +53,11 @@ def build_lifecycle_block(resource_type: str) -> list[str]:
     if resource_type in SINGLETON_TYPES:
         lines.append(f"{indent}  prevent_destroy = true")
 
-    # ignore_changes for cosmetic fields only
-    fields = ", ".join(IGNORE_FIELDS)
-    lines.append(f"{indent}  ignore_changes  = [{fields}]")
+    # ignore_changes: tags only for resources that support them
+    if resource_type in NO_TAGS_TYPES:
+        lines.append(f"{indent}  ignore_changes  = []")
+    else:
+        lines.append(f"{indent}  ignore_changes  = [tags, tags_all]")
 
     lines.append(f"{indent}}}")
     return lines
