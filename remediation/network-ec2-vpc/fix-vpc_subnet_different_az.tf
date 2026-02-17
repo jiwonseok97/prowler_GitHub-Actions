@@ -27,7 +27,7 @@ resource "aws_route_table" "remediation_route_table" {
 
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = "igw-0d1234567890abcde"
+    gateway_id = "igw-0a12345b6789cdef"
   }
 
   tags = {
