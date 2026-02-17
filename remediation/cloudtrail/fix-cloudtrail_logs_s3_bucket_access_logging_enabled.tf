@@ -1,4 +1,3 @@
-# Remediation apply trigger - cloudtrail
 variable "s3_bucket_name" {
   description = "Existing CloudTrail log bucket name"
   type        = string
