@@ -12,20 +12,9 @@ IMPORT_SCRIPT="${IMPORT_SCRIPT:-iac/scripts/auto_import.sh}"
 
 log() { echo "$@" | tee -a "$LOGFILE"; }
 
-# ── Step 0: Inject lifecycle prevent_destroy via override ──
-# 모든 리소스에 lifecycle { prevent_destroy = false, create_before_destroy = false } 적용
-# 대신, 이미 존재하는 리소스를 import로 가져와 destroy 방지
-cat > "$WORK_DIR/lifecycle_override.tf" <<'EOF'
-# Auto-generated: prevent accidental replacement
-# All resources use create_before_destroy = false to avoid
-# destroying existing infrastructure during remediation
-lifecycle {
-  # This file is a placeholder — actual lifecycle protection
-  # is handled by the import-before-apply strategy
-}
-EOF
-# lifecycle override는 HCL에서 resource 외부에 둘 수 없으므로 삭제
-rm -f "$WORK_DIR/lifecycle_override.tf"
+# ── Step 0: Inject lifecycle rules into all resources ──
+log "[$CATEGORY] Injecting lifecycle rules..."
+python3 iac/scripts/inject_lifecycle.py "$WORK_DIR" 2>&1 | tee -a "$LOGFILE" || true
 
 # ── Step 1: terraform init ──
 log "[$CATEGORY] terraform init..."
@@ -101,6 +90,16 @@ while [ $attempt -lt $MAX_RETRIES ]; do
     continue
   fi
 
+  # ── Replacement guard: never allow destructive remediation ──
+  if grep -qiE '(will be replaced|must be replaced|forces replacement)' "$plan_output" 2>/dev/null; then
+    log "FAIL $CATEGORY: plan contains RESOURCE REPLACEMENT — blocking apply"
+    log "Destructive changes detected:"
+    grep -iE '(will be replaced|must be replaced|forces replacement)' "$plan_output" | head -10 | tee -a "$LOGFILE"
+    log "Remediation must patch, never replace. Fix the resource definition or import."
+    rm -f "$plan_output"
+    exit 1
+  fi
+
   rm -f "$plan_output"
 
   # exitcode 2 = changes to apply
@@ -111,8 +110,24 @@ while [ $attempt -lt $MAX_RETRIES ]; do
     2>&1 | tee -a "$LOGFILE" > "$apply_output" || apply_exit=$?
 
   if [ $apply_exit -eq 0 ]; then
-    log "[$CATEGORY] Apply succeeded!"
+    log "[$CATEGORY] Apply succeeded — verifying idempotency..."
     rm -f "$apply_output"
+
+    # ── Drift loop protection: re-plan after apply ──
+    drift_exit=0
+    terraform -chdir="$WORK_DIR" plan -input=false -detailed-exitcode \
+      2>&1 | tee -a "$LOGFILE" > /dev/null || drift_exit=$?
+
+    if [ $drift_exit -eq 2 ]; then
+      log "FAIL $CATEGORY: NON-IDEMPOTENT RESULT — plan still shows changes after apply"
+      log "This indicates a drift loop. Investigate resource definitions."
+      exit 1
+    elif [ $drift_exit -eq 1 ]; then
+      log "WARN $CATEGORY: post-apply plan errored (non-fatal, apply was successful)"
+    else
+      log "[$CATEGORY] Idempotency verified — re-plan shows no changes."
+    fi
+
     exit 0
   fi
 
