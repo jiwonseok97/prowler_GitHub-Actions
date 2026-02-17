@@ -11,7 +11,7 @@ echo "Running pre-flight AWS discovery (region=$REGION)..."
 
 # ── CloudTrail ──────────────────────────────────────
 trails=$(aws cloudtrail describe-trails --region "$REGION" \
-  --query 'trailList[].{Name:Name,TrailARN:TrailARN,IsMultiRegion:IsMultiRegionTrail,HomeRegion:HomeRegion}' \
+  --query 'trailList[].{Name:Name,TrailARN:TrailARN,S3BucketName:S3BucketName,IsMultiRegion:IsMultiRegionTrail,HomeRegion:HomeRegion}' \
   --output json 2>/dev/null || echo '[]')
 
 # ── Config Recorder ─────────────────────────────────

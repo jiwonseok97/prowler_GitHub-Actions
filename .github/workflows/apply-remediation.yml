@@ -166,6 +166,10 @@ jobs:
                 cp "remediation/terraform.auto.tfvars" "$work/"
               fi
 
+              # Generate discovery-driven tfvars so variables get real values
+              # instead of default="" which causes count=0 (no resources created)
+              python3 iac/scripts/generate_tfvars.py /tmp/aws_discovery.json "$work" "$category" 2>&1 || true
+
               # Check if any resource blocks remain
               if ! grep -rEq '^\s*resource\s+"' "$work"/*.tf 2>/dev/null; then
                 echo "SKIP $category: no resource blocks after cleanup" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
@@ -693,6 +697,10 @@ jobs:
             if [ -f "remediation/terraform.auto.tfvars" ]; then
               cp "remediation/terraform.auto.tfvars" "$work/"
             fi
+
+            # Generate discovery-driven tfvars so variables get real values
+            # instead of default="" which causes count=0 (no resources created)
+            python3 iac/scripts/generate_tfvars.py /tmp/aws_discovery.json "$work" "$category" 2>&1 || true
 
             # Check if any resource blocks remain
             if ! grep -rEq '^\s*resource\s+"' "$work"/*.tf 2>/dev/null; then
