@@ -1,4 +1,4 @@
-# Modify the existing S3 bucket to disable ACLs and manage access with IAM and bucket policies
+# Modify the existing S3 bucket to disable ACLs and manage access using IAM and bucket policies
 data "aws_s3_bucket" "remediation_aws_cloudtrail_logs" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 }

@@ -1,4 +1,4 @@
-# Enable default SSE-KMS encryption for the S3 bucket
+# Enable default SSE-KMS encryption on the S3 bucket
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
   bucket = var.s3_bucket_name
 
@@ -10,7 +10,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
   }
 }
 
-# Create a customer-managed KMS key for the S3 bucket
+# Create a customer-managed KMS key for S3 bucket encryption
 resource "aws_kms_key" "remediation_s3_bucket_key" {
   description             = "Customer managed KMS key for S3 bucket encryption"
   deletion_window_in_days = 30
