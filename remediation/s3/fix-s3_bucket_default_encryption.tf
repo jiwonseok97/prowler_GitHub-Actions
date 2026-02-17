@@ -1,4 +1,4 @@
-# Enable default encryption on the existing S3 bucket
+# Enable default server-side encryption (SSE) on the existing S3 bucket
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 
@@ -9,7 +9,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
   }
 }
 
-# Attach a bucket policy to enforce encryption
+# Attach a bucket policy to enforce encryption on all objects
 data "aws_iam_policy_document" "remediation_s3_bucket_encryption_policy" {
   statement {
     effect = "Deny"
