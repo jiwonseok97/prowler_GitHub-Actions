@@ -36,23 +36,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycl
   }
 }
 
-# Enable MFA delete for stronger protection
-resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
-  bucket = var.s3_bucket_name
-
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access_block" {
-  bucket                  = var.s3_bucket_name
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
 variable "s3_bucket_name" {
   description = "Target S3 bucket name"
   type        = string
