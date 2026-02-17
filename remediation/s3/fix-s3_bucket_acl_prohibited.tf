@@ -18,19 +18,15 @@ resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs_policy" {
           "s3:GetBucketAcl",
           "s3:GetBucketPolicy",
           "s3:ListBucket",
-          "s3:PutBucketAcl",
           "s3:PutBucketPolicy"
         ],
-        Resource = [
-          "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b",
-          "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*"
-        ]
+        Resource = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.arn
       }
     ]
   })
 }
 
-# Create a new S3 bucket server-side encryption configuration
+# Create a new S3 bucket encryption configuration
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_aws_cloudtrail_logs_encryption" {
   bucket = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.id
 

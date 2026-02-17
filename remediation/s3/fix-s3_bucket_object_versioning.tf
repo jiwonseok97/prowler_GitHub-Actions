@@ -9,7 +9,7 @@ resource "aws_s3_bucket_versioning" "remediation_s3_bucket_versioning" {
 # Enable S3 bucket encryption using a new KMS key
 resource "aws_kms_key" "remediation_s3_bucket_encryption_key" {
   description             = "KMS key for S3 bucket encryption"
-  deletion_window_in_days = 10
+  deletion_window_in_days = 30
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
@@ -31,9 +31,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycl
     status = "Enabled"
 
     noncurrent_version_expiration {
-      noncurrent_days = 30
+      noncurrent_days = 90
     }
   }
+}
+
+# Enable MFA delete for stronger protection
+resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
+  bucket = var.s3_bucket_name
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access_block" {
+  bucket = var.s3_bucket_name
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 variable "s3_bucket_name" {
