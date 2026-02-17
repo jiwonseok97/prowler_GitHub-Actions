@@ -3,7 +3,7 @@ data "aws_iam_instance_profile" "remediation_instance_profile" {
   name = "remediation-instance-profile"
 }
 
-resource "aws_instance" "remediation_ec2_instance" {
+resource "aws_instance" "remediation_instance" {
   ami                  = var.ami_id
   instance_type        = "t2.micro"
   iam_instance_profile = var.iam_instance_profile_name
@@ -13,25 +13,22 @@ resource "aws_instance" "remediation_ec2_instance" {
   ]
 
   tags = {
-    Name = "Remediated EC2 Instance"
+    Name = "Remediation Instance"
   }
 }
 
-# Use an existing IAM role with the required permissions
-data "aws_iam_role" "remediation_role" {
-  name = var.iam_role_name
+# Use variables for IAM role and policy references
+variable "iam_role_name" {
+  default = "remediation-role"
 }
 
-# Use an existing Amazon Linux AMI
+variable "iam_policy_arn" {
+  default = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# Attach the required IAM policy to the role
 
 # Use the default VPC security group
-
-
-variable "iam_role_name" {
-  description = "Name of the IAM role to attach to the EC2 instance"
-  type        = string
-  default     = ""
-}
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
