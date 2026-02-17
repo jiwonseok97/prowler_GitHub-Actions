@@ -9,7 +9,7 @@ resource "aws_instance" "remediation_ec2_instance" {
   vpc_security_group_ids = tolist(data.aws_security_groups.default.ids)
 
   tags = {
-    Name = "Remediation-EC2-Instance"
+    Name = "Remediated EC2 Instance"
   }
 }
 
