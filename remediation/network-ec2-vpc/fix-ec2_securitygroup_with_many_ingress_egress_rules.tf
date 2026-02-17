@@ -6,17 +6,17 @@ resource "aws_security_group" "remediation_sg" {
 
   # Keep only the required inbound rules
   ingress {
-    from_port   = 80
-    to_port     = 80
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["10.0.0.0/16"]
   }
 
   ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [var.security_group_id]
   }
 
   # Keep only the required outbound rules
@@ -28,13 +28,9 @@ resource "aws_security_group" "remediation_sg" {
   }
 }
 
-# Use data source to look up the existing security group
+# Data source to look up the existing security group
 
-# Attach the remediated security group to the resources that use the existing one
-resource "aws_network_interface_sg_attachment" "remediation_remediation" {
-  security_group_id    = aws_security_group.remediation_sg.id
-  network_interface_id = var.security_group_id
-}
+# Data source to look up the web security group
 
 variable "security_group_id" {
   description = "Target security group ID"
