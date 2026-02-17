@@ -3,8 +3,35 @@ data "aws_s3_bucket" "remediation_aws_cloudtrail_logs" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 }
 
-# Ensure the bucket has server-side encryption enabled
-resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_aws_cloudtrail_logs" {
+# Add any required S3 bucket policy to manage access
+resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs_policy" {
+  bucket = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.id
+  policy = jsonencode({
+    # Example policy to grant access to a specific IAM role
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/my-cloudtrail-role"
+        },
+        Action = [
+          "s3:GetBucketAcl",
+          "s3:GetBucketPolicy",
+          "s3:ListBucket",
+          "s3:PutBucketPolicy"
+        ],
+        Resource = [
+          data.aws_s3_bucket.remediation_aws_cloudtrail_logs.arn,
+          "${data.aws_s3_bucket.remediation_aws_cloudtrail_logs.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Ensure the S3 bucket has server-side encryption enabled
+resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_aws_cloudtrail_logs_encryption" {
   bucket = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.id
 
   rule {
@@ -12,34 +39,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_aws_c
       sse_algorithm = "AES256"
     }
   }
-}
-
-# Add a bucket policy to manage access
-resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs" {
-  bucket = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          AWS = "*"
-        },
-        Action = [
-          "s3:GetBucketAcl",
-          "s3:GetBucketPolicy",
-          "s3:ListBucket",
-          "s3:PutBucketAcl",
-          "s3:PutBucketPolicy"
-        ],
-        Resource = [
-          "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b",
-          "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*"
-        ]
-      }
-    ]
-  })
 }
 
 variable "s3_bucket_name" {
