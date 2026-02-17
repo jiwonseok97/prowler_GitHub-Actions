@@ -22,7 +22,7 @@ data "aws_iam_role" "remediation_role" {
   name = var.iam_role_name
 }
 
-# Use an existing Amazon Linux AMI
+# Use an existing Amazon Linux 2 AMI
 
 # Use the default VPC security group
 
