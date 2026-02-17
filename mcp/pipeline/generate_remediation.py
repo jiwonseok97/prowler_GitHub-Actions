@@ -2898,6 +2898,58 @@ def _inject_required_attr(tf_code, resource_type, attr, value_expr):
     return "\n".join(out)
 
 
+def _ensure_variable_defaults(lines):
+    """AI가 선언한 variable 블록에 default가 없으면 타입에 맞는 default를 삽입."""
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = re.match(r'^(\s*)variable\s+"([^"]+)"\s*\{', line)
+        if not m:
+            out.append(line)
+            i += 1
+            continue
+        # variable 블록 전체 수집
+        indent = m.group(1)
+        var_name = m.group(2)
+        block = [line]
+        depth = _brace_delta(line)
+        i += 1
+        while i < len(lines) and depth > 0:
+            block.append(lines[i])
+            depth += _brace_delta(lines[i])
+            i += 1
+        # default가 이미 있는지 확인
+        has_default = any(re.match(r'^\s*default\s*=', bl) for bl in block)
+        if has_default:
+            out.extend(block)
+            continue
+        # 타입 파악하여 적절한 default 결정
+        var_type = "string"
+        for bl in block:
+            tm = re.match(r'^\s*type\s*=\s*(\S+)', bl)
+            if tm:
+                var_type = tm.group(1).lower()
+                break
+        if "list" in var_type:
+            default_val = "[]"
+        elif "map" in var_type or "object" in var_type:
+            default_val = "{}"
+        elif "number" in var_type:
+            default_val = "0"
+        elif "bool" in var_type:
+            default_val = "false"
+        else:
+            default_val = '""'
+        # 닫는 } 앞에 default 삽입
+        inner_indent = indent + "  "
+        closing = block.pop()  # }
+        block.append(f"{inner_indent}default     = {default_val}")
+        block.append(closing)
+        out.extend(block)
+    return out
+
+
 def _auto_declare_variables(lines):
     """코드에서 참조되는 var.xxx 중 선언되지 않은 variable 블록을 자동 추가."""
     # 기존 variable 선언 수집
@@ -2933,22 +2985,26 @@ def _auto_declare_variables(lines):
 
     # 변수별 기본 설명/타입 매핑
     VAR_DEFAULTS = {
-        "vpc_id": ('description = "Target VPC ID"\n  type        = string', None),
+        "vpc_id": ('description = "Target VPC ID"\n  type        = string\n  default     = ""', None),
+        "vpc_cidr": ('description = "VPC CIDR block"\n  type        = string\n  default     = "10.0.0.0/16"', None),
         "subnet_id": ('description = "Target subnet ID"\n  type        = string\n  default     = ""', None),
         "subnet_ids": ('description = "Target subnet IDs"\n  type        = list(string)\n  default     = []', None),
+        "subnet_count": ('description = "Number of subnets"\n  type        = number\n  default     = 2', None),
         "security_group_id": ('description = "Target security group ID"\n  type        = string\n  default     = ""', None),
+        "security_group_ids": ('description = "Target security group IDs"\n  type        = list(string)\n  default     = []', None),
         "network_interface_id": ('description = "Target network interface ID"\n  type        = string\n  default     = ""', None),
         "ami_id": ('description = "AMI ID for new or managed instances"\n  type        = string\n  default     = ""', None),
         "instance_type": ('description = "EC2 instance type"\n  type        = string\n  default     = ""', None),
         "launch_template_name": ('description = "EC2 launch template name"\n  type        = string\n  default     = ""', None),
         "s3_bucket_name": ('description = "Target S3 bucket name"\n  type        = string\n  default     = ""', None),
         "log_group_name": ('description = "CloudWatch log group name"\n  type        = string\n  default     = ""', None),
-        "iam_policy_arn": ('description = "Existing IAM policy ARN"\n  type        = string', None),
-        "iam_policy_name": ('description = "Existing IAM policy name"\n  type        = string', None),
-        "iam_role_name": ('description = "Existing IAM role name"\n  type        = string', None),
-        "iam_instance_profile_name": ('description = "Existing IAM instance profile name"\n  type        = string', None),
-        "ssm_iam_role": ('description = "IAM role for SSM activation"\n  type        = string', None),
-        "inspector_target_arn": ('description = "Inspector assessment target ARN"\n  type        = string', None),
+        "iam_policy_arn": ('description = "Existing IAM policy ARN"\n  type        = string\n  default     = ""', None),
+        "iam_policy_name": ('description = "Existing IAM policy name"\n  type        = string\n  default     = ""', None),
+        "iam_role_name": ('description = "Existing IAM role name"\n  type        = string\n  default     = ""', None),
+        "iam_instance_profile_name": ('description = "Existing IAM instance profile name"\n  type        = string\n  default     = ""', None),
+        "ssm_iam_role": ('description = "IAM role for SSM activation"\n  type        = string\n  default     = ""', None),
+        "inspector_target_arn": ('description = "Inspector assessment target ARN"\n  type        = string\n  default     = ""', None),
+        "firewall_subnet_id": ('description = "Subnet ID for Network Firewall"\n  type        = string\n  default     = ""', None),
     }
 
     out = list(lines)
@@ -3217,6 +3273,8 @@ def sanitize_tf_code_v2(code, extra_unconfig_attrs=None, row=None):
     lines = _ensure_flow_log_target(lines)
     # 선언 없이 참조된 variable 자동 선언
     lines = _auto_declare_variables(lines)
+    # variable 블록에 default 없으면 자동 추가 (apply 시 "No value" 에러 방지)
+    lines = _ensure_variable_defaults(lines)
     code = "\n".join(lines)
     # 미닫힌 따옴표 보정
     code = "\n".join(_repair_unbalanced_quotes(code.splitlines()))
