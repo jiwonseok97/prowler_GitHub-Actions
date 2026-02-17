@@ -15,7 +15,7 @@ on:
         options:
           - stable-only
           - all-checks
-        default: stable-only
+        default: all-checks
       remediation_only:
         description: "Skip scan/process and run remediation from existing artifact/workspace"
         type: boolean

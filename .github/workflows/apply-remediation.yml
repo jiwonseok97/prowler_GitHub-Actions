@@ -845,7 +845,7 @@ jobs:
 
       - name: Trigger Prowler Re-scan
         run: |
-          gh workflow run prowler-security-scan.yml
+          gh workflow run prowler-security-scan.yml -f mode=all-checks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
