@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""inject_lifecycle.py — 모든 resource 블록에 lifecycle { prevent_destroy = true } 삽입.
+"""inject_lifecycle.py — Inject lifecycle blocks into all resource blocks.
 
-destroy 동작을 방지하여 기존 인프라를 보호한다.
-단, prevent_destroy는 plan 시 에러를 발생시키므로 create_before_destroy만 사용하고
-ignore_changes = all 로 기존 리소스 드리프트를 무시한다.
-
-실제로는: 이미 state에 있는 리소스는 변경만 하고, 없으면 생성.
-destroy를 일으키는 replacement는 ignore_changes로 방지.
+Enforces patch-only behavior for remediation:
+  - Singleton/account resources: prevent_destroy = true
+  - All resources: ignore_changes on cosmetic fields (tags, name) to prevent
+    drift loops, but NEVER ignore security configuration fields.
 
 Usage: python3 inject_lifecycle.py <directory>
 """
@@ -15,23 +13,53 @@ import sys
 import pathlib
 import glob
 
-# 이미 lifecycle 블록이 있는 리소스는 건너뜀
-LIFECYCLE_RE = re.compile(r'^\s*lifecycle\s*\{', re.MULTILINE)
+# Singleton resource types: exactly one per account/region, always update-in-place
+SINGLETON_TYPES = frozenset({
+    "aws_iam_account_password_policy",
+    "aws_securityhub_account",
+    "aws_guardduty_detector",
+    "aws_config_configuration_recorder",
+    "aws_config_delivery_channel",
+    "aws_config_configuration_recorder_status",
+})
+
+# Fields safe to ignore (cosmetic, not security-relevant).
+# We do NOT ignore: encryption settings, policy docs, versioning, ACLs, logging,
+# key_rotation, mfa_delete, or any security configuration.
+IGNORE_FIELDS = ["tags", "tags_all"]
+
+RESOURCE_START_RE = re.compile(
+    r'^\s*resource\s+"([^"]+)"\s+"([^"]+)"\s*\{')
+
+
+def build_lifecycle_block(resource_type: str) -> list[str]:
+    """Return lifecycle block lines for the given resource type."""
+    indent = "  "
+    lines = [f"{indent}lifecycle {{"]
+
+    if resource_type in SINGLETON_TYPES:
+        lines.append(f"{indent}  prevent_destroy = true")
+
+    # ignore_changes for cosmetic fields only
+    fields = ", ".join(IGNORE_FIELDS)
+    lines.append(f"{indent}  ignore_changes  = [{fields}]")
+
+    lines.append(f"{indent}}}")
+    return lines
 
 
 def inject_lifecycle(filepath: pathlib.Path):
-    """resource 블록에 lifecycle 블록 삽입."""
+    """Insert lifecycle blocks into resource blocks that lack them."""
     text = filepath.read_text(encoding="utf-8")
     if not re.search(r'^\s*resource\s+"', text, re.MULTILINE):
         return  # no resource blocks
 
     lines = text.splitlines()
-    out = []
+    out: list[str] = []
     depth = 0
     in_resource = False
-    resource_depth = 0
     has_lifecycle = False
-    resource_start_depth = 0
+    current_rtype = ""
     in_heredoc = False
     heredoc_marker = None
 
@@ -60,28 +88,23 @@ def inject_lifecycle(filepath: pathlib.Path):
         delta = line.count('{') - line.count('}')
 
         # Detect resource block start at depth 0
-        if depth == 0 and re.match(r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{', line):
-            in_resource = True
-            resource_start_depth = 0
-            has_lifecycle = False
-            resource_depth = delta
+        if depth == 0:
+            m = RESOURCE_START_RE.match(line)
+            if m:
+                in_resource = True
+                has_lifecycle = False
+                current_rtype = m.group(1)
 
-        if in_resource:
-            if re.match(r'^\s*lifecycle\s*\{', line):
-                has_lifecycle = True
-            resource_depth += delta if depth > 0 else 0
+        if in_resource and re.match(r'^\s*lifecycle\s*\{', line):
+            has_lifecycle = True
 
         depth += delta
 
         # Resource block closing
         if in_resource and depth == 0:
             if not has_lifecycle:
-                # Insert lifecycle before closing brace
-                indent = "  "
-                out.append(f"{indent}lifecycle {{")
-                out.append(f"{indent}  create_before_destroy = false")
-                out.append(f"{indent}  ignore_changes        = []")
-                out.append(f"{indent}}}")
+                for lc_line in build_lifecycle_block(current_rtype):
+                    out.append(lc_line)
             out.append(line)
             in_resource = False
             i += 1
