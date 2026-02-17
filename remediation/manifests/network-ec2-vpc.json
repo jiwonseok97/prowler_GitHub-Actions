@@ -1,17 +1,5 @@
 [
   {
-    "check_id": "ec2_ebs_volume_protected_by_backup_plan",
-    "check_title": "EBS volume is protected by a backup plan",
-    "output_path": "network-ec2-vpc/fix-ec2_ebs_volume_protected_by_backup_plan.tf",
-    "file": "network-ec2-vpc/fix-ec2_ebs_volume_protected_by_backup_plan.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
     "check_id": "ec2_instance_managed_by_ssm",
     "check_title": "EC2 instance is managed by AWS Systems Manager or not running",
     "output_path": "network-ec2-vpc/fix-ec2_instance_managed_by_ssm.tf",
@@ -112,18 +100,6 @@
     "check_title": "Security group not created using the EC2 Launch Wizard",
     "output_path": "network-ec2-vpc/fix-ec2_securitygroup_from_launch_wizard.tf",
     "file": "network-ec2-vpc/fix-ec2_securitygroup_from_launch_wizard.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
-    "check_id": "ec2_securitygroup_with_many_ingress_egress_rules",
-    "check_title": "Security group has 50 or fewer inbound rules and 50 or fewer outbound rules",
-    "output_path": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
-    "file": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",

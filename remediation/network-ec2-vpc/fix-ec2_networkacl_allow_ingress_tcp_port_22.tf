@@ -1,7 +1,7 @@
 # Modify the existing Network ACL to remove the ingress rule allowing TCP port 22 from 0.0.0.0/0
 resource "aws_network_acl" "remediation_network_acl" {
   vpc_id     = var.vpc_id
-  subnet_ids = [var.subnet_id]
+  subnet_ids = data.aws_subnets.current.ids
 
   ingress {
     from_port  = 0
@@ -20,18 +20,14 @@ resource "aws_network_acl" "remediation_network_acl" {
     protocol   = "-1"
     cidr_block = "0.0.0.0/0"
   }
-
-  tags = {
-    Name = "remediation-network-acl"
-  }
 }
 
-# Look up the existing subnet using the Network ACL ID from the finding
 
-variable "subnet_id" {
-  description = "Target subnet ID"
-  type        = string
-  default     = ""
+data "aws_subnets" "current" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
 }
 
 variable "vpc_id" {
