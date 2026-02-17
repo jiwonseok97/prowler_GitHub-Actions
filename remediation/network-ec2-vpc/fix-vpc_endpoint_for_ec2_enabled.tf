@@ -1,4 +1,4 @@
-#Create a VPC endpoint for the EC2 service
+# Create a VPC endpoint for the EC2 service
 resource "aws_vpc_endpoint" "remediation_ec2_endpoint" {
   vpc_id              = "vpc-0565167ce4f7cc871"
   service_name        = "com.amazonaws.ap-northeast-2.ec2"
@@ -18,7 +18,7 @@ resource "aws_vpc_endpoint" "remediation_ec2_endpoint" {
   ]
 }
 
-#Apply a restrictive endpoint policy to the VPC endpoint
+# Apply a restrictive endpoint policy to the VPC endpoint
 resource "aws_vpc_endpoint_policy" "remediation_ec2_endpoint_policy" {
   vpc_endpoint_id = aws_vpc_endpoint.remediation_ec2_endpoint.id
 

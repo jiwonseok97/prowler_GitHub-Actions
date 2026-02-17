@@ -9,12 +9,9 @@ resource "aws_subnet" "remediation_subnet" {
   }
 }
 
-# Update the route table to include the new subnet
-resource "aws_route_table_association" "remediation_route_table_association" {
-  subnet_id      = aws_subnet.remediation_subnet.id
-  route_table_id = data.aws_route_table.existing_route_table.id
-}
-
-data "aws_route_table" "existing_route_table" {
-  vpc_id = "vpc-0565167ce4f7cc871"
+# Associate the new subnet with the existing VPC
+resource "aws_vpc_endpoint" "remediation_vpc_endpoint" {
+  vpc_id       = "vpc-0565167ce4f7cc871"
+  subnet_ids   = [aws_subnet.remediation_subnet.id]
+  service_name = "com.amazonaws.ap-northeast-2.s3"
 }
