@@ -13,14 +13,14 @@ resource "aws_network_acl" "remediation_acl" {
     cidr_block = "0.0.0.0/0"
   }
 
-  # Add a new ingress rule to allow RDP access only from a specific IP range
+  # Allow all other traffic
   ingress {
-    from_port  = 3389
-    to_port    = 3389
+    from_port  = 0
+    to_port    = 0
     rule_no    = 200
     action     = "allow"
-    protocol   = "tcp"
-    cidr_block = var.allowed_rdp_cidr
+    protocol   = "-1"
+    cidr_block = "0.0.0.0/0"
   }
 
   egress {
@@ -41,13 +41,6 @@ resource "aws_network_acl" "remediation_acl" {
 
 # Use a data source to look up the existing subnets
 data "aws_subnets" "current" {
-}
-
-# Define an input variable for the allowed RDP CIDR range
-variable "allowed_rdp_cidr" {
-  description = "CIDR range allowed for RDP access"
-  type        = string
-  default     = "10.0.0.0/16"
 }
 
 variable "vpc_id" {
