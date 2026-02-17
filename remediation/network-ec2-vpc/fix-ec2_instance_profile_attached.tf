@@ -8,45 +8,61 @@ resource "aws_instance" "remediation_ec2_instance" {
   instance_type        = "t2.micro"
   iam_instance_profile = var.iam_instance_profile_name
 
-  vpc_security_group_ids = [
-    var.security_group_id
-  ]
+  vpc_security_group_ids = tolist(data.aws_security_groups.default.ids)
+  subnet_id              = tolist(data.aws_subnets.default.ids)[0]
 
   tags = {
     Name = "Remediated EC2 Instance"
   }
 }
 
-# Use an existing IAM role with the required permissions
-data "aws_iam_role" "remediation_role" {
+# Use existing IAM role and policy
+data "aws_iam_role" "existing_role" {
   name = var.iam_role_name
 }
 
-# Use an existing Amazon Linux AMI
+data "aws_iam_policy" "existing_policy" {
+  arn = var.iam_policy_arn
+}
 
-# Use the default VPC security group
+# Attach the existing IAM policy to the existing IAM role
 
+# Use existing AMI and security groups
 
+data "aws_security_groups" "default" {
+  tags = {
+    Name = "default"
+  }
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name = "default-for-az"
+    values = ["true"]
+  }
+}
+
+# Use input variables for IAM role, policy, and instance profile names
 variable "iam_role_name" {
-  description = "Name of the IAM role to attach to the EC2 instance"
   type        = string
+  description = "Name of the existing IAM role to use"
+  default     = ""
+}
+
+variable "iam_policy_arn" {
+  type        = string
+  description = "ARN of the existing IAM policy to attach"
+  default     = ""
+}
+
+variable "iam_instance_profile_name" {
+  type        = string
+  description = "Name of the IAM instance profile to create"
   default     = ""
 }
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
-  type        = string
-  default     = ""
-}
-
-variable "security_group_id" {
-  description = "Target security group ID"
-  type        = string
-  default     = ""
-}
-
-variable "iam_instance_profile_name" {
-  description = "Existing IAM instance profile name"
   type        = string
   default     = ""
 }
