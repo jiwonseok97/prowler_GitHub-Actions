@@ -62,7 +62,6 @@ jobs:
       - name: Collect changed files and group by category
         id: changed
         run: |
-          # Squash merge 시 head SHA가 main 히스토리에 없을 수 있으므로 fallback
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
           if ! git cat-file -e "$HEAD" 2>/dev/null; then
@@ -70,20 +69,36 @@ jobs:
             HEAD="HEAD"
             BASE="HEAD~1"
           fi
-          files=$(git diff --name-status "$BASE" "$HEAD" -- 'remediation/**/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
+
+          # Detect categories from all changed remediation files (.tf + .json)
+          files=$(git diff --name-status "$BASE" "$HEAD" -- 'remediation/**' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
-          # Extract unique categories from directory structure
-          # remediation/iam/fix-iam_password_policy.tf -> iam
-          # remediation/cloudwatch/fix-cloudwatch_log_group.tf -> cloudwatch
           categories=""
           for file in $files; do
-            cat=$(echo "$file" | cut -d'/' -f2)
-            if ! echo "$categories" | grep -qw "$cat"; then
+            dir=$(echo "$file" | cut -d'/' -f2)
+            if [ "$dir" = "manifests" ]; then
+              cat=$(basename "$file" .json)
+            else
+              cat="$dir"
+            fi
+            if [ -n "$cat" ] && ! echo "$categories" | grep -qw "$cat"; then
               categories="$categories $cat"
             fi
           done
+
+          # Fallback: extract category from PR branch name
+          branch="${{ github.event.pull_request.head.ref }}"
+          if [ -z "$(echo $categories | xargs)" ] && echo "$branch" | grep -q '^remediation/'; then
+            cat=$(echo "$branch" | sed 's|^remediation/||' | sed 's/-[0-9].*$//')
+            if [ -n "$cat" ]; then
+              echo "INFO: No files detected via diff; using branch name category: $cat"
+              categories="$cat"
+            fi
+          fi
+
           echo "categories=$(echo $categories | xargs)" >> $GITHUB_OUTPUT
+          echo "Detected categories: $(echo $categories | xargs)"
 
       - name: Terraform Plan (per category)
         id: plan
@@ -551,7 +566,9 @@ jobs:
       - name: Collect changed files and group by category
         id: changed
         run: |
-          # Squash merge 시 head SHA가 main 히스토리에 없을 수 있으므로 fallback
+          # Strategy: extract category from PR branch name + manifest files.
+          # git diff on .tf files alone misses cases where .tf files were already
+          # merged to main from a prior PR (only manifest JSON differs).
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
           if ! git cat-file -e "$HEAD" 2>/dev/null; then
@@ -559,18 +576,39 @@ jobs:
             HEAD="HEAD"
             BASE="HEAD~1"
           fi
-          files=$(git diff --name-status "$BASE" "$HEAD" -- 'remediation/**/*.tf' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
+
+          # Detect categories from all changed remediation files (.tf + .json)
+          files=$(git diff --name-status "$BASE" "$HEAD" -- 'remediation/**' | awk '$1!="D"{print $NF}' | tr '\n' ' ')
           echo "files=$files" >> $GITHUB_OUTPUT
 
-          # Extract unique categories from directory structure
           categories=""
           for file in $files; do
-            cat=$(echo "$file" | cut -d'/' -f2)
-            if ! echo "$categories" | grep -qw "$cat"; then
+            # remediation/iam/fix-xxx.tf -> iam
+            # remediation/manifests/iam.json -> iam
+            dir=$(echo "$file" | cut -d'/' -f2)
+            if [ "$dir" = "manifests" ]; then
+              # Extract category from manifest filename: manifests/iam.json -> iam
+              cat=$(basename "$file" .json)
+            else
+              cat="$dir"
+            fi
+            if [ -n "$cat" ] && ! echo "$categories" | grep -qw "$cat"; then
               categories="$categories $cat"
             fi
           done
+
+          # Fallback: extract category from PR branch name (remediation/<cat>-<id>-<batch>)
+          branch="${{ github.event.pull_request.head.ref }}"
+          if [ -z "$(echo $categories | xargs)" ] && echo "$branch" | grep -q '^remediation/'; then
+            cat=$(echo "$branch" | sed 's|^remediation/||' | sed 's/-[0-9].*$//')
+            if [ -n "$cat" ]; then
+              echo "INFO: No files detected via diff; using branch name category: $cat"
+              categories="$cat"
+            fi
+          fi
+
           echo "categories=$(echo $categories | xargs)" >> $GITHUB_OUTPUT
+          echo "Detected categories: $(echo $categories | xargs)"
 
       - name: Collect target check IDs from manifest
         id: target_checks
