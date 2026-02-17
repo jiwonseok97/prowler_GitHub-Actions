@@ -38,7 +38,7 @@ data "aws_security_groups" "allowed_security_groups" {
   }
 }
 
-# Data source to look up an existing launch template
+# Data source to look up the existing launch template
 data "aws_launch_template" "existing_template" {
   name = "existing-launch-template"
 }
