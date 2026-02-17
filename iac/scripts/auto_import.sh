@@ -16,6 +16,8 @@ ACCOUNT=$(python3 -c "import json; print(json.load(open('$DISCOVERY'))['account_
 
 imported=0
 skipped=0
+failed=0
+blocked=0
 
 import_resource() {
   local addr="$1"
@@ -29,21 +31,37 @@ import_resource() {
   fi
 
   # 코드에 해당 resource가 없으면 skip
-  if ! grep -rq "$(echo "$addr" | sed 's/\./\\./g')" "$WORK_DIR"/*.tf 2>/dev/null; then
-    # addr 형태 확인: resource type + name
-    local rtype=$(echo "$addr" | cut -d'.' -f1)
-    local rname=$(echo "$addr" | cut -d'.' -f2)
-    if ! grep -rEq "resource\s+\"$rtype\"\s+\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null; then
-      return 0
-    fi
+  local rtype=$(echo "$addr" | cut -d'.' -f1)
+  local rname=$(echo "$addr" | cut -d'.' -f2)
+  if ! grep -rEq "resource\s+\"$rtype\"\s+\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null; then
+    echo "  SKIP import $addr (resource not declared in .tf files)"
+    return 0
   fi
 
   echo "  IMPORT $addr ← $id"
-  if terraform -chdir="$WORK_DIR" import -input=false "$addr" "$id" 2>&1; then
+  import_err=$(mktemp)
+  if terraform -chdir="$WORK_DIR" import -input=false "$addr" "$id" 2>&1 | tee "$import_err"; then
     imported=$((imported+1))
-  else
-    echo "  WARN: import failed for $addr (non-fatal)"
+    rm -f "$import_err"
+    return 0
   fi
+
+  # Import failed — determine if the resource exists in AWS
+  # "Cannot import non-existent" or "not found" = resource doesn't exist → safe to skip
+  if grep -qiE '(Cannot import non-existent|not found|does not exist|NoSuchEntity|NoSuchBucket|NotFoundException)' "$import_err" 2>/dev/null; then
+    echo "  WARN: import skipped for $addr — resource $id does not exist in AWS"
+    failed=$((failed+1))
+    rm -f "$import_err"
+    return 0
+  fi
+
+  # Resource exists in AWS but import failed → BLOCKING error
+  # Apply would try to create a duplicate, causing conflict
+  echo "  BLOCK: import FAILED for $addr with id=$id"
+  echo "  BLOCK: Resource exists in AWS but could not be imported into state."
+  echo "  BLOCK: Apply would attempt to recreate this resource — stopping."
+  blocked=$((blocked+1))
+  rm -f "$import_err"
 }
 
 echo "=== Auto-import existing resources ==="
@@ -61,19 +79,27 @@ if [ "$pw_exists" = "True" ] || [ "$pw_exists" = "true" ]; then
 fi
 
 # ── CloudTrail ───────────────────────────────────────
-trail_names=$(python3 -c "
+# aws_cloudtrail import requires the trail ARN, not just the name
+trail_arns=$(python3 -c "
 import json
 d = json.load(open('$DISCOVERY'))
 for t in d.get('cloudtrail',{}).get('trails',[]):
-    print(t.get('Name',''))
+    arn = t.get('TrailARN','')
+    name = t.get('Name','')
+    bucket = t.get('S3BucketName','')
+    if arn:
+        print(arn + '|' + name + '|' + bucket)
 " 2>/dev/null || true)
 
-for trail_name in $trail_names; do
-  [ -z "$trail_name" ] && continue
-  # Find any aws_cloudtrail resource referencing this trail
+for trail_info in $trail_arns; do
+  trail_arn=$(echo "$trail_info" | cut -d'|' -f1)
+  trail_name=$(echo "$trail_info" | cut -d'|' -f2)
+  trail_bucket=$(echo "$trail_info" | cut -d'|' -f3)
+  [ -z "$trail_arn" ] && continue
+  # Find any aws_cloudtrail resource in the .tf files
   for rname in $(grep -rEoh 'resource\s+"aws_cloudtrail"\s+"([^"]+)"' "$WORK_DIR"/*.tf 2>/dev/null | \
                  sed 's/resource\s*"aws_cloudtrail"\s*"//;s/"//g' || true); do
-    import_resource "aws_cloudtrail.$rname" "$trail_name"
+    import_resource "aws_cloudtrail.$rname" "$trail_arn"
   done
 done
 
@@ -134,4 +160,68 @@ if [ "$sh_enabled" = "True" ] || [ "$sh_enabled" = "true" ]; then
   done
 fi
 
-echo "Auto-import done: imported=$imported skipped=$skipped"
+# ── S3 Buckets and sub-resources ─────────────────────
+# Determine the target bucket from discovery (same logic as generate_tfvars.py)
+target_bucket=$(python3 -c "
+import json
+d = json.load(open('$DISCOVERY'))
+account_id = d.get('account_id','')
+state_bucket = f'prowler-terraform-state-{account_id}'
+trails = d.get('cloudtrail',{}).get('trails',[])
+buckets = d.get('s3',{}).get('buckets',[])
+# Primary: CloudTrail log bucket from trail config
+ct_bucket = ''
+for t in trails:
+    b = t.get('S3BucketName','')
+    if b:
+        ct_bucket = b
+        break
+if not ct_bucket:
+    for b in buckets:
+        if 'cloudtrail' in b:
+            ct_bucket = b
+            break
+# Fallback: first non-state bucket
+first_bucket = ''
+for b in buckets:
+    if b != state_bucket:
+        first_bucket = b
+        break
+# Print cloudtrail bucket and first bucket (pipe-separated)
+print(f'{ct_bucket}|{first_bucket}')
+" 2>/dev/null || echo "|")
+
+ct_target=$(echo "$target_bucket" | cut -d'|' -f1)
+s3_target=$(echo "$target_bucket" | cut -d'|' -f2)
+
+# S3 resource types that use bucket name as import ID
+S3_SUB_TYPES=(
+  "aws_s3_bucket"
+  "aws_s3_bucket_server_side_encryption_configuration"
+  "aws_s3_bucket_versioning"
+  "aws_s3_bucket_public_access_block"
+  "aws_s3_bucket_ownership_controls"
+  "aws_s3_bucket_policy"
+  "aws_s3_bucket_lifecycle_configuration"
+)
+
+# Use the CloudTrail bucket as primary target (most remediation files target it)
+# Fall back to first non-state bucket
+import_bucket="${ct_target:-$s3_target}"
+
+if [ -n "$import_bucket" ]; then
+  for s3type in "${S3_SUB_TYPES[@]}"; do
+    for rname in $(grep -rEoh "resource\s+\"$s3type\"\s+\"([^\"]+)\"" "$WORK_DIR"/*.tf 2>/dev/null | \
+                   sed "s/resource\s*\"$s3type\"\s*\"//;s/\"//g" || true); do
+      import_resource "$s3type.$rname" "$import_bucket"
+    done
+  done
+fi
+
+echo "Auto-import done: imported=$imported skipped=$skipped failed=$failed blocked=$blocked"
+
+if [ "$blocked" -gt 0 ]; then
+  echo "FATAL: $blocked resource(s) exist in AWS but could not be imported."
+  echo "Apply would create duplicates. Fix import IDs or remove conflicting resources."
+  exit 1
+fi
