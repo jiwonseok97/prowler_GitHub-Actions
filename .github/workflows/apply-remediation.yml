@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, closed]
     paths:
-      - 'remediation/**/*.tf'
+      - 'remediation/**'
 
 env:
   TF_BACKEND_BUCKET: prowler-terraform-state-132410971304
