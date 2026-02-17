@@ -60,7 +60,7 @@ resource "aws_sns_topic_subscription" "remediation_cloudtrail_logs_subscription"
 
 # Create a KMS key for encrypting the CloudTrail logs
 resource "aws_kms_key" "remediation_cloudtrail_logs_kms_key" {
-  description             = "KMS key for CloudTrail logs encryption"
+  description             = "CloudTrail Logs KMS Key"
   deletion_window_in_days = 30
 }
 
@@ -69,61 +69,63 @@ resource "aws_kms_alias" "remediation_cloudtrail_logs_kms_key_alias" {
   target_key_id = aws_kms_key.remediation_cloudtrail_logs_kms_key.id
 }
 
-# Apply the KMS key policy to allow CloudTrail to use the key
-resource "aws_kms_key_policy" "remediation_cloudtrail_logs_kms_key_policy" {
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        },
-        Action   = "kms:GenerateDataKey*",
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        },
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-  key_id = aws_kms_key.remediation_cloudtrail_logs_kms_key.key_id
-}
-
-# Apply the S3 bucket policy to allow CloudTrail to write logs
-resource "aws_s3_bucket_policy" "remediation_cloudtrail_logs_bucket_policy" {
+# Apply the KMS key to the CloudTrail logs bucket
+resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloudtrail_logs_encryption" {
   bucket = aws_s3_bucket.remediation_cloudtrail_logs.id
 
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.remediation_cloudtrail_logs_kms_key.id
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+# Apply the KMS key to the CloudTrail logs bucket
+resource "aws_s3_bucket_ownership_controls" "remediation_cloudtrail_logs_ownership" {
+  bucket = aws_s3_bucket.remediation_cloudtrail_logs.id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+
+# Apply the KMS key to the CloudTrail logs bucket
+resource "aws_s3_bucket_public_access_block" "remediation_cloudtrail_logs_public_access_block" {
+  bucket = aws_s3_bucket.remediation_cloudtrail_logs.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+variable "s3_bucket_name" {
+  description = "Target S3 bucket name for remediation"
+  type        = string
+  default     = "aws-cloudtrail-logs-132410971304-0971c04b"
+}
+
+
+resource "aws_s3_bucket_policy" "remediation_cloudtrail_bucket_policy" {
+  bucket = aws_s3_bucket.remediation_cloudtrail_logs.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        },
-        Action   = "s3:GetBucketAcl",
-        Resource = "arn:aws:s3:::${var.s3_bucket_name}"
+        Sid       = "AWSCloudTrailAclCheck"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action    = "s3:GetBucketAcl"
+        Resource  = "arn:aws:s3:::${aws_s3_bucket.remediation_cloudtrail_logs.id}"
       },
       {
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        },
-        Action   = "s3:PutObject",
-        Resource = "arn:aws:s3:::${var.s3_bucket_name}/cloudtrail/AWSLogs/${data.aws_caller_identity.current.account_id}/*",
+        Sid       = "AWSCloudTrailWrite"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "arn:aws:s3:::${aws_s3_bucket.remediation_cloudtrail_logs.id}/*"
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
@@ -133,13 +135,6 @@ resource "aws_s3_bucket_policy" "remediation_cloudtrail_logs_bucket_policy" {
     ]
   })
 }
-
-variable "s3_bucket_name" {
-  description = "Target S3 bucket name for remediation"
-  type        = string
-  default     = "aws-cloudtrail-logs-132410971304-0971c04b"
-}
-
 
 variable "cloudtrail_logs_notification_email" {
   description = "cloudtrail_logs_notification_email"

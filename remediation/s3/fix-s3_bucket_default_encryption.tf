@@ -1,4 +1,4 @@
-# Enable default encryption on the existing S3 bucket
+# Enable default encryption on the S3 bucket
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 
@@ -9,29 +9,20 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
   }
 }
 
-# Attach a bucket policy to enforce encryption
-data "aws_iam_policy_document" "remediation_s3_bucket_encryption_policy" {
-  statement {
-    effect = "Deny"
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-    actions = [
-      "s3:PutObject",
-    ]
-    resources = [
-      "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*",
-    ]
-    condition {
-      test     = "StringNotEquals"
-      variable = "s3:x-amz-server-side-encryption"
-      values   = ["AES256"]
-    }
+# Attach the S3 bucket encryption configuration to the existing S3 bucket
+resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
   }
 }
 
-resource "aws_s3_bucket_policy" "remediation_s3_bucket_encryption_policy" {
+resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access_block" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
-  policy = data.aws_iam_policy_document.remediation_s3_bucket_encryption_policy.json
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
