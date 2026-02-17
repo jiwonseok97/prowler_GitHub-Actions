@@ -10,31 +10,26 @@ resource "aws_instance" "remediation_ec2_instance" {
   }
 }
 
-# Look up the latest non-deprecated AMI
+# Data source to find the latest non-deprecated AMI
 
-# Look up the default VPC and security groups
-data "aws_subnets" "default" {
+# Data source to get the default VPC security groups
+data "aws_security_groups" "default" {
   filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
+    name   = "group-name"
+    values = ["default"]
   }
 }
 
-data "aws_security_groups" "default" {
+# Data source to get the default subnets
+data "aws_subnets" "default" {
   filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
+    name   = "default-for-az"
+    values = ["true"]
   }
 }
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
-  type        = string
-  default     = ""
-}
-
-variable "vpc_id" {
-  description = "Target VPC ID"
   type        = string
   default     = ""
 }
