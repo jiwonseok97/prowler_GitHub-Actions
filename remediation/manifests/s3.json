@@ -36,18 +36,6 @@
     "sanitizers_applied": []
   },
   {
-    "check_id": "s3_bucket_no_mfa_delete",
-    "check_title": "S3 bucket has MFA Delete enabled",
-    "output_path": "s3/fix-s3_bucket_no_mfa_delete.tf",
-    "file": "s3/fix-s3_bucket_no_mfa_delete.tf",
-    "priority": "P2",
-    "category": "s3",
-    "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
     "check_id": "s3_bucket_object_versioning",
     "check_title": "S3 bucket has object versioning enabled",
     "output_path": "s3/fix-s3_bucket_object_versioning.tf",
@@ -64,6 +52,18 @@
     "check_title": "S3 bucket policy denies requests over insecure transport",
     "output_path": "s3/fix-s3_bucket_secure_transport_policy.tf",
     "file": "s3/fix-s3_bucket_secure_transport_policy.tf",
+    "priority": "P2",
+    "category": "s3",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "s3_bucket_server_access_logging_enabled",
+    "check_title": "S3 bucket has server access logging enabled",
+    "output_path": "s3/fix-s3_bucket_server_access_logging_enabled.tf",
+    "file": "s3/fix-s3_bucket_server_access_logging_enabled.tf",
     "priority": "P2",
     "category": "s3",
     "source": "bedrock",
