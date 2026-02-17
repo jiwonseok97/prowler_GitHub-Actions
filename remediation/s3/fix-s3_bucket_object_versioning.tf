@@ -1,60 +1,57 @@
-# Enable S3 versioning for the existing S3 bucket
+# Enable S3 versioning for the existing bucket
 resource "aws_s3_bucket_versioning" "remediation_s3_bucket_versioning" {
-  bucket = var.s3_bucket_name
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Enable S3 bucket encryption using a new KMS key
-resource "aws_kms_key" "remediation_s3_bucket_encryption_key" {
-  description             = "KMS key for S3 bucket encryption"
-  deletion_window_in_days = 10
-}
-
+# Enable S3 bucket encryption using server-side encryption with Amazon S3-managed keys (SSE-S3)
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
-  bucket = var.s3_bucket_name
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
   rule {
     apply_server_side_encryption_by_default {
-      kms_master_key_id = aws_kms_key.remediation_s3_bucket_encryption_key.id
-      sse_algorithm     = "aws:kms"
+      sse_algorithm = "AES256"
     }
   }
+}
+
+# Apply a bucket policy to enforce MFA delete for the S3 bucket
+data "aws_iam_policy_document" "remediation_s3_bucket_policy" {
+  statement {
+    effect = "Deny"
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+    actions = [
+      "s3:DeleteObject",
+      "s3:DeleteObjectVersion"
+    ]
+    resources = [
+      "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*"
+    ]
+    condition {
+      test     = "Bool"
+      variable = "aws:MultiFactorAuthPresent"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+  policy = data.aws_iam_policy_document.remediation_s3_bucket_policy.json
 }
 
 # Apply a lifecycle rule to manage noncurrent object versions
 resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycle" {
-  bucket = var.s3_bucket_name
-
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
   rule {
     id     = "lifecycle-rule-1"
     status = "Enabled"
-
     noncurrent_version_expiration {
-      noncurrent_days = 30
+      noncurrent_days = 90
     }
   }
-}
-
-# Enable MFA delete for stronger protection
-resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
-  bucket = var.s3_bucket_name
-
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access_block" {
-  bucket                  = var.s3_bucket_name
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-variable "s3_bucket_name" {
-  description = "Target S3 bucket name"
-  type        = string
-  default     = ""
 }

@@ -1,6 +1,4 @@
-#
-# Enable default SSE-KMS encryption for the S3 bucket
-#
+#Enable default SSE-KMS encryption for the S3 bucket
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 
@@ -11,14 +9,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
   }
 }
 
-#
-# Attach a customer-managed KMS key to the S3 bucket
-#
-resource "aws_kms_key" "remediation_s3_bucket_kms_key" {
-  description             = "Customer-managed key for S3 bucket encryption"
-  deletion_window_in_days = 30
-}
-
+#Attach a customer-managed KMS key to the S3 bucket
 resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 
@@ -26,7 +17,6 @@ resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership" {
     object_ownership = "BucketOwnerPreferred"
   }
 }
-
 
 resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
@@ -37,9 +27,34 @@ resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_acces
   restrict_public_buckets = true
 }
 
-#
-# Enforce KMS encryption via bucket policy
-#
+#Create a customer-managed KMS key for the S3 bucket
+resource "aws_kms_key" "remediation_s3_bucket_kms_key" {
+  description             = "Customer-managed KMS key for S3 bucket encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+}
+
+#Attach the customer-managed KMS key to the S3 bucket
+resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption_configuration" {
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.remediation_s3_bucket_kms_key.id
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+#Enforce KMS encryption via bucket policy
 data "aws_iam_policy_document" "remediation_s3_bucket_policy" {
   statement {
     effect = "Deny"
