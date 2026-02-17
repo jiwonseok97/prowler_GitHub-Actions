@@ -1,6 +1,4 @@
-#
-# Remediate the S3 bucket policy to enforce HTTPS-only access
-#
+# Modify the existing S3 bucket policy to enforce HTTPS-only access
 resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
   bucket = var.s3_bucket_name
   policy = jsonencode({
@@ -10,10 +8,7 @@ resource "aws_s3_bucket_policy" "remediation_s3_bucket_policy" {
         Effect    = "Deny"
         Principal = "*"
         Action    = "s3:*"
-        Resource = [
-          "arn:aws:s3:::${var.s3_bucket_name}",
-          "arn:aws:s3:::${var.s3_bucket_name}/*"
-        ]
+        Resource  = "arn:aws:s3:::${var.s3_bucket_name}/*"
         Condition = {
           Bool = {
             "aws:SecureTransport" = "false"
