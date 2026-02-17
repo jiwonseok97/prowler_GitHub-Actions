@@ -224,6 +224,7 @@ jobs:
       - name: Checkout repository (full history)
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       # MCP 가공 결과 다운로드
@@ -389,6 +390,8 @@ jobs:
 
             # Always create a fresh branch per run to avoid force-push based PR updates.
             BRANCH="remediation/${CATEGORY}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            # Ensure main ref exists (workflow_dispatch may detach HEAD)
+            git rev-parse --verify main >/dev/null 2>&1 || git branch main origin/main
             git checkout -B "$BRANCH" main
 
             # main에서 상속된 같은 카테고리 remediation 파일만 정리
