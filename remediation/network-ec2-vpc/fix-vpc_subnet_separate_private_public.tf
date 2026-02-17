@@ -25,7 +25,7 @@ resource "aws_internet_gateway" "remediation_igw" {
   vpc_id = "vpc-0565167ce4f7cc871"
 
   tags = {
-    Name = "remediation-igw"
+    Name = "remediation-internet-gateway"
   }
 }
 
@@ -39,7 +39,7 @@ resource "aws_route_table" "remediation_public_rt" {
   }
 
   tags = {
-    Name = "remediation-public-rt"
+    Name = "remediation-public-route-table"
   }
 }
 
@@ -58,7 +58,7 @@ resource "aws_nat_gateway" "remediation_nat_gw" {
   subnet_id     = aws_subnet.remediation_public_subnet.id
 
   tags = {
-    Name = "remediation-nat-gw"
+    Name = "remediation-nat-gateway"
   }
 }
 
@@ -73,7 +73,7 @@ resource "aws_route_table" "remediation_private_rt" {
   }
 
   tags = {
-    Name = "remediation-private-rt"
+    Name = "remediation-private-route-table"
   }
 }
 
