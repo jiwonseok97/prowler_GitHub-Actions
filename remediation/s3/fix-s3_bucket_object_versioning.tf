@@ -22,7 +22,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
   }
 }
 
-# Apply a lifecycle rule to manage noncurrent object versions
+# Enable S3 bucket lifecycle rules to manage noncurrent versions
 resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycle" {
   bucket = var.s3_bucket_name
 
@@ -36,7 +36,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycl
   }
 }
 
-# Enable MFA delete for stronger protection
+# Enable MFA delete for the S3 bucket
 resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
   bucket = var.s3_bucket_name
 
