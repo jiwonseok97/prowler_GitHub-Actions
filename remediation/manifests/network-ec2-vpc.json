@@ -1,5 +1,17 @@
 [
   {
+    "check_id": "ec2_instance_managed_by_ssm",
+    "check_title": "EC2 instance is managed by AWS Systems Manager or not running",
+    "output_path": "network-ec2-vpc/fix-ec2_instance_managed_by_ssm.tf",
+    "file": "network-ec2-vpc/fix-ec2_instance_managed_by_ssm.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
     "check_id": "ec2_instance_older_than_specific_days",
     "check_title": "EC2 instance is not older than the configured maximum age or is not running",
     "output_path": "network-ec2-vpc/fix-ec2_instance_older_than_specific_days.tf",

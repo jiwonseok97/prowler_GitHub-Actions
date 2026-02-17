@@ -20,6 +20,10 @@ resource "aws_network_acl" "remediation_network_acl" {
     protocol   = "-1"
     cidr_block = "0.0.0.0/0"
   }
+
+  tags = {
+    Name = "remediation-network-acl"
+  }
 }
 
 
