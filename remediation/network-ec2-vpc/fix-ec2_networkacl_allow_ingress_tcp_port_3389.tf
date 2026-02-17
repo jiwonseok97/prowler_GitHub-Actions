@@ -1,23 +1,35 @@
-# Modify the existing Network ACL to remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
+# Modify the existing Network ACL to restrict RDP access from the internet
 resource "aws_network_acl" "remediation_network_acl" {
-  vpc_id = var.vpc_id
-  subnet_ids = data.aws_subnets.existing_subnets.ids
+  vpc_id     = var.vpc_id
+  subnet_ids = data.aws_subnets.current.ids
 
-  ingress {
-    from_port  = 0
-    to_port    = 0
-    rule_no    = 100
-    action     = "allow"
-    protocol   = "-1"
-    cidr_block = "0.0.0.0/0"
-  }
-
+  # Allow all traffic outbound
   egress {
     from_port  = 0
     to_port    = 0
     rule_no    = 100
-    action     = "allow"
     protocol   = "-1"
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+  }
+
+  # Deny RDP access from the internet
+  ingress {
+    from_port  = 3389
+    to_port    = 3389
+    rule_no    = 100
+    protocol   = "tcp"
+    action     = "deny"
+    cidr_block = "0.0.0.0/0"
+  }
+
+  # Allow all other traffic inbound
+  ingress {
+    from_port  = 0
+    to_port    = 0
+    rule_no    = 200
+    protocol   = "-1"
+    action     = "allow"
     cidr_block = "0.0.0.0/0"
   }
 
@@ -26,9 +38,12 @@ resource "aws_network_acl" "remediation_network_acl" {
   }
 }
 
-# Data sources to look up existing VPC and subnets
 
-data "aws_subnets" "existing_subnets" {
+data "aws_subnets" "current" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
 }
 
 variable "vpc_id" {
