@@ -46,7 +46,8 @@ resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_con
 }
 
 resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access_block" {
-  bucket                  = var.s3_bucket_name
+  bucket = var.s3_bucket_name
+
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
