@@ -1,49 +1,49 @@
-# Modify the existing EC2 instance to remove the public IP address
+#
+# Modify the EC2 instance to remove the public IP address
+#
 resource "aws_instance" "remediation_ec2_instance" {
-  ami                    = var.ami_id
-  instance_type          = var.instance_type
-  subnet_id              = data.aws_subnets.private_subnets.ids[0]
-  vpc_security_group_ids = tolist(data.aws_security_groups.allowed_security_groups.ids)
+  ami           = var.ami_id
+  instance_type = "t2.micro"
+  subnet_id     = data.aws_subnets.private_subnets.ids[0]
 
-  # Use an existing launch template or AMI
-  launch_template {
-    name = var.launch_template_name
-  }
+  vpc_security_group_ids = [
+    var.security_group_id,
+  ]
 
-  # Ensure the instance has no public IP address
   associate_public_ip_address = false
+  iam_instance_profile        = var.iam_instance_profile_name
+
+  tags = {
+    Name = "remediation-ec2-instance"
+  }
 }
 
-# Data source to look up existing private subnets
+#
+# Use a data source to look up the existing AMI
+#
+
+#
+# Use a data source to look up the existing default security group
+#
+
+#
+# Use a data source to look up the existing private subnets
+#
 data "aws_subnets" "private_subnets" {
   filter {
-    name = "vpc-id"
+    name   = "vpc-id"
     values = [var.vpc_id]
   }
+
   filter {
-    name = "tag-Tier"
+    name   = "tag-Tier"
     values = ["private"]
   }
 }
 
-# Data source to look up existing security groups
-data "aws_security_groups" "allowed_security_groups" {
-  filter {
-    name = "vpc-id"
-    values = [var.vpc_id]
-  }
-  filter {
-    name = "group-name"
-    values = ["allowed-sg"]
-  }
-}
-
-# Data source to look up an existing launch template
-data "aws_launch_template" "existing_template" {
-  name = "existing-launch-template"
-}
-
-# Data source to look up the current VPC
+#
+# Use a data source to look up the existing default VPC
+#
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
@@ -51,14 +51,14 @@ variable "ami_id" {
   default     = ""
 }
 
-variable "instance_type" {
-  description = "EC2 instance type"
+variable "iam_instance_profile_name" {
+  description = "Existing IAM instance profile name"
   type        = string
   default     = ""
 }
 
-variable "launch_template_name" {
-  description = "EC2 launch template name"
+variable "security_group_id" {
+  description = "Target security group ID"
   type        = string
   default     = ""
 }
