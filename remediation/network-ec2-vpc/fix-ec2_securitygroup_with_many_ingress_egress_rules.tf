@@ -31,7 +31,7 @@ resource "aws_security_group" "remediation_sg" {
 # Use data source to look up the existing security group
 
 # Attach the remediated security group to the resources that use the existing one
-resource "aws_network_interface_sg_attachment" "remediation_remediation" {
+resource "aws_network_interface_sg_attachment" "remediation_example" {
   security_group_id    = aws_security_group.remediation_sg.id
   network_interface_id = var.security_group_id
 }
