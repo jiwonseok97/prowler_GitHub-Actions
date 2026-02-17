@@ -37,4 +37,5 @@ variable "ami_id" {
 variable "vpc_id" {
   description = "Target VPC ID"
   type        = string
+  default     = ""
 }

@@ -57,9 +57,11 @@ resource "aws_networkfirewall_firewall" "remediation_firewall" {
 variable "vpc_id" {
   description = "VPC ID for Network Firewall"
   type        = string
+  default     = ""
 }
 
 variable "firewall_subnet_id" {
   description = "Subnet ID for Network Firewall endpoint"
   type        = string
+  default     = ""
 }
