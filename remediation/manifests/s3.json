@@ -36,10 +36,10 @@
     "sanitizers_applied": []
   },
   {
-    "check_id": "s3_bucket_object_versioning",
-    "check_title": "S3 bucket has object versioning enabled",
-    "output_path": "s3/fix-s3_bucket_object_versioning.tf",
-    "file": "s3/fix-s3_bucket_object_versioning.tf",
+    "check_id": "s3_bucket_no_mfa_delete",
+    "check_title": "S3 bucket has MFA Delete enabled",
+    "output_path": "s3/fix-s3_bucket_no_mfa_delete.tf",
+    "file": "s3/fix-s3_bucket_no_mfa_delete.tf",
     "priority": "P2",
     "category": "s3",
     "source": "bedrock",
