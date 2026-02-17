@@ -1,30 +1,21 @@
-# Update the EC2 instance to use a non-deprecated AMI
+variable "subnet_ids" {
+  description = "List of subnet IDs to use for the EC2 instance"
+  type        = list(string)
+}
+
+variable "security_group_ids" {
+  description = "List of security group IDs to use for the EC2 instance"
+  type        = list(string)
+}
+
 resource "aws_instance" "remediation_ec2_instance" {
   ami                    = var.ami_id
   instance_type          = "t2.micro"
-  subnet_id              = tolist(data.aws_subnets.default.ids)[0]
-  vpc_security_group_ids = tolist(data.aws_security_groups.default.ids)
+  subnet_id              = var.subnet_ids[0]
+  vpc_security_group_ids = var.security_group_ids
 
   tags = {
     Name = "Remediated EC2 Instance"
-  }
-}
-
-# Data source to find the latest non-deprecated AMI
-
-# Data source to get the default VPC security groups
-data "aws_security_groups" "default" {
-  filter {
-    name   = "group-name"
-    values = ["default"]
-  }
-}
-
-# Data source to get the default subnets
-data "aws_subnets" "default" {
-  filter {
-    name   = "default-for-az"
-    values = ["true"]
   }
 }
 
