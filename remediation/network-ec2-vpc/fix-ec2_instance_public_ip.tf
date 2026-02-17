@@ -43,9 +43,11 @@ variable "security_group_id" {
 variable "vpc_id" {
   description = "Target VPC ID"
   type        = string
+  default     = ""
 }
 
 variable "security_group_ids" {
   description = "Security group IDs for instance/network resources"
   type        = list(string)
+  default     = ""
 }

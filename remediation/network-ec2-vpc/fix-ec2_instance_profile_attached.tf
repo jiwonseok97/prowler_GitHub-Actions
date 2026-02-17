@@ -44,14 +44,17 @@ variable "iam_policy_arn" {
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
   type        = string
+  default     = ""
 }
 
 variable "vpc_id" {
   description = "Target VPC ID"
   type        = string
+  default     = ""
 }
 
 variable "iam_instance_profile_name" {
   description = "Existing IAM instance profile name"
   type        = string
+  default     = ""
 }

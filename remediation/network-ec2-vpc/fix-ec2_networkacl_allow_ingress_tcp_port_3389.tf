@@ -49,4 +49,5 @@ data "aws_subnets" "current" {
 variable "vpc_id" {
   description = "Target VPC ID"
   type        = string
+  default     = ""
 }

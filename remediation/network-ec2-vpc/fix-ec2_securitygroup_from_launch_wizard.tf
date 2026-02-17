@@ -29,4 +29,5 @@ resource "aws_security_group" "remediation_sg" {
 variable "vpc_id" {
   description = "Target VPC ID"
   type        = string
+  default     = ""
 }
