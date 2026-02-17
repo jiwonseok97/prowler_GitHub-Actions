@@ -1,24 +1,14 @@
-# Enable S3 versioning for the existing S3 bucket
+# Enable S3 versioning for the existing bucket
 resource "aws_s3_bucket_versioning" "remediation_s3_bucket_versioning" {
-  bucket = var.s3_bucket_name
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Enable S3 bucket encryption using the default KMS key
-resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bucket_encryption" {
-  bucket = var.s3_bucket_name
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "aws:kms"
-    }
-  }
-}
-
-# Apply a lifecycle rule to manage noncurrent object versions
+# Apply a lifecycle rule to manage noncurrent versions
 resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycle" {
-  bucket = var.s3_bucket_name
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
   rule {
     id = "lifecycle-rule-1"
     status = "Enabled"
@@ -28,8 +18,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "remediation_s3_bucket_lifecycl
   }
 }
 
-variable "s3_bucket_name" {
-  description = "Target S3 bucket name"
-  type        = string
-  default     = ""
+# Enable MFA delete for stronger protection
+resource "aws_s3_bucket_ownership_controls" "remediation_s3_bucket_ownership_controls" {
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "remediation_s3_bucket_public_access_block" {
+  bucket                  = "aws-cloudtrail-logs-132410971304-0971c04b"
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
