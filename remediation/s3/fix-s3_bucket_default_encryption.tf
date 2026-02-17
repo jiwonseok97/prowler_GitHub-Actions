@@ -13,15 +13,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3_bu
 data "aws_iam_policy_document" "remediation_s3_bucket_encryption_policy" {
   statement {
     effect = "Deny"
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
     actions = [
-      "s3:PutObject",
+      "s3:PutObject"
     ]
     resources = [
-      "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*",
+      "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*"
     ]
     condition {
       test     = "StringNotEquals"

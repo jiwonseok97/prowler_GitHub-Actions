@@ -3,7 +3,7 @@ data "aws_s3_bucket" "remediation_aws_cloudtrail_logs" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 }
 
-# Ensure the bucket has server-side encryption enabled
+# Ensure the bucket has the appropriate server-side encryption configuration
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_aws_cloudtrail_logs" {
   bucket = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.id
 
