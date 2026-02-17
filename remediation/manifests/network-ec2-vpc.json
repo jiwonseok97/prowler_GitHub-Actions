@@ -1,5 +1,17 @@
 [
   {
+    "check_id": "ec2_instance_managed_by_ssm",
+    "check_title": "EC2 instance is managed by AWS Systems Manager or not running",
+    "output_path": "network-ec2-vpc/fix-ec2_instance_managed_by_ssm.tf",
+    "file": "network-ec2-vpc/fix-ec2_instance_managed_by_ssm.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
     "check_id": "ec2_instance_older_than_specific_days",
     "check_title": "EC2 instance is not older than the configured maximum age or is not running",
     "output_path": "network-ec2-vpc/fix-ec2_instance_older_than_specific_days.tf",
@@ -33,7 +45,9 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": []
+    "sanitizers_applied": [
+      "_fix_invalid_ec2_resource_type"
+    ]
   },
   {
     "check_id": "ec2_instance_public_ip",
@@ -84,18 +98,6 @@
     "sanitizers_applied": []
   },
   {
-    "check_id": "ec2_securitygroup_with_many_ingress_egress_rules",
-    "check_title": "Security group has 50 or fewer inbound rules and 50 or fewer outbound rules",
-    "output_path": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
-    "file": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
     "check_id": "networkfirewall_in_all_vpc",
     "check_title": "VPC has Network Firewall enabled",
     "output_path": "network-ec2-vpc/fix-networkfirewall_in_all_vpc.tf",
@@ -124,6 +126,18 @@
     "check_title": "VPC has an Amazon EC2 VPC endpoint",
     "output_path": "network-ec2-vpc/fix-vpc_endpoint_for_ec2_enabled.tf",
     "file": "network-ec2-vpc/fix-vpc_endpoint_for_ec2_enabled.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "vpc_flow_logs_enabled",
+    "check_title": "VPC flow logs are enabled",
+    "output_path": "network-ec2-vpc/fix-vpc_flow_logs_enabled.tf",
+    "file": "network-ec2-vpc/fix-vpc_flow_logs_enabled.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",

@@ -1,4 +1,4 @@
-# Create a VPC endpoint for the EC2 service
+#Create a VPC endpoint for the EC2 service
 resource "aws_vpc_endpoint" "remediation_ec2_endpoint" {
   vpc_id              = "vpc-0565167ce4f7cc871"
   service_name        = "com.amazonaws.ap-northeast-2.ec2"
@@ -18,7 +18,7 @@ resource "aws_vpc_endpoint" "remediation_ec2_endpoint" {
   ]
 
   policy = jsonencode({
-    # Add a restrictive policy to the VPC endpoint
+    # Add a restrictive policy to control access to the VPC endpoint
     Version = "2012-10-17"
     Statement = [
       {
