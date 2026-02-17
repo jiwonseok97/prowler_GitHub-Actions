@@ -31,21 +31,16 @@ resource "aws_network_acl" "remediation_acl" {
     protocol   = "-1"
     cidr_block = "0.0.0.0/0"
   }
-
-  tags = {
-    Name = "remediation_acl"
-  }
 }
 
-# Use a data source to look up the existing VPC
+# Data sources to look up the current VPC and subnets
 
-# Use a data source to look up the existing subnets
 data "aws_subnets" "current" {
 }
 
-# Define an input variable for the allowed RDP CIDR range
+# Input variable to specify the allowed RDP CIDR range
 variable "allowed_rdp_cidr" {
-  description = "CIDR range allowed for RDP access"
+  description = "CIDR block allowed for RDP access"
   type        = string
   default     = "10.0.0.0/16"
 }
