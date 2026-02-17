@@ -1,4 +1,3 @@
-# Remediation apply trigger - cloudwatch
 # CloudWatch remediation baseline snippet
 # Log group + metric filter + alarm + SNS notification
 
