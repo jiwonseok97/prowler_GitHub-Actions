@@ -37,9 +37,9 @@ resource "aws_network_acl" "remediation_acl" {
   }
 }
 
-# Use a data source to look up the existing VPC
+# Use a data source to look up the current VPC
 
-# Use a data source to look up the existing subnets
+# Use a data source to look up the current subnets
 data "aws_subnets" "current" {
 }
 

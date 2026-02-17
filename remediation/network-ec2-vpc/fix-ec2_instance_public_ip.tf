@@ -14,7 +14,7 @@ resource "aws_instance" "remediation_ec2_instance" {
   associate_public_ip_address = false
 }
 
-# Data source to look up existing private subnets
+# Data source to look up the private subnets in the VPC
 data "aws_subnets" "private_subnets" {
   filter {
     name = "vpc-id"
@@ -26,19 +26,15 @@ data "aws_subnets" "private_subnets" {
   }
 }
 
-# Data source to look up existing security groups
+# Data source to look up the security groups allowed for the instance
 data "aws_security_groups" "allowed_security_groups" {
   filter {
-    name = "vpc-id"
-    values = [var.vpc_id]
-  }
-  filter {
     name = "group-name"
-    values = ["allowed-sg"]
+    values = ["allowed-sg-1", "allowed-sg-2"]
   }
 }
 
-# Data source to look up an existing launch template
+# Data source to look up the existing launch template
 data "aws_launch_template" "existing_template" {
   name = "existing-launch-template"
 }

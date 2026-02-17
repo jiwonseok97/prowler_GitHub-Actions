@@ -12,7 +12,7 @@ resource "aws_instance" "remediation_ec2_instance" {
 
 # Look up the latest non-deprecated AMI
 
-# Look up the default VPC and security groups
+# Look up the default VPC and subnets
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
