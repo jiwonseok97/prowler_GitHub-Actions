@@ -1,6 +1,6 @@
 #Enforce HTTPS-only access to the S3 bucket
 resource "aws_s3_bucket_policy" "remediation_s3_bucket_secure_transport_policy" {
-  bucket = var.s3_bucket_name
+  bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -8,7 +8,7 @@ resource "aws_s3_bucket_policy" "remediation_s3_bucket_secure_transport_policy" 
         Effect    = "Deny"
         Principal = "*"
         Action    = "s3:*"
-        Resource  = "arn:aws:s3:::${var.s3_bucket_name}/*"
+        Resource  = "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*"
         Condition = {
           Bool = {
             "aws:SecureTransport" = "false"
@@ -17,10 +17,4 @@ resource "aws_s3_bucket_policy" "remediation_s3_bucket_secure_transport_policy" 
       }
     ]
   })
-}
-
-variable "s3_bucket_name" {
-  description = "Target S3 bucket name"
-  type        = string
-  default     = ""
 }
