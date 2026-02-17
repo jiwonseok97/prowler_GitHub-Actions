@@ -28,7 +28,7 @@ resource "aws_security_group" "remediation_sg" {
   }
 }
 
-# Use data source to look up the existing security group
+# Look up the existing security group
 
 # Attach the remediated security group to the resources that use the existing one
 resource "aws_network_interface_sg_attachment" "remediation_remediation" {
