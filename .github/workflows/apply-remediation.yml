@@ -3,8 +3,9 @@ name: Apply Remediation
 on:
   pull_request:
     types: [opened, synchronize, closed]
-    paths:
-      - 'remediation/**'
+    # No paths filter — remediation PR merges where .tf files are already on main
+    # (from a prior merge) would produce empty diffs and never trigger the apply job.
+    # Branch name filtering is done in the job conditions instead.
 
 env:
   TF_BACKEND_BUCKET: prowler-terraform-state-132410971304
@@ -22,7 +23,10 @@ jobs:
   # Plan: run on PR updates and post Terraform plan comment
   # -------------------------------------------------------
   plan:
-    if: github.event.pull_request.merged != true && github.event.action != 'closed'
+    if: >-
+      github.event.pull_request.merged != true
+      && github.event.action != 'closed'
+      && startsWith(github.event.pull_request.head.ref, 'remediation/')
     runs-on: ubuntu-latest
 
     steps:
@@ -524,7 +528,9 @@ jobs:
   # Apply: run after PR merge and apply to AWS
   # -------------------------------------------------------
   apply:
-    if: github.event.pull_request.merged == true
+    if: >-
+      github.event.pull_request.merged == true
+      && startsWith(github.event.pull_request.head.ref, 'remediation/')
     runs-on: ubuntu-latest
 
     steps:
