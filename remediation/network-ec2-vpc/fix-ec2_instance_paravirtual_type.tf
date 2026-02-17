@@ -1,7 +1,7 @@
 # Modify the existing EC2 instance to use HVM virtualization
 resource "aws_instance" "remediation_ec2_instance" {
   ami                    = var.ami_id
-  instance_type          = "t2.micro"
+  instance_type          = "t3.micro"
   subnet_id              = tolist(data.aws_subnets.default.ids)[0]
   vpc_security_group_ids = tolist(data.aws_security_groups.default.ids)
 
