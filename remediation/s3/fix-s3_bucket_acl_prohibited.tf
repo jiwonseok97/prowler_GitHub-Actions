@@ -1,4 +1,4 @@
-# Update the S3 bucket to disable ACLs and manage access with IAM and bucket policies
+# Modify the existing S3 bucket to disable ACLs and manage access with IAM and bucket policies
 data "aws_s3_bucket" "remediation_aws_cloudtrail_logs" {
   bucket = "aws-cloudtrail-logs-132410971304-0971c04b"
 }
@@ -30,12 +30,19 @@ resource "aws_s3_bucket_policy" "remediation_aws_cloudtrail_logs" {
           "s3:GetBucketAcl",
           "s3:GetBucketPolicy",
           "s3:ListBucket",
-          "s3:PutBucketAcl",
           "s3:PutBucketPolicy"
         ],
+        Resource = data.aws_s3_bucket.remediation_aws_cloudtrail_logs.arn
+      },
+      {
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        Action = "s3:*",
         Resource = [
-          "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b",
-          "arn:aws:s3:::aws-cloudtrail-logs-132410971304-0971c04b/*"
+          data.aws_s3_bucket.remediation_aws_cloudtrail_logs.arn,
+          "${data.aws_s3_bucket.remediation_aws_cloudtrail_logs.arn}/*"
         ]
       }
     ]
