@@ -1,53 +1,46 @@
-# Modify the existing Network ACL to remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
-resource "aws_network_acl" "remediation_acl" {
+# Modify the existing Network ACL to restrict RDP access from the internet
+resource "aws_network_acl" "remediation_network_acl" {
   vpc_id = var.vpc_id
   subnet_ids = data.aws_subnets.current.ids
 
-  # Remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
-  ingress {
-    from_port  = 0
-    to_port    = 0
+  # Allow all outbound traffic
+  egress {
+    protocol   = "-1"
     rule_no    = 100
     action     = "allow"
-    protocol   = "-1"
     cidr_block = "0.0.0.0/0"
+    from_port  = 0
+    to_port    = 0
   }
 
-  # Add a new ingress rule to allow RDP access only from a specific IP range
+  # Deny inbound RDP access from the internet
   ingress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "deny"
+    cidr_block = "0.0.0.0/0"
     from_port  = 3389
     to_port    = 3389
-    rule_no    = 200
-    action     = "allow"
-    protocol   = "tcp"
-    cidr_block = var.allowed_rdp_cidr
   }
 
-  egress {
+  # Allow all other inbound traffic
+  ingress {
+    protocol   = "-1"
+    rule_no    = 200
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
     from_port  = 0
     to_port    = 0
-    rule_no    = 100
-    action     = "allow"
-    protocol   = "-1"
-    cidr_block = "0.0.0.0/0"
   }
 
   tags = {
-    Name = "remediation_acl"
+    Name = "remediation_network_acl"
   }
 }
 
-# Use a data source to look up the existing VPC
+# Lookup the existing VPC and subnets
 
-# Use a data source to look up the existing subnets
 data "aws_subnets" "current" {
-}
-
-# Define an input variable for the allowed RDP CIDR range
-variable "allowed_rdp_cidr" {
-  description = "CIDR range allowed for RDP access"
-  type        = string
-  default     = "10.0.0.0/16"
 }
 
 variable "vpc_id" {

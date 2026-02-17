@@ -1,7 +1,4 @@
-#
-# Remediate the EC2 instance that is not older than the configured maximum age or is not running
-#
-
+# Modify the existing EC2 instance to comply with the security finding
 resource "aws_instance" "remediation_ec2_instance" {
   ami                    = var.ami_id
   instance_type          = "t2.micro"
@@ -9,11 +6,13 @@ resource "aws_instance" "remediation_ec2_instance" {
   vpc_security_group_ids = tolist(data.aws_security_groups.default.ids)
 
   tags = {
-    Name = "Remediation-EC2-Instance"
+    Name = "Remediated EC2 Instance"
   }
 }
 
+# Use the latest Amazon Linux 2 AMI
 
+# Use the default VPC and security groups
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"

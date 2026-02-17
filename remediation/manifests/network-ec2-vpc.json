@@ -1,5 +1,31 @@
 [
   {
+    "check_id": "ec2_ebs_volume_protected_by_backup_plan",
+    "check_title": "EBS volume is protected by a backup plan",
+    "output_path": "network-ec2-vpc/fix-ec2_ebs_volume_protected_by_backup_plan.tf",
+    "file": "network-ec2-vpc/fix-ec2_ebs_volume_protected_by_backup_plan.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "ec2_instance_managed_by_ssm",
+    "check_title": "EC2 instance is managed by AWS Systems Manager or not running",
+    "output_path": "network-ec2-vpc/fix-ec2_instance_managed_by_ssm.tf",
+    "file": "network-ec2-vpc/fix-ec2_instance_managed_by_ssm.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": [
+      "_fix_incorrect_tolist_usage"
+    ]
+  },
+  {
     "check_id": "ec2_instance_older_than_specific_days",
     "check_title": "EC2 instance is not older than the configured maximum age or is not running",
     "output_path": "network-ec2-vpc/fix-ec2_instance_older_than_specific_days.tf",
@@ -33,25 +59,15 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": []
+    "sanitizers_applied": [
+      "_fix_invalid_ec2_resource_type"
+    ]
   },
   {
     "check_id": "ec2_instance_public_ip",
     "check_title": "EC2 instance does not have a public IP address",
     "output_path": "network-ec2-vpc/fix-ec2_instance_public_ip.tf",
     "file": "network-ec2-vpc/fix-ec2_instance_public_ip.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
-    "check_id": "ec2_instance_with_outdated_ami",
-    "check_title": "EC2 instance uses a non-deprecated Amazon AMI",
-    "output_path": "network-ec2-vpc/fix-ec2_instance_with_outdated_ami.tf",
-    "file": "network-ec2-vpc/fix-ec2_instance_with_outdated_ami.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
@@ -76,6 +92,18 @@
     "check_title": "Network ACL does not allow ingress from the Internet to TCP port 3389 (RDP)",
     "output_path": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
     "file": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "ec2_securitygroup_from_launch_wizard",
+    "check_title": "Security group not created using the EC2 Launch Wizard",
+    "output_path": "network-ec2-vpc/fix-ec2_securitygroup_from_launch_wizard.tf",
+    "file": "network-ec2-vpc/fix-ec2_securitygroup_from_launch_wizard.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",

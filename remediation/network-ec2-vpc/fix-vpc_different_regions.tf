@@ -10,13 +10,13 @@ resource "aws_vpc" "remediation_vpc" {
 resource "aws_subnet" "remediation_subnet_1" {
   vpc_id            = aws_vpc.remediation_vpc.id
   cidr_block        = "10.0.1.0/24"
-  availability_zone = "ap-northeast-1a"
+  availability_zone = "ap-southeast-1a"
 }
 
 resource "aws_subnet" "remediation_subnet_2" {
   vpc_id            = aws_vpc.remediation_vpc.id
   cidr_block        = "10.0.2.0/24"
-  availability_zone = "ap-northeast-1b"
+  availability_zone = "ap-southeast-1b"
 }
 
 # Create an internet gateway for the new VPC
@@ -34,12 +34,12 @@ resource "aws_route_table" "remediation_rt" {
   }
 }
 
-resource "aws_route_table_association" "remediation_rt_association_1" {
+resource "aws_route_table_association" "remediation_rt_assoc_1" {
   subnet_id      = aws_subnet.remediation_subnet_1.id
   route_table_id = aws_route_table.remediation_rt.id
 }
 
-resource "aws_route_table_association" "remediation_rt_association_2" {
+resource "aws_route_table_association" "remediation_rt_assoc_2" {
   subnet_id      = aws_subnet.remediation_subnet_2.id
   route_table_id = aws_route_table.remediation_rt.id
 }
