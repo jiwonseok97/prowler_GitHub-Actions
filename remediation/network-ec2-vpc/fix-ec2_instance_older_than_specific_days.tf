@@ -18,18 +18,17 @@ resource "aws_instance" "remediation_ec2_instance" {
 
 data "aws_subnets" "default" {
   filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
+    name   = "default-for-az"
+    values = ["true"]
   }
 }
 
 data "aws_security_groups" "default" {
   filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
+    name   = "group-name"
+    values = ["default"]
   }
 }
-
 
 variable "iam_instance_profile_name" {
   description = "Name of the IAM instance profile to use for the EC2 instance"
@@ -39,12 +38,6 @@ variable "iam_instance_profile_name" {
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
-  type        = string
-  default     = ""
-}
-
-variable "vpc_id" {
-  description = "Target VPC ID"
   type        = string
   default     = ""
 }
