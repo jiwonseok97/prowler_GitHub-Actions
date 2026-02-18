@@ -43,6 +43,30 @@ _PLACEHOLDER_VALUES = [
     (re.compile(r'"my-config-bucket"'), "var.config_bucket_name"),
 ]
 
+# Deprecated/unsupported attributes to remove (line-level)
+# These are attributes that Terraform no longer supports or that cause errors.
+_DEPRECATED_ATTR_RE = re.compile(
+    r'^\s*('
+    r'acceleration_status'       # aws_s3_bucket (deprecated)
+    r'|request_payer'            # aws_s3_bucket (deprecated)
+    r'|hosted_zone_id'           # aws_s3_bucket (computed-only)
+    r'|bucket_domain_name'       # aws_s3_bucket (computed-only)
+    r'|bucket_regional_domain_name'  # aws_s3_bucket (computed-only)
+    r'|website_domain'           # aws_s3_bucket (computed-only)
+    r'|website_endpoint'         # aws_s3_bucket (computed-only)
+    r'|region'                   # aws_s3_bucket (computed-only)
+    r'|arn\b(?!.*=.*aws_)'      # arn when not referencing another resource
+    r')\s*='
+)
+
+# Deprecated nested blocks inside aws_s3_bucket (must use separate resources)
+_DEPRECATED_S3_BLOCKS = {
+    "logging", "versioning", "lifecycle_rule",
+    "replication_configuration", "cors_rule",
+    "website", "object_lock_configuration",
+    "grant",
+}
+
 
 def _ensure_lifecycle_rule_id(lines):
     """Ensure each aws_s3_bucket_lifecycle_configuration rule has an id."""
@@ -230,6 +254,17 @@ def cleanup(path):
                 if s3_brace <= 0:
                     in_s3_bucket = False
                 continue
+            # Remove other deprecated nested blocks inside aws_s3_bucket
+            dep_match = re.match(r'^\s*(\w+)\s*\{', line)
+            if dep_match and dep_match.group(1) in _DEPRECATED_S3_BLOCKS:
+                in_dep_block = True
+                dep_brace = line.count('{') - line.count('}')
+                s3_brace += line.count('{') - line.count('}')
+                if dep_brace <= 0:
+                    in_dep_block = False
+                if s3_brace <= 0:
+                    in_s3_bucket = False
+                continue
             s3_brace += line.count('{') - line.count('}')
             out.append(line)
             if s3_brace <= 0:
@@ -237,12 +272,15 @@ def cleanup(path):
             continue
         out.append(line)
 
-    # --- 후처리: 하드코딩 값 치환 ---
+    # --- 후처리: deprecated 속성 제거 + 하드코딩 값 치환 ---
     result = []
     for line in out:
         stripped = line.lstrip()
         if stripped.startswith("#") or stripped.startswith("//"):
             result.append(line)
+            continue
+        # Remove deprecated/unsupported single-line attributes
+        if _DEPRECATED_ATTR_RE.match(stripped):
             continue
         # ARN 내 하드코딩된 계정 ID 치환
         if "arn:aws" in line and _ACCOUNT_ID_RE.search(line):

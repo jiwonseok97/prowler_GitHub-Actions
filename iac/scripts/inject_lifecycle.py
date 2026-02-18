@@ -39,6 +39,8 @@ NO_TAGS_TYPES = frozenset({
     "aws_s3_bucket_logging",
     "aws_kms_key_policy",
     "aws_kms_alias",
+    "aws_cloudwatch_log_metric_filter",
+    "aws_sns_topic_policy",
 })
 
 RESOURCE_START_RE = re.compile(

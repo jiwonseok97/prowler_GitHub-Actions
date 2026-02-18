@@ -1,17 +1,25 @@
 # check_id -> IaC snippet mapping
 # Use paths under iac/terraform/snippets
+# All CIS metric filter checks map to the single cloudwatch_cis_filters.tf
+# which contains all 14 filter+alarm pairs with unique resource names.
 
+# ── Account ──
 account_maintain_current_contact_details: iac/terraform/snippets/account_alternate_contact_security.tf
 account_security_contact_information_is_registered: iac/terraform/snippets/account_alternate_contact_security.tf
-# Example: Firewall Manager
+
+# ── Firewall Manager ──
 fms_policy_compliant: iac/terraform/snippets/fms_policy_stub.tf
+
+# ── Config ──
 config_recorder_all_regions_enabled: iac/terraform/snippets/config_recorder_all_regions_enabled.tf
-# Network Firewall
+
+# ── Network Firewall ──
 networkfirewall_in_all_vpc: iac/terraform/snippets/networkfirewall.tf
-# Organizations AI opt-out
+
+# ── Organizations ──
 organizations_opt_out_ai_services_policy: iac/terraform/snippets/organizations_ai_opt_out.tf
 
-# IAM password policy (singleton — all checks share one resource)
+# ── IAM password policy (singleton — all checks share one resource) ──
 iam_password_policy_expires_passwords_within_90_days_or_less: iac/terraform/snippets/iam_password_policy.tf
 iam_password_policy_minimum_length_14: iac/terraform/snippets/iam_password_policy.tf
 iam_password_policy_lowercase: iac/terraform/snippets/iam_password_policy.tf
@@ -19,3 +27,41 @@ iam_password_policy_number: iac/terraform/snippets/iam_password_policy.tf
 iam_password_policy_reuse_24: iac/terraform/snippets/iam_password_policy.tf
 iam_password_policy_symbol: iac/terraform/snippets/iam_password_policy.tf
 iam_password_policy_uppercase: iac/terraform/snippets/iam_password_policy.tf
+
+# ── CloudTrail (S3 bucket hardening) ──
+cloudtrail_bucket_requires_mfa_delete: iac/terraform/snippets/cloudtrail.tf
+cloudtrail_kms_encryption_enabled: iac/terraform/snippets/cloudtrail.tf
+cloudtrail_log_file_validation_enabled: iac/terraform/snippets/cloudtrail.tf
+cloudtrail_logs_s3_bucket_access_logging_enabled: iac/terraform/snippets/cloudtrail.tf
+
+# ── S3 bucket hardening ──
+s3_bucket_acl_prohibited: iac/terraform/snippets/cloudtrail.tf
+s3_bucket_default_encryption: iac/terraform/snippets/cloudtrail.tf
+s3_bucket_kms_encryption: iac/terraform/snippets/cloudtrail.tf
+s3_bucket_no_mfa_delete: iac/terraform/snippets/cloudtrail.tf
+s3_bucket_object_versioning: iac/terraform/snippets/cloudtrail.tf
+s3_bucket_secure_transport_policy: iac/terraform/snippets/cloudtrail.tf
+s3_bucket_server_access_logging_enabled: iac/terraform/snippets/cloudtrail.tf
+
+# ── CloudWatch CIS metric filters (all map to single file with 14 unique filters) ──
+cloudwatch_log_metric_filter_unauthorized_api_calls: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_sign_in_without_mfa: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_root_usage: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_policy_changes: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_and_alarm_for_cloudtrail_configuration_changes_enabled: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_authentication_failures: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_disable_or_scheduled_deletion_of_kms_cmk: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_for_s3_bucket_policy_changes: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_and_alarm_for_aws_config_configuration_changes_enabled: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_security_group_changes: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_changes_to_network_acls_alarm_configured: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_changes_to_network_gateways_alarm_configured: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_changes_to_network_route_tables_alarm_configured: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_changes_to_vpcs_alarm_configured: iac/terraform/snippets/cloudwatch_cis_filters.tf
+cloudwatch_log_metric_filter_aws_organizations_changes: iac/terraform/snippets/cloudwatch_cis_filters.tf
+
+# ── CloudWatch non-CIS filter checks (use generic snippet) ──
+cloudwatch_cross_account_sharing_disabled: iac/terraform/snippets/cloudwatch.tf
+cloudwatch_log_group_kms_encryption_enabled: iac/terraform/snippets/cloudwatch.tf
+cloudwatch_log_group_no_secrets_in_logs: iac/terraform/snippets/cloudwatch.tf
+cloudwatch_log_group_retention_policy_specific_days_enabled: iac/terraform/snippets/cloudwatch.tf

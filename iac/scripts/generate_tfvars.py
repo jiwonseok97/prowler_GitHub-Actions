@@ -103,10 +103,34 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
                     vals["kms_key_id"] = kid
                     break
 
+    elif category == "cloudwatch":
+        # CloudWatch CIS filters need the CloudTrail log group name
+        log_groups = discovery.get("cloudwatch", {}).get("log_groups", [])
+        ct_log_group = ""
+        # Find the CloudTrail-linked log group
+        for t in trails:
+            lg = t.get("CloudWatchLogsLogGroupArn", "")
+            if lg:
+                # ARN format: arn:aws:logs:region:account:log-group:NAME:*
+                parts = lg.split(":")
+                if len(parts) >= 7:
+                    ct_log_group = parts[6]
+                    break
+        if not ct_log_group:
+            # Fallback: look for log groups with "cloudtrail" in name
+            for lg in log_groups:
+                name = lg if isinstance(lg, str) else lg.get("logGroupName", "")
+                if "cloudtrail" in name.lower():
+                    ct_log_group = name
+                    break
+        if "cloudwatch_log_group_name" in refs and ct_log_group:
+            vals["cloudwatch_log_group_name"] = ct_log_group
+
     elif category == "network-ec2-vpc":
-        # VPC-related variables — provide discovery-based values if available
-        # (vpc_id will come from auto_import or data sources)
-        pass
+        # VPC-related variables
+        vpcs = discovery.get("vpc", {}).get("vpcs", [])
+        if "vpc_id" in refs and vpcs:
+            vals["vpc_id"] = vpcs[0] if isinstance(vpcs[0], str) else vpcs[0].get("VpcId", "")
 
     return vals
 

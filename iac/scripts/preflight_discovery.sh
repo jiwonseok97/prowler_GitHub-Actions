@@ -11,7 +11,7 @@ echo "Running pre-flight AWS discovery (region=$REGION)..."
 
 # ── CloudTrail ──────────────────────────────────────
 trails=$(aws cloudtrail describe-trails --region "$REGION" \
-  --query 'trailList[].{Name:Name,TrailARN:TrailARN,S3BucketName:S3BucketName,IsMultiRegion:IsMultiRegionTrail,HomeRegion:HomeRegion}' \
+  --query 'trailList[].{Name:Name,TrailARN:TrailARN,S3BucketName:S3BucketName,IsMultiRegion:IsMultiRegionTrail,HomeRegion:HomeRegion,CloudWatchLogsLogGroupArn:CloudWatchLogsLogGroupArn}' \
   --output json 2>/dev/null || echo '[]')
 
 # ── Config Recorder ─────────────────────────────────
@@ -76,6 +76,14 @@ fi
 # ── Account ID ──────────────────────────────────────
 account_id=$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null || echo "unknown")
 
+# ── CloudWatch Log Groups ─────────────────────────
+cw_log_groups=$(aws logs describe-log-groups --region "$REGION" \
+  --query 'logGroups[].logGroupName' --output json 2>/dev/null || echo '[]')
+
+# ── VPC ───────────────────────────────────────────
+vpc_ids=$(aws ec2 describe-vpcs --region "$REGION" \
+  --query 'Vpcs[].VpcId' --output json 2>/dev/null || echo '[]')
+
 # ── S3 Buckets (existing, for import) ──────────────
 s3_buckets=$(aws s3api list-buckets --query 'Buckets[].Name' --output json 2>/dev/null || echo '[]')
 
@@ -106,6 +114,12 @@ cat > "$OUTFILE" <<ENDJSON
   "service_linked_roles": $slr_status,
   "iam": {
     "password_policy_exists": $password_policy_exists
+  },
+  "cloudwatch": {
+    "log_groups": $cw_log_groups
+  },
+  "vpc": {
+    "vpcs": $vpc_ids
   },
   "s3": {
     "buckets": $s3_buckets

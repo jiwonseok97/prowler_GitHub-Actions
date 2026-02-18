@@ -218,6 +218,44 @@ if [ -n "$import_bucket" ]; then
   done
 fi
 
+# ── SNS Topics ────────────────────────────────────
+# Import existing SNS topics that match remediation resource names
+for rname in $(grep -rEoh 'resource\s+"aws_sns_topic"\s+"([^"]+)"' "$WORK_DIR"/*.tf 2>/dev/null | \
+               sed 's/resource\s*"aws_sns_topic"\s*"//;s/"//g' || true); do
+  # Derive topic name from resource name (convention: resource name = topic name with underscores→hyphens)
+  topic_name=$(echo "$rname" | tr '_' '-')
+  topic_arn="arn:aws:sns:${REGION}:${ACCOUNT}:${topic_name}"
+  import_resource "aws_sns_topic.$rname" "$topic_arn"
+done
+
+# ── CloudWatch Log Metric Filters ──────────────────
+# Import existing metric filters that match resources declared in .tf files
+for rname in $(grep -rEoh 'resource\s+"aws_cloudwatch_log_metric_filter"\s+"([^"]+)"' "$WORK_DIR"/*.tf 2>/dev/null | \
+               sed 's/resource\s*"aws_cloudwatch_log_metric_filter"\s*"//;s/"//g' || true); do
+  # Metric filter import ID format: log_group_name:filter_name
+  # Extract the filter name from the .tf file (name = "xxx" attribute)
+  filter_name=$(grep -A5 "resource\s*\"aws_cloudwatch_log_metric_filter\"\s*\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null | \
+    grep -oP 'name\s*=\s*"\K[^"]+' | head -1 || true)
+  if [ -n "$filter_name" ]; then
+    # Find the log group name from the .tf file or discovery
+    lg_name=$(python3 -c "
+import json
+d = json.load(open('$DISCOVERY'))
+trails = d.get('cloudtrail',{}).get('trails',[])
+for t in trails:
+    arn = t.get('CloudWatchLogsLogGroupArn','')
+    if arn:
+        parts = arn.split(':')
+        if len(parts) >= 7:
+            print(parts[6])
+            break
+" 2>/dev/null || true)
+    if [ -n "$lg_name" ]; then
+      import_resource "aws_cloudwatch_log_metric_filter.$rname" "${lg_name}:${filter_name}"
+    fi
+  fi
+done
+
 echo "Auto-import done: imported=$imported skipped=$skipped failed=$failed blocked=$blocked"
 
 if [ "$blocked" -gt 0 ]; then
