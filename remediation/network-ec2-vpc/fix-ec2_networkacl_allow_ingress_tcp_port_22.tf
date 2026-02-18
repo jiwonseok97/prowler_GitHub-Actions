@@ -22,7 +22,7 @@ resource "aws_network_acl" "remediation_network_acl" {
   }
 }
 
-# Look up the existing Network ACL
+# Look up the existing VPC and subnets
 
 data "aws_subnets" "current" {
 }

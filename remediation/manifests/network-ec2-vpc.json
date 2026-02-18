@@ -9,7 +9,9 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": []
+    "sanitizers_applied": [
+      "_fix_incorrect_tolist_usage"
+    ]
   },
   {
     "check_id": "ec2_instance_older_than_specific_days",
@@ -46,7 +48,7 @@
     "validation_status": "ok",
     "error_message": "",
     "sanitizers_applied": [
-      "_fix_invalid_ec2_resource_type"
+      "_fix_incorrect_tolist_usage"
     ]
   },
   {
@@ -90,6 +92,30 @@
     "check_title": "Network ACL does not allow ingress from the Internet to TCP port 3389 (RDP)",
     "output_path": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
     "file": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "ec2_securitygroup_from_launch_wizard",
+    "check_title": "Security group not created using the EC2 Launch Wizard",
+    "output_path": "network-ec2-vpc/fix-ec2_securitygroup_from_launch_wizard.tf",
+    "file": "network-ec2-vpc/fix-ec2_securitygroup_from_launch_wizard.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "ec2_securitygroup_with_many_ingress_egress_rules",
+    "check_title": "Security group has 50 or fewer inbound rules and 50 or fewer outbound rules",
+    "output_path": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
+    "file": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
