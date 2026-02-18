@@ -4,25 +4,29 @@ resource "aws_network_acl" "remediation_network_acl" {
   subnet_ids = data.aws_subnets.current.ids
 
   ingress {
-    from_port  = 22
-    to_port    = 22
     rule_no    = 100
     protocol   = "tcp"
-    cidr_block = "10.0.0.0/8"
-    action     = "allow"
+    from_port  = 22
+    to_port    = 22
+    cidr_block = "0.0.0.0/0"
+    action     = "deny"
   }
 
   egress {
-    from_port  = 0
-    to_port    = 0
     rule_no    = 100
     protocol   = "-1"
+    from_port  = 0
+    to_port    = 0
     cidr_block = "0.0.0.0/0"
     action     = "allow"
   }
+
+  tags = {
+    Name = "remediation-network-acl"
+  }
 }
 
-# Look up the existing Network ACL
+# Look up the existing VPC and subnets
 
 data "aws_subnets" "current" {
 }
