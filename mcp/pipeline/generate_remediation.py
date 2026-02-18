@@ -581,6 +581,11 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
         attrs.update(extra_attrs)
     if not attrs:
         return lines
+    # arn/key_id가 필수 입력인 리소스 타입 → 해당 속성을 제거하지 않음
+    _ARN_REQUIRED = {
+        "aws_sns_topic_policy": {"arn"},
+        "aws_kms_key_policy": {"key_id"},
+    }
     attr_re = re.compile(r"^\s*(" + "|".join(sorted(attrs)) + r")\s*=")
 
     out = []
@@ -588,6 +593,8 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
     in_heredoc = False
     heredoc_marker = None
     brace = 0
+    current_rtype = None
+    exempt_attrs = set()
     for line in lines:
         # heredoc 내부에서는 attr 매칭/brace 카운팅 건너뜀
         if in_heredoc:
@@ -596,11 +603,15 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
                 in_heredoc = False
                 heredoc_marker = None
             continue
-        if not in_resource and re.match(r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{', line):
-            in_resource = True
-            brace = _brace_delta(line)
-            out.append(line)
-            continue
+        if not in_resource:
+            m = re.match(r'^\s*resource\s+"([^"]+)"\s+"[^"]+"\s*\{', line)
+            if m:
+                in_resource = True
+                current_rtype = m.group(1)
+                exempt_attrs = _ARN_REQUIRED.get(current_rtype, set())
+                brace = _brace_delta(line)
+                out.append(line)
+                continue
         if in_resource:
             # heredoc 시작 감지
             m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
@@ -609,12 +620,15 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
                 heredoc_marker = m.group(1)
                 out.append(line)
                 continue
-            if attr_re.match(line):
+            am = attr_re.match(line)
+            if am and am.group(1) not in exempt_attrs:
                 continue
             brace += _brace_delta(line)
             out.append(line)
             if brace <= 0:
                 in_resource = False
+                current_rtype = None
+                exempt_attrs = set()
             continue
         out.append(line)
     return out
@@ -1102,11 +1116,24 @@ def _ensure_sns_topic_policy_arn(lines):
     # aws_sns_topic_policy에 arn이 없으면 자동 삽입
     sns_resource = None
     sns_data = None
+    sns_has_count = False
+    _in_sns = False
+    _sns_brace = 0
     for line in lines:
-        m = re.match(r'^\s*resource\s+"aws_sns_topic"\s+"([^"]+)"\s*\{', line)
-        if m:
-            sns_resource = m.group(1)
-            break
+        if not _in_sns:
+            m = re.match(r'^\s*resource\s+"aws_sns_topic"\s+"([^"]+)"\s*\{', line)
+            if m:
+                sns_resource = m.group(1)
+                _in_sns = True
+                _sns_brace = _brace_delta(line)
+                continue
+        else:
+            if re.match(r'^\s*(count|for_each)\s*=', line):
+                sns_has_count = True
+            _sns_brace += _brace_delta(line)
+            if _sns_brace <= 0:
+                _in_sns = False
+                break  # found the topic, stop scanning
     if not sns_resource:
         for line in lines:
             m = re.match(r'^\s*data\s+"aws_sns_topic"\s+"([^"]+)"\s*\{', line)
@@ -1114,7 +1141,8 @@ def _ensure_sns_topic_policy_arn(lines):
                 sns_data = m.group(1)
                 break
     if sns_resource:
-        arn_expr = f"aws_sns_topic.{sns_resource}.arn"
+        idx = "[0]" if sns_has_count else ""
+        arn_expr = f"aws_sns_topic.{sns_resource}{idx}.arn"
     elif sns_data:
         arn_expr = f"data.aws_sns_topic.{sns_data}.arn"
     else:
