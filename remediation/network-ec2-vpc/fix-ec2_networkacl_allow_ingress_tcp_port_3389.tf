@@ -1,38 +1,18 @@
-# Modify the existing Network ACL to remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
-resource "aws_network_acl" "remediation_network_acl" {
-  vpc_id = var.vpc_id
-  subnet_ids = data.aws_subnets.existing_subnets.ids
-
-  ingress {
-    from_port  = 0
-    to_port    = 0
-    rule_no    = 100
-    action     = "allow"
-    protocol   = "-1"
-    cidr_block = "0.0.0.0/0"
-  }
-
-  egress {
-    from_port  = 0
-    to_port    = 0
-    rule_no    = 100
-    action     = "allow"
-    protocol   = "-1"
-    cidr_block = "0.0.0.0/0"
-  }
-
-  tags = {
-    Name = "remediation-network-acl"
-  }
+#
+# Restrict RDP access to the network ACL
+#
+resource "aws_network_acl_rule" "remediation_rdp_ingress_deny" {
+  network_acl_id = "acl-0572e1ab82993bb20"
+  rule_number    = 100
+  egress         = false
+  protocol       = "tcp"
+  rule_action    = "deny"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 3389
+  to_port        = 3389
 }
 
-# Data sources to look up existing VPC and subnets
-
-data "aws_subnets" "existing_subnets" {
-}
-
-variable "vpc_id" {
-  description = "Target VPC ID"
-  type        = string
-  default     = ""
-}
+#
+# Prefer bastion hosts or Session Manager over direct RDP
+#
+# Add your bastion host or Session Manager configuration here
