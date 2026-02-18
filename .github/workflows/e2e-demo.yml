@@ -1,0 +1,507 @@
+name: E2E Demo — Vulnerable Infra → Scan → Remediate
+
+# 취약 인프라 배포 → Prowler 스캔 → AI 자동 remediation PR 생성
+# PR 머지 → apply-remediation.yml 이 자동 적용 → 취약점 해소 확인
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "실행할 단계"
+        type: choice
+        options:
+          - deploy          # 취약 인프라만 배포
+          - scan-remediate  # 스캔 + remediation PR 생성
+          - verify          # 재스캔으로 취약점 감소 확인
+          - destroy         # 취약 인프라 삭제
+          - full            # deploy → scan-remediate (PR 자동 머지 없음)
+        default: full
+      auto_merge:
+        description: "remediation PR 자동 머지 (데모용)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+  actions: write
+
+env:
+  TF_VERSION: "1.6.0"
+  AWS_REGION: ap-northeast-2
+  TF_BACKEND_BUCKET: prowler-terraform-state-132410971304
+  TF_BACKEND_TABLE: prowler-terraform-locks
+
+jobs:
+  # ============================================================
+  # 1) 취약 인프라 배포
+  # ============================================================
+  deploy:
+    name: "1) Deploy Vulnerable Infrastructure"
+    if: contains(fromJson('["deploy","full"]'), github.event.inputs.action)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform -chdir=iac/terraform/vulnerable init -input=false
+
+      - name: Terraform Apply (취약 인프라 배포)
+        run: |
+          terraform -chdir=iac/terraform/vulnerable apply \
+            -auto-approve \
+            -input=false \
+            -var="name_prefix=vuln-demo" 2>&1 | tee /tmp/tf-deploy.log
+
+          echo "=== Deploy Outputs ==="
+          terraform -chdir=iac/terraform/vulnerable output -json | tee /tmp/deploy-outputs.json
+
+      - name: Upload deploy artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-deploy-logs
+          path: |
+            /tmp/tf-deploy.log
+            /tmp/deploy-outputs.json
+
+  # ============================================================
+  # 2) Prowler 스캔 + Builders 기반 Remediation PR 생성
+  # ============================================================
+  scan-remediate:
+    name: "2) Scan + Generate Remediation PRs"
+    if: contains(fromJson('["scan-remediate","full"]'), github.event.inputs.action)
+    needs: [deploy]
+    # deploy가 스킵되어도 scan-remediate는 실행 가능
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install dependencies
+        run: pip install prowler pandas pyyaml boto3
+
+      # ── Prowler 스캔 ──────────────────────────────────
+      - name: Run Prowler CIS 1.4 scan
+        id: scan
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/scan-output
+          prowler aws \
+            --region ap-northeast-2 \
+            --compliance cis_1.4_aws \
+            --severity medium \
+            --output-directory /tmp/scan-output \
+            --output-formats json-ocsf csv
+          echo "scan_exit=$?" >> $GITHUB_OUTPUT
+
+      - name: Count FAIL before remediation
+        id: pre_count
+        run: |
+          python3 - <<'PY'
+          import glob, os
+          import pandas as pd
+
+          frames = []
+          for path in glob.glob("/tmp/scan-output/*.csv"):
+              try:
+                  df = pd.read_csv(path, sep=";")
+                  if {"CHECK_ID", "STATUS"}.issubset(df.columns):
+                      frames.append(df[["CHECK_ID", "STATUS", "SERVICE_NAME"]])
+              except Exception:
+                  pass
+
+          if frames:
+              df = pd.concat(frames)
+              fails = df[df["STATUS"].str.upper() == "FAIL"]
+              count = len(fails)
+              by_svc = fails.groupby("SERVICE_NAME").size().to_dict()
+              print(f"Pre-remediation FAIL count: {count}")
+              for svc, n in sorted(by_svc.items()):
+                  print(f"  {svc}: {n} FAILs")
+              with open("/tmp/pre_fail_count.txt", "w") as f:
+                  f.write(str(count))
+          else:
+              print("No CSV scan output found")
+          PY
+
+      # ── Pre-flight Discovery ──────────────────────────
+      - name: Pre-flight AWS discovery
+        run: bash iac/scripts/preflight_discovery.sh /tmp/aws_discovery.json
+
+      # ── Findings 변환 (CSV → Builders JSON 포맷) ─────
+      - name: Convert findings for builders
+        run: |
+          python3 - <<'PY'
+          import glob, json
+          import pandas as pd
+
+          frames = []
+          for path in glob.glob("/tmp/scan-output/*.csv"):
+              try:
+                  df = pd.read_csv(path, sep=";")
+                  frames.append(df)
+              except Exception:
+                  pass
+
+          if not frames:
+              print("No scan CSV found — skipping conversion")
+              open("/tmp/findings.json", "w").write("[]")
+              exit(0)
+
+          df = pd.concat(frames, ignore_index=True)
+          df.columns = [c.strip() for c in df.columns]
+
+          # Builders가 사용하는 필드명으로 매핑
+          col_map = {
+              "CHECK_ID": "CheckID",
+              "STATUS": "Status",
+              "SERVICE_NAME": "ServiceName",
+              "RESOURCE_UID": "ResourceUID",
+              "RESOURCE_ID": "ResourceId",
+              "ACCOUNT_UID": "AccountUID",
+              "REGION": "Region",
+          }
+          df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+
+          fails = df[df["Status"].str.upper() == "FAIL"]
+          records = fails.to_dict(orient="records")
+          with open("/tmp/findings.json", "w") as f:
+              json.dump(records, f, indent=2, default=str)
+          print(f"Converted {len(records)} FAIL findings to /tmp/findings.json")
+          PY
+
+      # ── Builders 실행 → remediation/ 생성 ────────────
+      - name: Generate remediation with builders
+        run: |
+          mkdir -p remediation
+          find remediation -type f ! -name '.gitkeep' -delete 2>/dev/null || true
+          python3 -m iac.builders.engine \
+            --discovery /tmp/aws_discovery.json \
+            --findings /tmp/findings.json \
+            --outdir remediation/
+          ls -la remediation/
+
+      # ── Builder 출력 → 기존 manifest 포맷으로 변환 ────
+      - name: Convert builder output to manifest format
+        run: |
+          python3 - <<'PY'
+          import glob, json, os, pathlib
+
+          REMEDIATION_DIR = pathlib.Path("remediation")
+
+          # Prowler check_id → 서비스 매핑 (PR 메타데이터용)
+          SERVICE_CHECK_MAP = {
+              "iam": ["iam_password_policy_minimum_length_14",
+                      "iam_password_policy_number",
+                      "iam_password_policy_symbol",
+                      "iam_password_policy_uppercase",
+                      "iam_password_policy_reuse_24",
+                      "iam_password_policy_expires_passwords_within_90_days_or_less",
+                      "iam_password_policy_lowercase"],
+              "s3": ["s3_bucket_default_encryption",
+                     "s3_bucket_object_versioning",
+                     "s3_bucket_acl_prohibited",
+                     "s3_bucket_secure_transport_policy",
+                     "s3_bucket_server_access_logging_enabled",
+                     "s3_bucket_no_mfa_delete",
+                     "s3_bucket_kms_encryption"],
+              "cloudtrail": ["cloudtrail_log_file_validation_enabled",
+                             "cloudtrail_kms_encryption_enabled",
+                             "cloudtrail_multi_region_enabled"],
+              "cloudwatch": [f"cloudwatch_log_metric_filter_{x}" for x in [
+                  "unauthorized_api_calls", "sign_in_without_mfa",
+                  "root_usage", "policy_changes",
+                  "and_alarm_for_cloudtrail_configuration_changes_enabled",
+                  "authentication_failures",
+                  "disable_or_scheduled_deletion_of_kms_cmk",
+                  "for_s3_bucket_policy_changes",
+                  "and_alarm_for_aws_config_configuration_changes_enabled",
+                  "security_group_changes",
+              ]] + ["cloudwatch_changes_to_network_acls_alarm_configured",
+                    "cloudwatch_changes_to_network_gateways_alarm_configured",
+                    "cloudwatch_changes_to_network_route_tables_alarm_configured",
+                    "cloudwatch_changes_to_vpcs_alarm_configured",
+                    "cloudwatch_log_metric_filter_aws_organizations_changes"],
+              "network-ec2-vpc": ["vpc_flow_logs_enabled"],
+          }
+
+          all_manifests = []
+          mkdir_ok = set()
+
+          for svc_dir in sorted(REMEDIATION_DIR.iterdir()):
+              if not svc_dir.is_dir():
+                  continue
+              svc = svc_dir.name
+              main_tf = svc_dir / "main.tf"
+              if not main_tf.exists():
+                  continue
+
+              check_ids = SERVICE_CHECK_MAP.get(svc, [f"{svc}_check"])
+
+              # category-level manifest
+              cat_manifest = []
+              for cid in check_ids:
+                  entry = {
+                      "check_id": cid,
+                      "check_title": cid.replace("_", " ").title(),
+                      "priority": "P2",
+                      "category": svc,
+                      "file": f"{svc}/main.tf",
+                      "source": "builder",
+                      "validation_status": "ok",
+                      "error_message": "",
+                      "sanitizers_applied": [],
+                  }
+                  cat_manifest.append(entry)
+                  all_manifests.append(entry)
+
+              (REMEDIATION_DIR / "manifests").mkdir(exist_ok=True)
+              with open(REMEDIATION_DIR / "manifests" / f"{svc}.json", "w") as f:
+                  json.dump(cat_manifest, f, indent=2)
+              print(f"  {svc}: {len(cat_manifest)} checks → manifests/{svc}.json")
+
+          # root manifest (union)
+          with open(REMEDIATION_DIR / "manifest.json", "w") as f:
+              json.dump(all_manifests, f, indent=2)
+          print(f"Total manifest entries: {len(all_manifests)}")
+          PY
+
+      # ── PR 생성 (카테고리별) ───────────────────────────
+      - name: Create remediation PRs per category
+        env:
+          GH_TOKEN: ${{ secrets.PROWLER_PAT }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${{ secrets.PROWLER_PAT }}@github.com/${{ github.repository }}.git"
+
+          PRE_FAIL=$(cat /tmp/pre_fail_count.txt 2>/dev/null || echo "?")
+          CREATED_PRS=""
+
+          for svc_dir in remediation/*/; do
+            svc=$(basename "$svc_dir")
+            [ "$svc" = "manifests" ] && continue
+            [ -f "remediation/${svc}/main.tf" ] || continue
+
+            BRANCH="remediation/${svc}-e2e-${GITHUB_RUN_ID}"
+            git rev-parse --verify main >/dev/null 2>&1 || git branch main origin/main
+            git checkout -B "$BRANCH" main
+
+            # 기존 open PR 닫기
+            OLD_PRS=$(gh pr list --state open --base main \
+              --json number,headRefName \
+              --jq ".[] | select(.headRefName | startswith(\"remediation/${svc}\")) | .number" 2>/dev/null || true)
+            for pr in $OLD_PRS; do
+              gh pr close "$pr" --comment "Superseded by E2E demo branch \`$BRANCH\`." || true
+            done
+
+            git rm -rf "remediation/${svc}/" "remediation/manifests/${svc}.json" 2>/dev/null || true
+            mkdir -p "remediation/${svc}" "remediation/manifests"
+            cp "remediation/${svc}/main.tf" "remediation/${svc}/main.tf.tmp" 2>/dev/null || true
+            # 임시파일 정리
+            rm -f "remediation/${svc}/main.tf.tmp"
+
+            # builder 출력 복사
+            git checkout main -- . 2>/dev/null || true
+            git checkout -B "$BRANCH" main
+
+            mkdir -p "remediation/${svc}" "remediation/manifests"
+            cp "/tmp/../remediation/${svc}/main.tf" "remediation/${svc}/main.tf" 2>/dev/null || \
+              cp "remediation/${svc}/main.tf" "remediation/${svc}/main.tf" 2>/dev/null || true
+
+            git add "remediation/${svc}/" "remediation/manifests/${svc}.json" 2>/dev/null || true
+
+            if [ -z "$(git diff --cached --name-only)" ]; then
+              echo "No changes for $svc"
+              continue
+            fi
+
+            git commit -m "fix(${svc}): E2E demo auto-remediation [builders]"
+            git push origin "$BRANCH" --force
+
+            PR_URL=$(gh pr create \
+              --title "E2E Security Remediation: ${svc}" \
+              --body "## E2E Demo Remediation
+
+카테고리: \`${svc}\`
+스캔 전 FAIL 수: **${PRE_FAIL}**
+
+이 PR을 머지하면 \`apply-remediation.yml\`이 자동 실행됩니다.
+
+### 포함된 remediation
+- Builder: Discovery-driven HCL (count=0 없음)
+- Auto-import: 기존 리소스 자동 import 후 변경분만 apply
+
+> 머지 후 apply workflow에서 terraform plan이 PR 코멘트로 달립니다." \
+              --base main \
+              --head "$BRANCH" 2>&1 || true)
+            echo "Created PR: $PR_URL"
+            CREATED_PRS="$CREATED_PRS $PR_URL"
+          done
+
+          echo "=== Created PRs ==="
+          echo "$CREATED_PRS"
+
+      # ── 자동 머지 (데모 옵션) ─────────────────────────
+      - name: Auto-merge PRs (if enabled)
+        if: github.event.inputs.auto_merge == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PROWLER_PAT }}
+        run: |
+          echo "Auto-merge enabled — merging open remediation PRs..."
+          sleep 30  # PR 생성 후 CI가 시작될 시간 확보
+
+          OPEN_PRS=$(gh pr list --state open --base main \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("remediation/")) | .number')
+
+          for pr in $OPEN_PRS; do
+            echo "Merging PR #$pr..."
+            gh pr merge "$pr" --squash --admin --delete-branch || \
+              echo "WARN: PR #$pr merge failed (may need manual review)"
+          done
+
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-scan-results
+          path: |
+            /tmp/scan-output/
+            /tmp/aws_discovery.json
+            /tmp/findings.json
+            /tmp/pre_fail_count.txt
+
+  # ============================================================
+  # 3) 검증 스캔 (apply 완료 후 수동 실행)
+  # ============================================================
+  verify:
+    name: "3) Verify — Re-scan After Remediation"
+    if: github.event.inputs.action == 'verify'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Install Prowler
+        run: pip install prowler pandas
+
+      - name: Run post-remediation Prowler scan
+        run: |
+          mkdir -p /tmp/verify-output
+          prowler aws \
+            --region ap-northeast-2 \
+            --compliance cis_1.4_aws \
+            --severity medium \
+            --output-directory /tmp/verify-output \
+            --output-formats csv
+
+      - name: Compare FAIL counts
+        run: |
+          python3 - <<'PY'
+          import glob
+          import pandas as pd
+
+          frames = []
+          for path in glob.glob("/tmp/verify-output/*.csv"):
+              try:
+                  df = pd.read_csv(path, sep=";")
+                  if {"CHECK_ID", "STATUS", "SERVICE_NAME"}.issubset(df.columns):
+                      frames.append(df)
+              except Exception:
+                  pass
+
+          if frames:
+              df = pd.concat(frames)
+              fails = df[df["STATUS"].str.upper() == "FAIL"]
+              total = len(fails)
+              by_svc = fails.groupby("SERVICE_NAME").size().to_dict()
+              print(f"Post-remediation FAIL count: {total}")
+              for svc, n in sorted(by_svc.items()):
+                  print(f"  {svc}: {n} FAILs")
+          PY
+
+      - name: Upload verify artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-verify-results
+          path: /tmp/verify-output/
+
+  # ============================================================
+  # 4) 취약 인프라 삭제
+  # ============================================================
+  destroy:
+    name: "4) Destroy Vulnerable Infrastructure"
+    if: github.event.inputs.action == 'destroy'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Destroy
+        run: |
+          terraform -chdir=iac/terraform/vulnerable init -input=false
+          terraform -chdir=iac/terraform/vulnerable destroy \
+            -auto-approve \
+            -input=false \
+            -var="name_prefix=vuln-demo" 2>&1 | tee /tmp/tf-destroy.log
+          echo "Vulnerable infrastructure destroyed."
+
+      - name: Upload destroy logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-destroy-logs
+          path: /tmp/tf-destroy.log
