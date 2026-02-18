@@ -51,7 +51,7 @@ jobs:
         with:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
 
-      - name: Install IaC quality tools (tflint + tfsec)
+      - name: Install IaC quality tools (tflint + tfsec + checkov)
         run: |
           curl -sSL -o /usr/local/bin/tfsec https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64
           chmod +x /usr/local/bin/tfsec
@@ -59,6 +59,7 @@ jobs:
           unzip -q /tmp/tflint.zip -d /tmp
           mv /tmp/tflint /usr/local/bin/tflint
           tflint --init
+          pip install -q checkov
 
       - name: Pre-flight AWS discovery
         run: bash iac/scripts/preflight_discovery.sh /tmp/aws_discovery.json
@@ -247,6 +248,16 @@ jobs:
               fi
               # tfsec: record warnings only (non-blocking for remediation code)
               tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfgate.txt || echo "WARN $category: tfsec found issues (non-blocking)" | tee -a /tmp/tfplan.txt
+
+              # Checkov: built-in + custom checks (non-blocking, results logged)
+              echo "### Checkov ($category)" >> /tmp/checkov-results.txt
+              checkov -d "$work" \
+                --external-checks-dir iac/policies/checkov \
+                --config-file iac/policies/.checkov.yaml \
+                --output cli \
+                --soft-fail \
+                2>&1 | tee -a /tmp/tfgate.txt >> /tmp/checkov-results.txt || echo "WARN $category: checkov scan failed (non-blocking)" | tee -a /tmp/tfplan.txt
+
               if ! terraform -chdir="$work" validate 2>&1 | tee -a /tmp/tfplan.txt /tmp/tfgate.txt; then
                 echo "SKIP $category: validate failed" | tee -a /tmp/tfplan.txt /tmp/tfgate.txt
                 exitcode=1
@@ -254,7 +265,14 @@ jobs:
               fi
               terraform -chdir="$work" plan -no-color -out=tfplan.binary | tee -a /tmp/tfplan.txt
 
+              # Checkov plan-json scan (deeper analysis on planned changes)
               terraform -chdir="$work" show -json tfplan.binary > "$work/plan.json"
+              checkov -f "$work/plan.json" \
+                --framework terraform_plan \
+                --config-file iac/policies/.checkov.yaml \
+                --output cli \
+                --soft-fail \
+                2>&1 | tee -a /tmp/tfgate.txt >> /tmp/checkov-results.txt || true
               infracost breakdown --path "$work/plan.json" \
                 --format json \
                 --out-file "/tmp/infracost-${category}.json" 2>&1 | tee -a /tmp/tfplan.txt
@@ -462,11 +480,36 @@ jobs:
               costSection = '\n### Cost details unavailable (Infracost failed)\n';
             }
 
+            // Read Checkov results
+            let checkovSection = '';
+            try {
+              const checkovResults = readIfExists('/tmp/checkov-results.txt');
+              if (checkovResults) {
+                const passed = (checkovResults.match(/Passed checks: (\d+)/g) || [])
+                  .reduce((sum, m) => sum + parseInt(m.match(/\d+/)[0]), 0);
+                const failed = (checkovResults.match(/Failed checks: (\d+)/g) || [])
+                  .reduce((sum, m) => sum + parseInt(m.match(/\d+/)[0]), 0);
+                const statusEmoji = failed > 0 ? 'WARN' : 'OK';
+                checkovSection = `\n### ${statusEmoji} Checkov: ${passed} passed, ${failed} failed\n`;
+                if (failed > 0) {
+                  // Extract failed check lines
+                  const failedLines = checkovResults.split('\n')
+                    .filter(l => l.includes('FAILED') || l.match(/Check: CKV/))
+                    .slice(0, 20)
+                    .join('\n');
+                  checkovSection += `\n<details>\n<summary>Checkov findings (click to expand)</summary>\n\n\`\`\`\n${failedLines}\n\`\`\`\n\n</details>\n`;
+                }
+              }
+            } catch (e) {
+              checkovSection = '';
+            }
+
             const exitcode = process.env.PLAN_OUTPUT;
             const status = exitcode === '0' ? 'Plan Succeeded' : 'Plan Failed';
 
             const body = `### Terraform Plan Result - ${status}
             ${costSection}
+            ${checkovSection}
             <details>
             <summary>Plan details (click to expand)</summary>
 
@@ -512,7 +555,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: remediation-quality-gates
-          path: /tmp/tfgate.txt
+          path: |
+            /tmp/tfgate.txt
+            /tmp/checkov-results.txt
 
       - name: Upload cost estimate
         if: always()
@@ -550,7 +595,7 @@ jobs:
         with:
           terraform_version: 1.6.0
 
-      - name: Install IaC quality tools (tflint + tfsec)
+      - name: Install IaC quality tools (tflint + tfsec + checkov)
         run: |
           curl -sSL -o /usr/local/bin/tfsec https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64
           chmod +x /usr/local/bin/tfsec
@@ -558,6 +603,7 @@ jobs:
           unzip -q /tmp/tflint.zip -d /tmp
           mv /tmp/tflint /usr/local/bin/tflint
           tflint --init
+          pip install -q checkov
 
       - name: Install Prowler verification dependencies
         run: |
@@ -799,6 +845,14 @@ jobs:
 
             # tfsec: record warnings only
             tfsec --no-colour "$work" 2>&1 | tee -a /tmp/tfapply.txt || echo "WARN $category: tfsec found issues (non-blocking)" | tee -a /tmp/tfapply.txt
+
+            # Checkov: built-in + custom checks (non-blocking for apply)
+            checkov -d "$work" \
+              --external-checks-dir iac/policies/checkov \
+              --config-file iac/policies/.checkov.yaml \
+              --output cli \
+              --soft-fail \
+              2>&1 | tee -a /tmp/tfapply.txt || true
 
             # validate
             if ! terraform -chdir="$work" init -input=false 2>&1 | tee -a /tmp/tfapply.txt; then

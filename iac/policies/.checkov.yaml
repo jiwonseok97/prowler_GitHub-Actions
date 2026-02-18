@@ -1,0 +1,19 @@
+# Checkov configuration for remediation code scanning
+# https://www.checkov.io/2.Basics/CLI%20Command%20Reference.html
+
+framework:
+  - terraform
+
+# Skip checks that conflict with remediation patterns:
+# CKV_AWS_144: S3 cross-region replication (not needed for remediation buckets)
+# CKV_AWS_145: S3 KMS encryption (we use AES256 for simplicity)
+# CKV_AWS_18: S3 access logging (we remediate this separately)
+# CKV2_AWS_62: S3 event notification (not relevant)
+# CKV_AWS_21: S3 versioning (we remediate this separately)
+skip-check:
+  - CKV_AWS_144
+  - CKV2_AWS_62
+
+# Output settings
+compact: true
+quiet: true
