@@ -16,7 +16,7 @@ import sys
 
 def load_discovery(path: str) -> dict:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"WARN: Cannot load discovery: {e}")
@@ -36,6 +36,21 @@ def find_referenced_vars(work_dir: str) -> set[str]:
         for m in re.finditer(r"var\.([A-Za-z_][A-Za-z0-9_]*)", text):
             refs.add(m.group(1))
     return refs
+
+
+def find_declared_vars(work_dir: str) -> set[str]:
+    """Scan .tf files in work_dir for variable declarations."""
+    declared = set()
+    for name in os.listdir(work_dir):
+        if not name.endswith(".tf"):
+            continue
+        try:
+            text = open(os.path.join(work_dir, name), encoding="utf-8").read()
+        except OSError:
+            continue
+        for m in re.finditer(r'variable\s+"([A-Za-z_][A-Za-z0-9_]*)"', text):
+            declared.add(m.group(1))
+    return declared
 
 
 def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
@@ -149,6 +164,44 @@ def write_tfvars(vals: dict[str, str], work_dir: str) -> None:
     print(f"  Generated {path}: {list(vals.keys())}")
 
 
+def prune_auto_tfvars(work_dir: str) -> None:
+    """Remove undeclared keys from *.auto.tfvars files in work_dir."""
+    declared = find_declared_vars(work_dir)
+    if not declared:
+        return
+
+    for name in os.listdir(work_dir):
+        if not name.endswith(".auto.tfvars"):
+            continue
+        path = os.path.join(work_dir, name)
+        try:
+            lines = open(path, "r", encoding="utf-8").read().splitlines()
+        except OSError:
+            continue
+
+        kept: list[str] = []
+        removed: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                kept.append(line)
+                continue
+            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=", stripped)
+            if not m:
+                kept.append(line)
+                continue
+            key = m.group(1)
+            if key in declared:
+                kept.append(line)
+            else:
+                removed.append(key)
+
+        if removed:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(kept).rstrip() + "\n")
+            print(f"  Pruned {name}: removed undeclared keys {sorted(set(removed))}")
+
+
 def main():
     if len(sys.argv) < 4:
         print("Usage: generate_tfvars.py <discovery_json> <work_dir> <category>")
@@ -164,6 +217,7 @@ def main():
 
     vals = generate(discovery, work_dir, category)
     write_tfvars(vals, work_dir)
+    prune_auto_tfvars(work_dir)
 
 
 if __name__ == "__main__":

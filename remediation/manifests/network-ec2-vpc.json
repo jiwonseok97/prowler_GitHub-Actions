@@ -7,8 +7,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Requires in-place onboarding of existing instances (SSM agent/role attach), current template creates new instance.",
     "sanitizers_applied": []
   },
   {
@@ -19,8 +19,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Age-based remediation requires replacement policy/approval per instance; current template creates new instance.",
     "sanitizers_applied": []
   },
   {
@@ -31,8 +31,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Virtualization type is AMI/instance replacement concern; safe auto-remediation requires controlled migration.",
     "sanitizers_applied": []
   },
   {
@@ -43,8 +43,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Current template uses placeholder role/profile and creates new instance instead of patching existing one.",
     "sanitizers_applied": [
       "_fix_invalid_ec2_resource_type"
     ]
@@ -57,8 +57,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Public IP removal requires per-interface/per-subnet migration plan; current template is not in-place remediation.",
     "sanitizers_applied": []
   },
   {
@@ -69,8 +69,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Outdated AMI remediation requires replacement orchestration and downtime policy.",
     "sanitizers_applied": []
   },
   {
@@ -81,8 +81,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Current template recreates/reattaches NACL and can be disruptive; requires resource-targeted safe patch flow.",
     "sanitizers_applied": []
   },
   {
@@ -93,8 +93,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Current template recreates/reattaches NACL and can be disruptive; requires resource-targeted safe patch flow.",
     "sanitizers_applied": []
   },
   {
@@ -105,8 +105,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "iac_snippet",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Organization-wide architecture/cost-impacting change; keep as manual/approved remediation.",
     "sanitizers_applied": []
   },
   {
@@ -117,8 +117,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Business/DR architecture decision, not a safe automatic fix.",
     "sanitizers_applied": []
   },
   {
@@ -129,8 +129,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Needs per-VPC route/table/security validation; current template is not discovery-targeted.",
     "sanitizers_applied": []
   },
   {
@@ -141,8 +141,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Current template contains hardcoded VPC and does not guarantee all failing VPCs are remediated.",
     "sanitizers_applied": []
   },
   {
@@ -153,8 +153,8 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Topology redesign item; auto-creating subnets can break routing and workloads.",
     "sanitizers_applied": []
   },
   {
@@ -165,8 +165,32 @@
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Topology redesign item requiring route/NAT/IGW orchestration and approval.",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "ec2_ebs_volume_protected_by_backup_plan",
+    "check_title": "",
+    "output_path": "",
+    "file": "",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "manual",
+    "validation_status": "excluded",
+    "error_message": "EBS backup plan remediation is not yet generated; requires Backup vault/plan/selection targeting existing volumes.",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "ec2_securitygroup_with_many_ingress_egress_rules",
+    "check_title": "",
+    "output_path": "",
+    "file": "",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "manual",
+    "validation_status": "excluded",
+    "error_message": "Rule-count remediation not generated; requires policy-driven split/refactor of existing security groups.",
     "sanitizers_applied": []
   }
 ]

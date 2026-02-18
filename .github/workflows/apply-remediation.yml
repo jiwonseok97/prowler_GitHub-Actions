@@ -708,6 +708,7 @@ jobs:
         run: |
           set -euo pipefail
           : > /tmp/tfapply.txt
+          : > /tmp/target_resource_hints.txt
           applied=0
           skipped=0
           failed=0
@@ -791,6 +792,20 @@ jobs:
             # Generate discovery-driven tfvars so variables get real values
             # instead of default="" which causes count=0 (no resources created)
             python3 iac/scripts/generate_tfvars.py /tmp/aws_discovery.json "$work" "$category" 2>&1 || true
+
+            # Collect resource hints for scoped post-apply verification.
+            # This prevents counting unrelated account-wide FAILs from same check_id.
+            for tfvars in "$work"/*.auto.tfvars; do
+              [ -f "$tfvars" ] || continue
+              awk -F= '
+                /^[[:space:]]*(s3_bucket_name|s3_target_bucket_name|s3_logging_bucket_name|log_bucket_name|cloudtrail_name|config_bucket_name)[[:space:]]*=/ {
+                  v=$2
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+                  gsub(/^"|"$/, "", v)
+                  if (length(v) > 0) print v
+                }
+              ' "$tfvars" >> /tmp/target_resource_hints.txt || true
+            done
 
             # Check if any resource blocks remain
             if ! grep -rEq '^\s*resource\s+"' "$work"/*.tf 2>/dev/null; then
@@ -877,6 +892,8 @@ jobs:
           done
 
           echo "applied=$applied skipped=$skipped failed=$failed" >> /tmp/tfapply.txt
+          sort -u /tmp/target_resource_hints.txt -o /tmp/target_resource_hints.txt || true
+          echo "target_resource_hints=$(wc -l < /tmp/target_resource_hints.txt || echo 0)" >> /tmp/tfapply.txt
           echo "Summary: applied=$applied skipped=$skipped failed=$failed"
           if [ "$applied" -eq 0 ] && [ "$failed" -gt 0 ]; then
             echo "No categories applied and failures present. Failing job." | tee -a /tmp/tfapply.txt
@@ -925,17 +942,38 @@ jobs:
 
           check_ids = {x.strip() for x in os.environ.get("CHECK_IDS", "").split(",") if x.strip()}
           frames = []
+          resource_cols = ["RESOURCE_UID", "RESOURCE_ID", "RESOURCE_ARN", "RESOURCE_NAME", "RESOURCE"]
+          found_resource_col = None
           for path in glob.glob("/tmp/post_scan/*.csv"):
               try:
                   df = pd.read_csv(path, sep=";")
               except Exception:
                   continue
               if {"CHECK_ID", "STATUS"}.issubset(df.columns):
-                  frames.append(df[["CHECK_ID", "STATUS"]])
+                  cols = ["CHECK_ID", "STATUS"] + [c for c in resource_cols if c in df.columns]
+                  for c in resource_cols:
+                      if c in df.columns and not found_resource_col:
+                          found_resource_col = c
+                  frames.append(df[cols])
 
           data = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["CHECK_ID", "STATUS"])
           if check_ids:
               data = data[data["CHECK_ID"].astype(str).isin(check_ids)]
+
+          hints = []
+          hints_path = "/tmp/target_resource_hints.txt"
+          if os.path.exists(hints_path):
+              with open(hints_path, "r", encoding="utf-8") as f:
+                  hints = [line.strip() for line in f if line.strip()]
+          hints = sorted(set(hints))
+
+          if hints:
+              present_cols = [c for c in resource_cols if c in data.columns]
+              if present_cols:
+                  def row_matches_hint(row):
+                      joined = " ".join(str(row.get(c, "")) for c in present_cols).lower()
+                      return any(h.lower() in joined for h in hints)
+                  data = data[data.apply(row_matches_hint, axis=1)]
 
           fails = data[data["STATUS"].astype(str).str.upper() == "FAIL"]
           fail_count = int(len(fails))
@@ -945,9 +983,34 @@ jobs:
               f.write(str(fail_count))
           with open("/tmp/post_fail_by_check.json", "w", encoding="utf-8") as f:
               json.dump(fail_by_check, f, indent=2)
+          with open("/tmp/post_scope_summary.json", "w", encoding="utf-8") as f:
+              json.dump(
+                  {
+                      "target_check_ids": sorted(check_ids),
+                      "resource_hints": hints,
+                      "resource_column_detected": found_resource_col,
+                      "rows_scanned_after_filter": int(len(data)),
+                      "fails_after_filter": fail_count,
+                  },
+                  f,
+                  indent=2,
+              )
 
-          print(f"Post-apply FAIL count (target checks): {fail_count}")
+          print(f"Post-apply FAIL count (scoped target checks/resources): {fail_count}")
           PY
+
+      - name: Evaluate Post-apply Verification
+        if: always()
+        run: |
+          set -euo pipefail
+          strict="${STRICT_POST_APPLY_VERIFICATION:-true}"
+          fail_count="$(cat /tmp/post_fail_count.txt 2>/dev/null || echo 0)"
+          echo "Scoped post-apply fail count: ${fail_count}"
+          if [ "$strict" = "true" ] && [ "${fail_count}" -gt 0 ]; then
+            echo "Post-apply verification failed: scoped FAIL remains (${fail_count})."
+            exit 1
+          fi
+          echo "Post-apply verification passed."
 
       - name: Trigger Prowler Re-scan
         run: |
@@ -965,3 +1028,5 @@ jobs:
             /tmp/aws_discovery.json
             /tmp/post_fail_count.txt
             /tmp/post_fail_by_check.json
+            /tmp/post_scope_summary.json
+            /tmp/target_resource_hints.txt

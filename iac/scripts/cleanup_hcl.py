@@ -23,6 +23,7 @@ FRAMEWORK_DATA = {
 
 # AWS 계정 ID 패턴 (ARN 내부 12자리)
 _ACCOUNT_ID_RE = re.compile(r"(?<=:)\d{12}(?=:)")
+_ACCOUNT_ID_ANY_RE = re.compile(r"\b\d{12}\b")
 
 # placeholder VPC/subnet/SG ID 패턴
 _PLACEHOLDER_PATTERNS = [
@@ -287,6 +288,8 @@ def cleanup(path):
             line = _ACCOUNT_ID_RE.sub(
                 "${data.aws_caller_identity.current.account_id}", line
             )
+        # 일반 문자열에 남아있는 하드코딩 계정 ID 치환
+        line = _ACCOUNT_ID_ANY_RE.sub("${data.aws_caller_identity.current.account_id}", line)
         # ARN 내 하드코딩된 리전 치환
         if "arn:aws" in line:
             line = re.sub(

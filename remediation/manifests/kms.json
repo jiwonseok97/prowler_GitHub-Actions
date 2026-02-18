@@ -7,8 +7,8 @@
     "priority": "P2",
     "category": "kms",
     "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
+    "validation_status": "excluded",
+    "error_message": "Temporarily excluded until key-policy and key-management remediations are validated for least-risk in-place updates.",
     "sanitizers_applied": []
   }
 ]

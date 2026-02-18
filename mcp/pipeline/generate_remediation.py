@@ -79,6 +79,8 @@ USE_CATEGORY_SNIPPET = os.getenv("USE_CATEGORY_SNIPPET", "true").lower() == "tru
 ALLOW_IAM_CREATE = os.getenv("ALLOW_IAM_CREATE", "false").lower() == "true"
 # 검증 실패 시 스킵 허용 여부 (기본: false → 스텁 생성)
 ALLOW_SKIP = os.getenv("ALLOW_SKIP", "false").lower() == "true"
+# 생성 코드가 실제 FAIL 감소에 기여 가능한지 정적 게이트 적용
+STRICT_EFFECTIVENESS_GUARD = os.getenv("STRICT_EFFECTIVENESS_GUARD", "true").lower() == "true"
 # 자동 리메디에이션 허용 체크 ID 목록
 # - 기본값: 실제 개선 효과가 안정적으로 검증된 체크만 보수적으로 자동 적용
 # - "*"  : 허용 목록 제한 해제(모든 체크 대상)
@@ -92,6 +94,19 @@ DEFAULT_AUTO_REMEDIATE_CHECKS = {
     "iam_password_policy_reuse_24",
     "iam_password_policy_symbol",
     "iam_password_policy_uppercase",
+}
+
+# 아키텍처/운영 정책 결정이 필요한 항목은 자동 리메디에이션에서 제외
+NON_AUTOFIXABLE_CHECKS = {
+    "ec2_ebs_volume_protected_by_backup_plan",
+    "ec2_instance_older_than_specific_days",
+    "ec2_instance_paravirtual_type",
+    "ec2_instance_with_outdated_ami",
+    "ec2_securitygroup_with_many_ingress_egress_rules",
+    "networkfirewall_in_all_vpc",
+    "vpc_different_regions",
+    "vpc_subnet_different_az",
+    "vpc_subnet_separate_private_public",
 }
 
 
@@ -3313,6 +3328,9 @@ def sanitize_tf_code_v2(code, extra_unconfig_attrs=None, row=None):
     # 중괄호 균형/블록 종료 보정 및 malformed 감지
     code, flags = _normalize_block_termination(code)
     sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
+    # 생성 코드 효과성 정적 게이트
+    flags = _check_effectiveness_guard(code, row)
+    sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
 
     lines = code.splitlines()
     # 앞/뒤 공백 라인 제거
@@ -3324,6 +3342,51 @@ def sanitize_tf_code_v2(code, extra_unconfig_attrs=None, row=None):
     if sanitized:
         sanitized += "\n"
     return sanitized, sanitize_flags
+
+
+def _check_effectiveness_guard(tf_code: str, row) -> dict:
+    """Static guard to keep only remediations likely to reduce FAIL after apply."""
+    flags = {"exclude": False, "exclude_reason": "", "sanitizers_applied": []}
+    if not STRICT_EFFECTIVENESS_GUARD:
+        return flags
+
+    check_id = _safe_str((row or {}).get("check_id", "")).strip()
+    text = tf_code or ""
+
+    if check_id in NON_AUTOFIXABLE_CHECKS:
+        flags["exclude"] = True
+        flags["exclude_reason"] = "non-autofixable check (architecture/policy change required)"
+        flags["sanitizers_applied"].append("_effectiveness_guard")
+        return flags
+
+    # Placeholder/hardcoded identifiers that usually prevent target remediation.
+    if re.search(r"\b(existing-role-name|remediation-instance-profile)\b", text):
+        flags["exclude"] = True
+        flags["exclude_reason"] = "placeholder IAM identifiers detected"
+        flags["sanitizers_applied"].append("_effectiveness_guard")
+        return flags
+
+    if re.search(r"\b(vpc|subnet|sg)-[0-9a-f]{8,17}\b", text):
+        flags["exclude"] = True
+        flags["exclude_reason"] = "hardcoded network resource IDs detected"
+        flags["sanitizers_applied"].append("_effectiveness_guard")
+        return flags
+
+    # For EC2 instance posture checks, creating a new instance rarely remediates failing existing ones.
+    if check_id.startswith("ec2_instance_"):
+        creates_instance = re.search(r'^\s*resource\s+"aws_instance"\s+"', text, re.MULTILINE) is not None
+        references_existing_instance = (
+            re.search(r'^\s*data\s+"aws_instance"\s+"', text, re.MULTILINE) is not None
+            or "var.instance_id" in text
+            or "aws_ssm_association" in text
+        )
+        if creates_instance and not references_existing_instance:
+            flags["exclude"] = True
+            flags["exclude_reason"] = "creates new aws_instance without targeting existing failing instances"
+            flags["sanitizers_applied"].append("_effectiveness_guard")
+            return flags
+
+    return flags
 
 
 def sanitize_tf_code(code, extra_unconfig_attrs=None, row=None):
