@@ -394,6 +394,12 @@ jobs:
             git rev-parse --verify main >/dev/null 2>&1 || git branch main origin/main
             git checkout -B "$BRANCH" main
 
+            # ── 안전장치: workflow 파일을 main 상태로 강제 복원
+            # GitHub App은 workflow 파일 변경을 push할 수 없으므로 원천 차단
+            git fetch origin main --quiet
+            git restore --source=origin/main --staged --worktree .github/workflows/ 2>/dev/null || true
+            git checkout origin/main -- .github/workflows/ 2>/dev/null || true
+
             # main에서 상속된 같은 카테고리 remediation 파일만 정리
             git rm -rf "remediation/$CATEGORY/" "remediation/manifests/$CATEGORY.json" 2>/dev/null || true
             mkdir -p "remediation/$CATEGORY"
@@ -426,6 +432,17 @@ jobs:
               json.dump(filtered, f, indent=2)
           "
             git add "remediation/manifests/$CATEGORY.json"
+
+            # ── 커밋 직전 안전장치: staging에서 workflow 파일 제거
+            git reset HEAD .github/workflows/ 2>/dev/null || true
+            git checkout -- .github/workflows/ 2>/dev/null || true
+
+            # workflow 파일이 diff에 포함되면 push 거부 (GitHub App 권한 오류 방지)
+            if git diff --cached --name-only | grep -q "^\.github/workflows/"; then
+              echo "ERROR: .github/workflows/ detected in staged changes for $CATEGORY — aborting to prevent push rejection"
+              git reset HEAD .github/workflows/ 2>/dev/null || true
+              git checkout -- .github/workflows/ 2>/dev/null || true
+            fi
 
             if [ -z "$(git diff --cached --name-only)" ]; then
               echo "No changes for $CATEGORY; skipping."
