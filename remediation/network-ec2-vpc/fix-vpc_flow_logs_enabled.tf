@@ -6,7 +6,7 @@ resource "aws_flow_log" "remediation_vpc_flow_logs" {
 
 #Create an S3 bucket to store the VPC flow logs
 resource "aws_s3_bucket" "remediation_vpc_flow_logs_bucket" {
-  bucket = "remediation-vpc-flow-logs-bucket-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}"
+  bucket = "remediation-vpc-flow-logs-bucket-${data.aws_caller_identity.current.account_id}"
 
 }
 
@@ -23,7 +23,7 @@ resource "aws_s3_bucket_policy" "remediation_vpc_flow_logs_bucket_policy" {
           Service = "delivery.logs.amazonaws.com"
         },
         Action   = "s3:PutObject",
-        Resource = "${aws_s3_bucket.remediation_vpc_flow_logs_bucket.arn}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
+        Resource = "${aws_s3_bucket.remediation_vpc_flow_logs_bucket.arn}/*"
       },
       {
         Effect = "Allow",

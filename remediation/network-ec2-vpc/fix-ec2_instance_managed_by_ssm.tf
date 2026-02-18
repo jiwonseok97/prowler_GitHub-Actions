@@ -1,23 +1,14 @@
-#
-# Enroll the EC2 instance as a Systems Manager managed node
-#
 resource "aws_ssm_activation" "remediation_ssm_activation" {
-  name               = "remediation-ssm-activation"
-  description        = "Activate instance for Systems Manager"
-  iam_role           = "AmazonEC2RoleforSSM"
+  name = "remediation-ssm-activation"
+  description        = "Activate EC2 instance for Systems Manager"
+  iam_role           = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/AmazonEC2RoleforSSM"
   registration_limit = 1
+
   tags = {
     Name = "remediation-ssm-activation"
   }
 }
 
-#
-# Attach the Systems Manager managed instance core policy to the instance
-#
-
-#
-# Update the EC2 instance to use the Systems Manager managed instance role
-#
 resource "aws_instance" "remediation_ec2_instance" {
   ami                  = var.ami_id
   instance_type        = "t2.micro"
@@ -28,9 +19,10 @@ resource "aws_instance" "remediation_ec2_instance" {
   }
 }
 
-#
-# Data source to get the latest Amazon Linux 2 AMI
-#
+resource "aws_ssm_association" "remediation_ssm_association" {
+  name        = aws_ssm_activation.remediation_ssm_activation.name
+}
+
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
