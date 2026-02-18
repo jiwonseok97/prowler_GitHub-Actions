@@ -6,7 +6,7 @@
     "file": "s3/fix-s3_bucket_acl_prohibited.tf",
     "priority": "P2",
     "category": "s3",
-    "source": "bedrock",
+    "source": "iac_snippet",
     "validation_status": "ok",
     "error_message": "",
     "sanitizers_applied": []
@@ -18,7 +18,7 @@
     "file": "s3/fix-s3_bucket_default_encryption.tf",
     "priority": "P2",
     "category": "s3",
-    "source": "bedrock",
+    "source": "iac_snippet",
     "validation_status": "ok",
     "error_message": "",
     "sanitizers_applied": []
@@ -30,7 +30,7 @@
     "file": "s3/fix-s3_bucket_kms_encryption.tf",
     "priority": "P2",
     "category": "s3",
-    "source": "bedrock",
+    "source": "iac_snippet",
     "validation_status": "ok",
     "error_message": "",
     "sanitizers_applied": []
@@ -42,7 +42,7 @@
     "file": "s3/fix-s3_bucket_no_mfa_delete.tf",
     "priority": "P2",
     "category": "s3",
-    "source": "bedrock",
+    "source": "iac_snippet",
     "validation_status": "ok",
     "error_message": "",
     "sanitizers_applied": []
@@ -54,7 +54,7 @@
     "file": "s3/fix-s3_bucket_object_versioning.tf",
     "priority": "P2",
     "category": "s3",
-    "source": "bedrock",
+    "source": "iac_snippet",
     "validation_status": "ok",
     "error_message": "",
     "sanitizers_applied": []
@@ -66,7 +66,19 @@
     "file": "s3/fix-s3_bucket_secure_transport_policy.tf",
     "priority": "P2",
     "category": "s3",
-    "source": "bedrock",
+    "source": "iac_snippet",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "s3_bucket_server_access_logging_enabled",
+    "check_title": "S3 bucket has server access logging enabled",
+    "output_path": "s3/fix-s3_bucket_server_access_logging_enabled.tf",
+    "file": "s3/fix-s3_bucket_server_access_logging_enabled.tf",
+    "priority": "P2",
+    "category": "s3",
+    "source": "iac_snippet",
     "validation_status": "ok",
     "error_message": "",
     "sanitizers_applied": []
