@@ -1,50 +1,65 @@
+#
 # Modify the existing EC2 instance to remove the public IP address
+#
 resource "aws_instance" "remediation_ec2_instance" {
   ami           = var.ami_id
-  instance_type = "t2.micro"
-  subnet_id     = tolist(data.aws_subnets.private.ids)[0]
-
-  vpc_security_group_ids = tolist(data.aws_security_groups.allowed.ids)
+  instance_type = var.instance_type
+  subnet_id     = data.aws_subnets.private.ids[0]
 
   associate_public_ip_address = false
 
-  tags = {
-    Name = "remediation-ec2-instance"
+  # Use an existing launch template or AMI
+  launch_template {
+    name = var.launch_template_name
   }
+
+  # Use existing security groups
+  vpc_security_group_ids = tolist(data.aws_security_groups.existing.ids)
+
+  # Use an existing IAM instance profile
+  iam_instance_profile = data.aws_iam_instance_profile.existing.name
 }
 
-# Use a data source to look up the existing AMI
-
-# Use a data source to look up the existing private subnets
+#
+# Data sources to look up existing resources
+#
 data "aws_subnets" "private" {
   filter {
-    name   = "vpc-id"
+    name = "vpc-id"
     values = [var.vpc_id]
   }
 
   filter {
-    name   = "tag-Tier"
+    name = "tag-Tier"
     values = ["private"]
   }
 }
 
-# Use a data source to look up the existing security groups
-data "aws_security_groups" "allowed" {
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
-  }
-
-  filter {
-    name   = "group-name"
-    values = ["allowed-sg"]
-  }
+data "aws_launch_template" "existing" {
+  name = "my-launch-template"
 }
 
-# Use a data source to look up the existing default VPC
+data "aws_security_groups" "existing" {
+}
+
+data "aws_iam_instance_profile" "existing" {
+  name = "my-instance-profile"
+}
 
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
+  type        = string
+  default     = ""
+}
+
+variable "instance_type" {
+  description = "EC2 instance type"
+  type        = string
+  default     = ""
+}
+
+variable "launch_template_name" {
+  description = "EC2 launch template name"
   type        = string
   default     = ""
 }

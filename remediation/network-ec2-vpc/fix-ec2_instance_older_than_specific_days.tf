@@ -1,7 +1,4 @@
-#
-# Remediate the EC2 instance that is not older than the configured maximum age or is not running
-#
-
+#Update the EC2 instance to use a newer AMI and apply the latest patches
 resource "aws_instance" "remediation_ec2_instance" {
   ami                    = var.ami_id
   instance_type          = "t2.micro"
@@ -11,11 +8,13 @@ resource "aws_instance" "remediation_ec2_instance" {
   iam_instance_profile = var.iam_instance_profile_name
 
   tags = {
-    Name = "Remediation-EC2-Instance"
+    Name = "remediation-ec2-instance"
   }
 }
 
+#Look up the latest Amazon Linux 2 AMI
 
+#Look up the default VPC and security groups
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
@@ -31,9 +30,10 @@ data "aws_security_groups" "default" {
 }
 
 
+#Use an existing IAM instance profile
 variable "iam_instance_profile_name" {
-  description = "Name of the IAM instance profile to use for the EC2 instance"
   type        = string
+  description = "Name of the IAM instance profile to use"
   default     = ""
 }
 

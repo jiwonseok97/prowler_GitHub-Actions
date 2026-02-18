@@ -1,7 +1,7 @@
-# Modify the existing Network ACL to remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
-resource "aws_network_acl" "remediation_network_acl" {
-  vpc_id = var.vpc_id
-  subnet_ids = data.aws_subnets.existing_subnets.ids
+# Modify the existing Network ACL to remove the TCP port 3389 (RDP) ingress rule
+resource "aws_network_acl" "remediation_acl" {
+  vpc_id     = var.vpc_id
+  subnet_ids = data.aws_subnets.current.ids
 
   ingress {
     from_port  = 0
@@ -22,13 +22,16 @@ resource "aws_network_acl" "remediation_network_acl" {
   }
 
   tags = {
-    Name = "remediation-network-acl"
+    Name = "remediation-acl-${data.aws_caller_identity.current.account_id}"
   }
 }
 
-# Data sources to look up existing VPC and subnets
 
-data "aws_subnets" "existing_subnets" {
+data "aws_subnets" "current" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
 }
 
 variable "vpc_id" {
