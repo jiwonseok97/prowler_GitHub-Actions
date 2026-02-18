@@ -9,7 +9,9 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": []
+    "sanitizers_applied": [
+      "_fix_incorrect_tolist_usage"
+    ]
   },
   {
     "check_id": "ec2_instance_older_than_specific_days",
@@ -45,9 +47,7 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": [
-      "_fix_invalid_ec2_resource_type"
-    ]
+    "sanitizers_applied": []
   },
   {
     "check_id": "ec2_instance_public_ip",
@@ -98,6 +98,30 @@
     "sanitizers_applied": []
   },
   {
+    "check_id": "ec2_securitygroup_from_launch_wizard",
+    "check_title": "Security group not created using the EC2 Launch Wizard",
+    "output_path": "network-ec2-vpc/fix-ec2_securitygroup_from_launch_wizard.tf",
+    "file": "network-ec2-vpc/fix-ec2_securitygroup_from_launch_wizard.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
+    "check_id": "ec2_securitygroup_with_many_ingress_egress_rules",
+    "check_title": "Security group has 50 or fewer inbound rules and 50 or fewer outbound rules",
+    "output_path": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
+    "file": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
     "check_id": "networkfirewall_in_all_vpc",
     "check_title": "VPC has Network Firewall enabled",
     "output_path": "network-ec2-vpc/fix-networkfirewall_in_all_vpc.tf",
@@ -138,18 +162,6 @@
     "check_title": "VPC flow logs are enabled",
     "output_path": "network-ec2-vpc/fix-vpc_flow_logs_enabled.tf",
     "file": "network-ec2-vpc/fix-vpc_flow_logs_enabled.tf",
-    "priority": "P2",
-    "category": "network-ec2-vpc",
-    "source": "bedrock",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
-    "check_id": "vpc_subnet_different_az",
-    "check_title": "VPC has subnets in more than one Availability Zone",
-    "output_path": "network-ec2-vpc/fix-vpc_subnet_different_az.tf",
-    "file": "network-ec2-vpc/fix-vpc_subnet_different_az.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
