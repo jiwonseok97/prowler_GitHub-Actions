@@ -32,8 +32,8 @@ data "aws_security_groups" "default" {
 
 
 variable "iam_instance_profile_name" {
-  description = "Name of the IAM instance profile to use for the EC2 instance"
   type        = string
+  description = "Name of the IAM instance profile to use for the EC2 instance"
   default     = ""
 }
 
