@@ -45,9 +45,7 @@
     "source": "bedrock",
     "validation_status": "ok",
     "error_message": "",
-    "sanitizers_applied": [
-      "_fix_invalid_ec2_resource_type"
-    ]
+    "sanitizers_applied": []
   },
   {
     "check_id": "ec2_instance_public_ip",
@@ -74,10 +72,10 @@
     "sanitizers_applied": []
   },
   {
-    "check_id": "ec2_networkacl_allow_ingress_tcp_port_22",
-    "check_title": "Network ACL does not allow ingress from the Internet to TCP port 22 (SSH)",
-    "output_path": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_22.tf",
-    "file": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_22.tf",
+    "check_id": "ec2_networkacl_allow_ingress_tcp_port_3389",
+    "check_title": "Network ACL does not allow ingress from the Internet to TCP port 3389 (RDP)",
+    "output_path": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
+    "file": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
@@ -86,10 +84,10 @@
     "sanitizers_applied": []
   },
   {
-    "check_id": "ec2_networkacl_allow_ingress_tcp_port_3389",
-    "check_title": "Network ACL does not allow ingress from the Internet to TCP port 3389 (RDP)",
-    "output_path": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
-    "file": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
+    "check_id": "ec2_securitygroup_with_many_ingress_egress_rules",
+    "check_title": "Security group has 50 or fewer inbound rules and 50 or fewer outbound rules",
+    "output_path": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
+    "file": "network-ec2-vpc/fix-ec2_securitygroup_with_many_ingress_egress_rules.tf",
     "priority": "P2",
     "category": "network-ec2-vpc",
     "source": "bedrock",
