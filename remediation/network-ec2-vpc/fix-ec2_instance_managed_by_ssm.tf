@@ -28,10 +28,6 @@ resource "aws_instance" "remediation_ec2_instance" {
   }
 }
 
-#
-# Data source to get the latest Amazon Linux 2 AMI
-#
-
 variable "ami_id" {
   description = "AMI ID for new or managed instances"
   type        = string
