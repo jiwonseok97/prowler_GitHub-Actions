@@ -1,46 +1,46 @@
-ï»¿# =============================================================================
-# generate_remediation.py - Terraform ë¦¬ë©”ë””ì—ì´ì…˜ ì½”ë“œ ìƒì„± ìŠ¤í¬ë¦½íŠ¸
 # =============================================================================
-# ëª©ì :
-#   - Prowler ê²°ê³¼(P0/P1/P2 ìš°ì„ ìˆœìœ„) ê¸°ë°˜ìœ¼ë¡œ Terraform ë¦¬ë©”ë””ì—ì´ì…˜ ì½”ë“œë¥¼ ìƒì„±
-#   - 1ì°¨: AWS Bedrock Claude Haikuë¡œ ì½”ë“œ ìƒì„±
-#   - 2ì°¨: Bedrock ì‹¤íŒ¨ ì‹œ iac/mappings/check_to_iac.yaml ë§¤í•‘ ìŠ¤ë‹ˆí« ì‚¬ìš©
+# generate_remediation.py - Terraform ¸®¸Şµğ¿¡ÀÌ¼Ç ÄÚµå »ı¼º ½ºÅ©¸³Æ®
+# =============================================================================
+# ¸ñÀû:
+#   - Prowler °á°ú(P0/P1/P2 ¿ì¼±¼øÀ§) ±â¹İÀ¸·Î Terraform ¸®¸Şµğ¿¡ÀÌ¼Ç ÄÚµå¸¦ »ı¼º
+#   - 1Â÷: AWS Bedrock Claude Haiku·Î ÄÚµå »ı¼º
+#   - 2Â÷: Bedrock ½ÇÆĞ ½Ã iac/mappings/check_to_iac.yaml ¸ÅÇÎ ½º´ÏÆê »ç¿ë
 #
-# ì…ë ¥:
+# ÀÔ·Â:
 #   - mcp/output/findings-scored-ai.csv
 #
-# ì¶œë ¥:
-#   - remediation/fix-{check_id}.tf (ê°œë³„ Terraform íŒŒì¼)
-#   - remediation/manifest.json (ìƒì„± íŒŒì¼ ëª©ë¡/ë©”íƒ€ë°ì´í„°)
+# Ãâ·Â:
+#   - remediation/fix-{check_id}.tf (°³º° Terraform ÆÄÀÏ)
+#   - remediation/manifest.json (»ı¼º ÆÄÀÏ ¸ñ·Ï/¸ŞÅ¸µ¥ÀÌÅÍ)
 #
-# ì‚¬ìš© íë¦„:
-#   1) Bedrock í˜¸ì¶œë¡œ ìš°ì„  ì½”ë“œ ìƒì„±
-#   2) ì‹¤íŒ¨ ì‹œ YAML ë§¤í•‘ì—ì„œ ìŠ¤ë‹ˆí« ë¡œë“œ
-#   3) ìƒì„± ì½”ë“œ ì •ë¦¬(cleanup) í›„ terraform init/validateë¡œ ê²€ì¦
-#   4) ì‹¤íŒ¨ ì‹œ ìµœëŒ€ ì¬ì‹œë„ë§Œí¼ ì˜¤ë¥˜ í”¼ë“œë°±ì„ AIì— ì „ë‹¬í•´ ìˆ˜ì • ì‹œë„
-#   5) ì„±ê³µí•œ ì½”ë“œë§Œ íŒŒì¼ë¡œ ì €ì¥í•˜ê³  manifestì— ê¸°ë¡
+# »ç¿ë Èå¸§:
+#   1) Bedrock È£Ãâ·Î ¿ì¼± ÄÚµå »ı¼º
+#   2) ½ÇÆĞ ½Ã YAML ¸ÅÇÎ¿¡¼­ ½º´ÏÆê ·Îµå
+#   3) »ı¼º ÄÚµå Á¤¸®(cleanup) ÈÄ terraform init/validate·Î °ËÁõ
+#   4) ½ÇÆĞ ½Ã ÃÖ´ë Àç½Ãµµ¸¸Å­ ¿À·ù ÇÇµå¹éÀ» AI¿¡ Àü´ŞÇØ ¼öÁ¤ ½Ãµµ
+#   5) ¼º°øÇÑ ÄÚµå¸¸ ÆÄÀÏ·Î ÀúÀåÇÏ°í manifest¿¡ ±â·Ï
 # =============================================================================
 
 import argparse
 import json
 import os
 import re
-import shutil  # terraform ë°”ì´ë„ˆë¦¬ ì¡´ì¬ ì—¬ë¶€ í™•ì¸ìš©
+import shutil  # terraform ¹ÙÀÌ³Ê¸® Á¸Àç ¿©ºÎ È®ÀÎ¿ë
 import pandas as pd
 
-# ì„ íƒì  ì˜ì¡´ì„±: ì—†ëŠ” ê²½ìš°ì—ë„ ìŠ¤í¬ë¦½íŠ¸ê°€ ë™ì‘í•˜ë„ë¡ ì•ˆì „í•˜ê²Œ ì²˜ë¦¬
+# ¼±ÅÃÀû ÀÇÁ¸¼º: ¾ø´Â °æ¿ì¿¡µµ ½ºÅ©¸³Æ®°¡ µ¿ÀÛÇÏµµ·Ï ¾ÈÀüÇÏ°Ô Ã³¸®
 try:
     import boto3
 except Exception:
-    boto3 = None  # boto3 ë¯¸ì„¤ì¹˜ ì‹œ Bedrock í˜¸ì¶œ ë¹„í™œì„±
+    boto3 = None  # boto3 ¹Ì¼³Ä¡ ½Ã Bedrock È£Ãâ ºñÈ°¼º
 
 try:
     import yaml
 except Exception:
-    yaml = None  # pyyaml ë¯¸ì„¤ì¹˜ ì‹œ IaC ë§¤í•‘ ë¡œë“œ ë¹„í™œì„±
+    yaml = None  # pyyaml ¹Ì¼³Ä¡ ½Ã IaC ¸ÅÇÎ ·Îµå ºñÈ°¼º
 
 # -----------------------------------------------------------------------------
-# CLI ì¸ì
+# CLI ÀÎÀÚ
 # -----------------------------------------------------------------------------
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", required=True)
@@ -48,11 +48,11 @@ parser.add_argument("--output-dir", required=True)
 parser.add_argument("--iac-mapping", default="iac/mappings/check_to_iac.yaml")
 args = parser.parse_args()
 
-# ì…ë ¥ CSV ë¡œë“œ (Prowler ìŠ¤ì½”ì–´ë§ ê²°ê³¼)
+# ÀÔ·Â CSV ·Îµå (Prowler ½ºÄÚ¾î¸µ °á°ú)
 df = pd.read_csv(args.input)
 
 # -----------------------------------------------------------------------------
-# Bedrock ì„¤ì • (í™˜ê²½ ë³€ìˆ˜ë¡œ ì˜¤ë²„ë¼ì´ë“œ ê°€ëŠ¥)
+# Bedrock ¼³Á¤ (È¯°æ º¯¼ö·Î ¿À¹ö¶óÀÌµå °¡´É)
 # -----------------------------------------------------------------------------
 DEFAULT_BEDROCK_REGION = "ap-northeast-2"
 DEFAULT_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
@@ -65,26 +65,26 @@ if BEDROCK_REGION != DEFAULT_BEDROCK_REGION:
 # Normalize to ARN if model id is a short name
 if not MODEL_ID.startswith("arn:aws:bedrock:"):
     MODEL_ID = f"arn:aws:bedrock:{BEDROCK_REGION}::foundation-model/{MODEL_ID}"
-MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))  # Terraform ì½”ë“œ ìµœëŒ€ ê¸¸ì´
+MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))  # Terraform ÄÚµå ÃÖ´ë ±æÀÌ
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"
-# IaC ìŠ¤ë‹ˆí«ì„ Bedrockë³´ë‹¤ ìš°ì„  ì ìš©í• ì§€ ì—¬ë¶€
+# IaC ½º´ÏÆêÀ» Bedrockº¸´Ù ¿ì¼± Àû¿ëÇÒÁö ¿©ºÎ
 PREFER_IAC_SNIPPET = os.getenv("PREFER_IAC_SNIPPET", "true").lower() == "true"
-# provider ìŠ¤í‚¤ë§ˆ ê¸°ë°˜ ê°€ë“œë ˆì¼ ì‚¬ìš© ì—¬ë¶€
+# provider ½ºÅ°¸¶ ±â¹İ °¡µå·¹ÀÏ »ç¿ë ¿©ºÎ
 USE_SCHEMA_GUARDRAIL = os.getenv("USE_SCHEMA_GUARDRAIL", "true").lower() == "true"
-# IaC ìŠ¤ë‹ˆí« ê¸°ë³¸ ê²½ë¡œ
+# IaC ½º´ÏÆê ±âº» °æ·Î
 IAC_SNIPPET_DIR = os.getenv("IAC_SNIPPET_DIR", "iac/terraform/snippets")
-# ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí« fallback ì‚¬ìš© ì—¬ë¶€
+# Ä«Å×°í¸® ½º´ÏÆê fallback »ç¿ë ¿©ºÎ
 USE_CATEGORY_SNIPPET = os.getenv("USE_CATEGORY_SNIPPET", "true").lower() == "true"
-# IAM ë¦¬ì†ŒìŠ¤ ìƒì„± í—ˆìš© ì—¬ë¶€ (ê¸°ë³¸: false â†’ data source ì°¸ì¡°ë¡œ ì „í™˜)
+# IAM ¸®¼Ò½º »ı¼º Çã¿ë ¿©ºÎ (±âº»: false ¡æ data source ÂüÁ¶·Î ÀüÈ¯)
 ALLOW_IAM_CREATE = os.getenv("ALLOW_IAM_CREATE", "false").lower() == "true"
-# ê²€ì¦ ì‹¤íŒ¨ ì‹œ ìŠ¤í‚µ í—ˆìš© ì—¬ë¶€ (ê¸°ë³¸: false â†’ ìŠ¤í… ìƒì„±)
+# °ËÁõ ½ÇÆĞ ½Ã ½ºÅµ Çã¿ë ¿©ºÎ (±âº»: false ¡æ ½ºÅÓ »ı¼º)
 ALLOW_SKIP = os.getenv("ALLOW_SKIP", "false").lower() == "true"
-# ìƒì„± ì½”ë“œê°€ ì‹¤ì œ FAIL ê°ì†Œì— ê¸°ì—¬ ê°€ëŠ¥í•œì§€ ì •ì  ê²Œì´íŠ¸ ì ìš©
+# »ı¼º ÄÚµå°¡ ½ÇÁ¦ FAIL °¨¼Ò¿¡ ±â¿© °¡´ÉÇÑÁö Á¤Àû °ÔÀÌÆ® Àû¿ë
 STRICT_EFFECTIVENESS_GUARD = os.getenv("STRICT_EFFECTIVENESS_GUARD", "true").lower() == "true"
-# ìë™ ë¦¬ë©”ë””ì—ì´ì…˜ í—ˆìš© ì²´í¬ ID ëª©ë¡
-# - ê¸°ë³¸ê°’: ì‹¤ì œ ê°œì„  íš¨ê³¼ê°€ ì•ˆì •ì ìœ¼ë¡œ ê²€ì¦ëœ ì²´í¬ë§Œ ë³´ìˆ˜ì ìœ¼ë¡œ ìë™ ì ìš©
-# - "*"  : í—ˆìš© ëª©ë¡ ì œí•œ í•´ì œ(ëª¨ë“  ì²´í¬ ëŒ€ìƒ)
-# - "none": ìë™ ì ìš© ë¹„í™œì„±
+# ÀÚµ¿ ¸®¸Şµğ¿¡ÀÌ¼Ç Çã¿ë Ã¼Å© ID ¸ñ·Ï
+# - ±âº»°ª: ½ÇÁ¦ °³¼± È¿°ú°¡ ¾ÈÁ¤ÀûÀ¸·Î °ËÁõµÈ Ã¼Å©¸¸ º¸¼öÀûÀ¸·Î ÀÚµ¿ Àû¿ë
+# - "*"  : Çã¿ë ¸ñ·Ï Á¦ÇÑ ÇØÁ¦(¸ğµç Ã¼Å© ´ë»ó)
+# - "none": ÀÚµ¿ Àû¿ë ºñÈ°¼º
 AUTO_REMEDIATE_CHECKS_RAW = os.getenv("AUTO_REMEDIATE_CHECKS", "").strip()
 DEFAULT_AUTO_REMEDIATE_CHECKS = {
     "iam_password_policy_expires_passwords_within_90_days_or_less",
@@ -96,7 +96,7 @@ DEFAULT_AUTO_REMEDIATE_CHECKS = {
     "iam_password_policy_uppercase",
 }
 
-# ì•„í‚¤í…ì²˜/ìš´ì˜ ì •ì±… ê²°ì •ì´ í•„ìš”í•œ í•­ëª©ì€ ìë™ ë¦¬ë©”ë””ì—ì´ì…˜ì—ì„œ ì œì™¸
+# ¾ÆÅ°ÅØÃ³/¿î¿µ Á¤Ã¥ °áÁ¤ÀÌ ÇÊ¿äÇÑ Ç×¸ñÀº ÀÚµ¿ ¸®¸Şµğ¿¡ÀÌ¼Ç¿¡¼­ Á¦¿Ü
 NON_AUTOFIXABLE_CHECKS = {
     "ec2_ebs_volume_protected_by_backup_plan",
     "ec2_instance_older_than_specific_days",
@@ -127,7 +127,7 @@ REMEDIATION_MODE = os.getenv("REMEDIATION_MODE", "stable-only").strip().lower() 
 STABLE_ONLY_MODE = REMEDIATION_MODE != "all-checks"
 
 # -----------------------------------------------------------------------------
-# IaC ìŠ¤ë‹ˆí« ë§¤í•‘ ë¡œë“œ (Bedrock ì‹¤íŒ¨ ì‹œ fallback)
+# IaC ½º´ÏÆê ¸ÅÇÎ ·Îµå (Bedrock ½ÇÆĞ ½Ã fallback)
 # -----------------------------------------------------------------------------
 iac_map = {}
 if yaml and os.path.exists(args.iac_mapping):
@@ -136,7 +136,7 @@ if yaml and os.path.exists(args.iac_mapping):
     print(f"Loaded {len(iac_map)} IaC snippet mappings")
 
 # -----------------------------------------------------------------------------
-# Guardrail ì„¤ì • (ë¬¸ë²•/ìŠ¤í‚¤ë§ˆ ìœ„ë°˜ ìµœì†Œí™”)
+# Guardrail ¼³Á¤ (¹®¹ı/½ºÅ°¸¶ À§¹İ ÃÖ¼ÒÈ­)
 # -----------------------------------------------------------------------------
 COMPUTED_ATTRS = {
     "arn",
@@ -149,20 +149,20 @@ COMPUTED_ATTRS = {
     "unique_id",
 }
 
-# Terraformìœ¼ë¡œ í•´ê²° ë¶ˆê°€ëŠ¥í•œ ì²´í¬ (AWS Console/ìˆ˜ë™ ì„¤ì •ë§Œ ê°€ëŠ¥)
+# TerraformÀ¸·Î ÇØ°á ºÒ°¡´ÉÇÑ Ã¼Å© (AWS Console/¼öµ¿ ¼³Á¤¸¸ °¡´É)
 SKIP_CHECKS = {
     "account_maintain_current_contact_details",
     "account_maintain_different_contact_details_to_security_billing_and_operations",
     "account_security_contact_information_is_registered",
     "account_security_questions_are_registered_in_the_aws_account",
-    "iam_policy_cloudshell_admin_not_attached",       # ìˆ˜ë™ detach í•„ìš”
-    "iam_user_console_access_unused",                 # ìˆ˜ë™ ë¹„í™œì„±í™” í•„ìš”
-    "iam_inline_policy_no_full_access_to_kms",        # ìˆ˜ë™ ì •ì±… ìˆ˜ì • í•„ìš”
-    "organizations_account_part_of_organizations",    # ì¡°ì§ ê°€ì… í•„ìš” (ìë™ ì ìš© ì–´ë ¤ì›€)
-    "fms_policy_compliant",                          # AWS Shield Advanced êµ¬ë… í•„ìš” (SubscriptionRequiredException)
+    "iam_policy_cloudshell_admin_not_attached",       # ¼öµ¿ detach ÇÊ¿ä
+    "iam_user_console_access_unused",                 # ¼öµ¿ ºñÈ°¼ºÈ­ ÇÊ¿ä
+    "iam_inline_policy_no_full_access_to_kms",        # ¼öµ¿ Á¤Ã¥ ¼öÁ¤ ÇÊ¿ä
+    "organizations_account_part_of_organizations",    # Á¶Á÷ °¡ÀÔ ÇÊ¿ä (ÀÚµ¿ Àû¿ë ¾î·Á¿ò)
+    "fms_policy_compliant",                          # AWS Shield Advanced ±¸µ¶ ÇÊ¿ä (SubscriptionRequiredException)
 }
 
-# ë™ì¼ singleton AWS ë¦¬ì†ŒìŠ¤ë¥¼ ìƒì„±í•˜ëŠ” ì²´í¬ë“¤ â†’ í•˜ë‚˜ì˜ íŒŒì¼ë¡œ í†µí•©
+# µ¿ÀÏ singleton AWS ¸®¼Ò½º¸¦ »ı¼ºÇÏ´Â Ã¼Å©µé ¡æ ÇÏ³ªÀÇ ÆÄÀÏ·Î ÅëÇÕ
 CONSOLIDATE_CHECKS = {
     "iam_password_policy_expires_passwords_within_90_days_or_less": "fix-iam_password_policy.tf",
     "iam_password_policy_minimum_length_14": "fix-iam_password_policy.tf",
@@ -173,8 +173,8 @@ CONSOLIDATE_CHECKS = {
     "iam_password_policy_uppercase": "fix-iam_password_policy.tf",
 }
 
-# AWS ê³„ì •ë‹¹ 1ê°œë§Œ ì¡´ì¬í•˜ëŠ” ì‹±ê¸€í†¤ ë¦¬ì†ŒìŠ¤ â†’ ê³ ì • ì´ë¦„ ì‚¬ìš©
-# (ë§¤ ì‹¤í–‰ë§ˆë‹¤ ì´ë¦„ì´ ë°”ë€Œë©´ stateì—ì„œ destroy â†’ ì„¤ì • ë¦¬ì…‹ ë¬¸ì œ ë°œìƒ)
+# AWS °èÁ¤´ç 1°³¸¸ Á¸ÀçÇÏ´Â ½Ì±ÛÅæ ¸®¼Ò½º ¡æ °íÁ¤ ÀÌ¸§ »ç¿ë
+# (¸Å ½ÇÇà¸¶´Ù ÀÌ¸§ÀÌ ¹Ù²î¸é state¿¡¼­ destroy ¡æ ¼³Á¤ ¸®¼Â ¹®Á¦ ¹ß»ı)
 SINGLETON_RESOURCE_NAMES = {
     "aws_iam_account_password_policy": "remediation_password_policy",
 }
@@ -205,98 +205,98 @@ HCL_START_RE = re.compile(
     r"output\b|module\b|import\b|\})"
 )
 
-# provider ìŠ¤í‚¤ë§ˆì—ì„œ ì¶”ì¶œí•œ computed-only ì†ì„± ë§µ
+# provider ½ºÅ°¸¶¿¡¼­ ÃßÃâÇÑ computed-only ¼Ó¼º ¸Ê
 SCHEMA_COMPUTED_ATTRS = {}
 
 
 def _terraform_cli_available():
-    # Terraform CLIê°€ PATHì— ìˆëŠ”ì§€ í™•ì¸
-    return shutil.which("terraform") is not None  # PATHì— terraformì´ ìˆìœ¼ë©´ True
+    # Terraform CLI°¡ PATH¿¡ ÀÖ´ÂÁö È®ÀÎ
+    return shutil.which("terraform") is not None  # PATH¿¡ terraformÀÌ ÀÖÀ¸¸é True
 
 
 def _load_schema_computed_attrs():
-    # ìŠ¤í‚¤ë§ˆ ê°€ë“œë ˆì¼ì´ ë¹„í™œì„±í™”ë©´ ë¹ˆ ë§µ ë°˜í™˜
-    if not USE_SCHEMA_GUARDRAIL:  # ê°€ë“œë ˆì¼ ë¹„í™œì„± ì²´í¬
-        return {}  # ë¹„í™œì„±í™” ì‹œ ë¹ˆ ë§µ ë°˜í™˜
-    # ì´ë¯¸ ë¡œë“œëœ ìºì‹œê°€ ìˆìœ¼ë©´ ê·¸ëŒ€ë¡œ ë°˜í™˜
-    if SCHEMA_COMPUTED_ATTRS:  # ìºì‹œê°€ ìˆìœ¼ë©´ ì¬ì‚¬ìš©
-        return SCHEMA_COMPUTED_ATTRS  # ìºì‹œëœ ê°’ ë°˜í™˜
-    # Terraform CLIê°€ ì—†ìœ¼ë©´ ìŠ¤í‚¤ë§ˆ ë¡œë”© ë¶ˆê°€
-    if not _terraform_cli_available():  # terraform ë°”ì´ë„ˆë¦¬ ì¡´ì¬ ì—¬ë¶€ í™•ì¸
-        return {}  # ì‹¤í–‰ ë¶ˆê°€ ì‹œ ë¹ˆ ë§µ ë°˜í™˜
-    # í‘œì¤€ ë¼ì´ë¸ŒëŸ¬ë¦¬ ë¡œì»¬ import (í•„ìš” ì‹œì—ë§Œ)
-    import tempfile  # ì„ì‹œ ë””ë ‰í„°ë¦¬ ìƒì„±ìš©
-    import subprocess  # terraform ëª…ë ¹ ì‹¤í–‰ìš©
-    # ì„ì‹œ ì‘ì—… ë””ë ‰í„°ë¦¬ ìƒì„±
-    work = tempfile.mkdtemp(prefix="tf-schema-")  # ìŠ¤í‚¤ë§ˆ ì¡°íšŒìš© ì„ì‹œ í´ë”
+    # ½ºÅ°¸¶ °¡µå·¹ÀÏÀÌ ºñÈ°¼ºÈ­¸é ºó ¸Ê ¹İÈ¯
+    if not USE_SCHEMA_GUARDRAIL:  # °¡µå·¹ÀÏ ºñÈ°¼º Ã¼Å©
+        return {}  # ºñÈ°¼ºÈ­ ½Ã ºó ¸Ê ¹İÈ¯
+    # ÀÌ¹Ì ·ÎµåµÈ Ä³½Ã°¡ ÀÖÀ¸¸é ±×´ë·Î ¹İÈ¯
+    if SCHEMA_COMPUTED_ATTRS:  # Ä³½Ã°¡ ÀÖÀ¸¸é Àç»ç¿ë
+        return SCHEMA_COMPUTED_ATTRS  # Ä³½ÃµÈ °ª ¹İÈ¯
+    # Terraform CLI°¡ ¾øÀ¸¸é ½ºÅ°¸¶ ·Îµù ºÒ°¡
+    if not _terraform_cli_available():  # terraform ¹ÙÀÌ³Ê¸® Á¸Àç ¿©ºÎ È®ÀÎ
+        return {}  # ½ÇÇà ºÒ°¡ ½Ã ºó ¸Ê ¹İÈ¯
+    # Ç¥ÁØ ¶óÀÌºê·¯¸® ·ÎÄÃ import (ÇÊ¿ä ½Ã¿¡¸¸)
+    import tempfile  # ÀÓ½Ã µğ·ºÅÍ¸® »ı¼º¿ë
+    import subprocess  # terraform ¸í·É ½ÇÇà¿ë
+    # ÀÓ½Ã ÀÛ¾÷ µğ·ºÅÍ¸® »ı¼º
+    work = tempfile.mkdtemp(prefix="tf-schema-")  # ½ºÅ°¸¶ Á¶È¸¿ë ÀÓ½Ã Æú´õ
     try:
-        # ìŠ¤í‚¤ë§ˆ ë¡œë”©ìš© ìµœì†Œ main.tf ì‘ì„±
-        with open(os.path.join(work, "main.tf"), "w") as f:  # main.tf ìƒì„±
-            # required_providers ë¸”ë¡ ì •ì˜
-            f.write('terraform {\n')  # terraform ë¸”ë¡ ì‹œì‘
-            # aws í”„ë¡œë°”ì´ë” ì†ŒìŠ¤ ì§€ì •
-            f.write('  required_providers {\n')  # required_providers ë¸”ë¡ ì‹œì‘
-            # aws provider í•€ ê³ ì • (ì†ŒìŠ¤ë§Œ ì§€ì •)
-            f.write('    aws = {\n')  # aws í”„ë¡œë°”ì´ë” ë¸”ë¡ ì‹œì‘
-            # registry ì†ŒìŠ¤ ì§€ì •
-            f.write('      source = "hashicorp/aws"\n')  # aws ì†ŒìŠ¤ ì§€ì •
-            # ë¸”ë¡ ì¢…ë£Œ
-            f.write('    }\n')  # aws í”„ë¡œë°”ì´ë” ë¸”ë¡ ì¢…ë£Œ
-            # required_providers ì¢…ë£Œ
-            f.write('  }\n')  # required_providers ì¢…ë£Œ
-            # terraform ë¸”ë¡ ì¢…ë£Œ
-            f.write('}\n')  # terraform ë¸”ë¡ ì¢…ë£Œ
-            # provider ë¸”ë¡ ì¶”ê°€
-            f.write('provider "aws" {\n')  # provider ë¸”ë¡ ì‹œì‘
-            # ë¦¬ì „ ê³ ì •
-            f.write('  region = "ap-northeast-2"\n')  # ë¦¬ì „ ì„¤ì •
-            # provider ë¸”ë¡ ì¢…ë£Œ
-            f.write('}\n')  # provider ë¸”ë¡ ì¢…ë£Œ
-        # terraform init ì‹¤í–‰ (backend ë¶ˆí•„ìš”)
-        r1 = subprocess.run(  # init ì‹¤í–‰
-            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],  # init ì˜µì…˜
-            cwd=work, capture_output=True, text=True, timeout=120  # ì‹¤í–‰ ê²½ë¡œ/ì˜µì…˜
+        # ½ºÅ°¸¶ ·Îµù¿ë ÃÖ¼Ò main.tf ÀÛ¼º
+        with open(os.path.join(work, "main.tf"), "w") as f:  # main.tf »ı¼º
+            # required_providers ºí·Ï Á¤ÀÇ
+            f.write('terraform {\n')  # terraform ºí·Ï ½ÃÀÛ
+            # aws ÇÁ·Î¹ÙÀÌ´õ ¼Ò½º ÁöÁ¤
+            f.write('  required_providers {\n')  # required_providers ºí·Ï ½ÃÀÛ
+            # aws provider ÇÉ °íÁ¤ (¼Ò½º¸¸ ÁöÁ¤)
+            f.write('    aws = {\n')  # aws ÇÁ·Î¹ÙÀÌ´õ ºí·Ï ½ÃÀÛ
+            # registry ¼Ò½º ÁöÁ¤
+            f.write('      source = "hashicorp/aws"\n')  # aws ¼Ò½º ÁöÁ¤
+            # ºí·Ï Á¾·á
+            f.write('    }\n')  # aws ÇÁ·Î¹ÙÀÌ´õ ºí·Ï Á¾·á
+            # required_providers Á¾·á
+            f.write('  }\n')  # required_providers Á¾·á
+            # terraform ºí·Ï Á¾·á
+            f.write('}\n')  # terraform ºí·Ï Á¾·á
+            # provider ºí·Ï Ãß°¡
+            f.write('provider "aws" {\n')  # provider ºí·Ï ½ÃÀÛ
+            # ¸®Àü °íÁ¤
+            f.write('  region = "ap-northeast-2"\n')  # ¸®Àü ¼³Á¤
+            # provider ºí·Ï Á¾·á
+            f.write('}\n')  # provider ºí·Ï Á¾·á
+        # terraform init ½ÇÇà (backend ºÒÇÊ¿ä)
+        r1 = subprocess.run(  # init ½ÇÇà
+            ["terraform", "init", "-backend=false", "-input=false", "-no-color"],  # init ¿É¼Ç
+            cwd=work, capture_output=True, text=True, timeout=120  # ½ÇÇà °æ·Î/¿É¼Ç
         )
-        # init ì‹¤íŒ¨ ì‹œ ë¹ˆ ê²°ê³¼ ë°˜í™˜
-        if r1.returncode != 0:  # init ì‹¤íŒ¨ ì²´í¬
-            return {}  # ì‹¤íŒ¨ ì‹œ ë¹ˆ ë§µ ë°˜í™˜
-        # provider schema JSON ì¶œë ¥
-        r2 = subprocess.run(  # schema ì¶œë ¥ ì‹¤í–‰
-            ["terraform", "providers", "schema", "-json"],  # schema ì¶œë ¥ ì˜µì…˜
-            cwd=work, capture_output=True, text=True, timeout=120  # ì‹¤í–‰ ê²½ë¡œ/ì˜µì…˜
+        # init ½ÇÆĞ ½Ã ºó °á°ú ¹İÈ¯
+        if r1.returncode != 0:  # init ½ÇÆĞ Ã¼Å©
+            return {}  # ½ÇÆĞ ½Ã ºó ¸Ê ¹İÈ¯
+        # provider schema JSON Ãâ·Â
+        r2 = subprocess.run(  # schema Ãâ·Â ½ÇÇà
+            ["terraform", "providers", "schema", "-json"],  # schema Ãâ·Â ¿É¼Ç
+            cwd=work, capture_output=True, text=True, timeout=120  # ½ÇÇà °æ·Î/¿É¼Ç
         )
-        # schema ì¡°íšŒ ì‹¤íŒ¨ ì‹œ ë¹ˆ ê²°ê³¼ ë°˜í™˜
-        if r2.returncode != 0:  # schema ì‹¤í–‰ ì‹¤íŒ¨ ì²´í¬
-            return {}  # ì‹¤íŒ¨ ì‹œ ë¹ˆ ë§µ ë°˜í™˜
-        # JSON íŒŒì‹±
-        schema = json.loads(r2.stdout)  # schema JSON íŒŒì‹±
-        # aws provider ìŠ¤í‚¤ë§ˆ ìœ„ì¹˜ ì°¾ê¸°
-        provider = schema.get("provider_schemas", {}).get(  # provider ìœ„ì¹˜ íƒìƒ‰
-            "registry.terraform.io/hashicorp/aws"  # aws provider í‚¤
+        # schema Á¶È¸ ½ÇÆĞ ½Ã ºó °á°ú ¹İÈ¯
+        if r2.returncode != 0:  # schema ½ÇÇà ½ÇÆĞ Ã¼Å©
+            return {}  # ½ÇÆĞ ½Ã ºó ¸Ê ¹İÈ¯
+        # JSON ÆÄ½Ì
+        schema = json.loads(r2.stdout)  # schema JSON ÆÄ½Ì
+        # aws provider ½ºÅ°¸¶ À§Ä¡ Ã£±â
+        provider = schema.get("provider_schemas", {}).get(  # provider À§Ä¡ Å½»ö
+            "registry.terraform.io/hashicorp/aws"  # aws provider Å°
         )
-        # provider ìŠ¤í‚¤ë§ˆ ì—†ìœ¼ë©´ ì¢…ë£Œ
-        if not provider:  # provider ìŠ¤í‚¤ë§ˆ ì¡´ì¬ ì²´í¬
-            return {}  # ì—†ìœ¼ë©´ ë¹ˆ ë§µ ë°˜í™˜
-        # ë¦¬ì†ŒìŠ¤ ìŠ¤í‚¤ë§ˆ ì¶”ì¶œ
-        resource_schemas = provider.get("resource_schemas", {})  # ë¦¬ì†ŒìŠ¤ ìŠ¤í‚¤ë§ˆ ëª©ë¡
-        # ê° ë¦¬ì†ŒìŠ¤ë³„ computed-only ì†ì„± ì¶”ì¶œ
-        for rtype, rschema in resource_schemas.items():  # ë¦¬ì†ŒìŠ¤ ìŠ¤í‚¤ë§ˆ ìˆœíšŒ
-            # ìµœìƒìœ„ attribute ëª©ë¡
-            attrs = rschema.get("block", {}).get("attributes", {})  # ì†ì„± ë§µ ì¶”ì¶œ
-            # computed-only ì†ì„± í•„í„°ë§
-            computed = {  # computed-only ì†ì„± ì§‘í•©
-                name  # ì†ì„± ì´ë¦„
-                for name, meta in attrs.items()  # ì†ì„± ë©”íƒ€ ìˆœíšŒ
-                if meta.get("computed") and not meta.get("optional") and not meta.get("required")  # computed-only ì¡°ê±´
+        # provider ½ºÅ°¸¶ ¾øÀ¸¸é Á¾·á
+        if not provider:  # provider ½ºÅ°¸¶ Á¸Àç Ã¼Å©
+            return {}  # ¾øÀ¸¸é ºó ¸Ê ¹İÈ¯
+        # ¸®¼Ò½º ½ºÅ°¸¶ ÃßÃâ
+        resource_schemas = provider.get("resource_schemas", {})  # ¸®¼Ò½º ½ºÅ°¸¶ ¸ñ·Ï
+        # °¢ ¸®¼Ò½ºº° computed-only ¼Ó¼º ÃßÃâ
+        for rtype, rschema in resource_schemas.items():  # ¸®¼Ò½º ½ºÅ°¸¶ ¼øÈ¸
+            # ÃÖ»óÀ§ attribute ¸ñ·Ï
+            attrs = rschema.get("block", {}).get("attributes", {})  # ¼Ó¼º ¸Ê ÃßÃâ
+            # computed-only ¼Ó¼º ÇÊÅÍ¸µ
+            computed = {  # computed-only ¼Ó¼º ÁıÇÕ
+                name  # ¼Ó¼º ÀÌ¸§
+                for name, meta in attrs.items()  # ¼Ó¼º ¸ŞÅ¸ ¼øÈ¸
+                if meta.get("computed") and not meta.get("optional") and not meta.get("required")  # computed-only Á¶°Ç
             }
-            # computed-only ì†ì„±ì´ ìˆìœ¼ë©´ ë§µì— ì €ì¥
-            if computed:  # computed-only ì¡´ì¬ ì—¬ë¶€
-                SCHEMA_COMPUTED_ATTRS[rtype] = computed  # ë¦¬ì†ŒìŠ¤ íƒ€ì…ë³„ ì €ì¥
-        # ìºì‹œëœ ë§µ ë°˜í™˜
-        return SCHEMA_COMPUTED_ATTRS  # computed-only ë§µ ë°˜í™˜
+            # computed-only ¼Ó¼ºÀÌ ÀÖÀ¸¸é ¸Ê¿¡ ÀúÀå
+            if computed:  # computed-only Á¸Àç ¿©ºÎ
+                SCHEMA_COMPUTED_ATTRS[rtype] = computed  # ¸®¼Ò½º Å¸ÀÔº° ÀúÀå
+        # Ä³½ÃµÈ ¸Ê ¹İÈ¯
+        return SCHEMA_COMPUTED_ATTRS  # computed-only ¸Ê ¹İÈ¯
     finally:
-        # ì„ì‹œ ë””ë ‰í„°ë¦¬ ì‚­ì œ
-        shutil.rmtree(work, ignore_errors=True)  # ì„ì‹œ í´ë” ì •ë¦¬
+        # ÀÓ½Ã µğ·ºÅÍ¸® »èÁ¦
+        shutil.rmtree(work, ignore_errors=True)  # ÀÓ½Ã Æú´õ Á¤¸®
 
 
 def _brace_delta(line: str) -> int:
@@ -464,14 +464,14 @@ def _comment_explanations(lines):
     in_heredoc = False
     heredoc_marker = None
     for line in lines:
-        # heredoc ë‚´ë¶€ì—ì„œëŠ” ì„¤ëª… íŒ¨í„´ ë§¤ì¹­ ê±´ë„ˆëœ€
+        # heredoc ³»ºÎ¿¡¼­´Â ¼³¸í ÆĞÅÏ ¸ÅÄª °Ç³Ê¶Ü
         if in_heredoc:
             out.append(line)
             if line.strip() == heredoc_marker:
                 in_heredoc = False
                 heredoc_marker = None
             continue
-        # heredoc ì‹œì‘ ê°ì§€
+        # heredoc ½ÃÀÛ °¨Áö
         m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
         if m:
             in_heredoc = True
@@ -514,39 +514,39 @@ def _remove_import_blocks(lines):
 
 
 def _remove_terraform_blocks(lines):
-    # ê²°ê³¼ë¥¼ ë‹´ì„ ë¦¬ìŠ¤íŠ¸
+    # °á°ú¸¦ ´ãÀ» ¸®½ºÆ®
     out = []
-    # terraform ë¸”ë¡ ë‚´ë¶€ ì—¬ë¶€
+    # terraform ºí·Ï ³»ºÎ ¿©ºÎ
     in_tf = False
-    # ì¤‘ê´„í˜¸ ì¹´ìš´í„°
+    # Áß°ıÈ£ Ä«¿îÅÍ
     brace = 0
-    # ëª¨ë“  ë¼ì¸ ìˆœíšŒ
+    # ¸ğµç ¶óÀÎ ¼øÈ¸
     for line in lines:
-        # terraform ë¸”ë¡ ì‹œì‘ ê°ì§€
+        # terraform ºí·Ï ½ÃÀÛ °¨Áö
         if not in_tf and re.match(r"^\s*terraform\s*\{", line):
-            # ë¸”ë¡ ì§„ì…
+            # ºí·Ï ÁøÀÔ
             in_tf = True
-            # ì¤‘ê´„í˜¸ ì¹´ìš´íŠ¸ ê°±ì‹ 
+            # Áß°ıÈ£ Ä«¿îÆ® °»½Å
             brace += _brace_delta(line)
-            # í•œ ì¤„ ë¸”ë¡ì´ë©´ ì¦‰ì‹œ ì¢…ë£Œ
+            # ÇÑ ÁÙ ºí·ÏÀÌ¸é Áï½Ã Á¾·á
             if brace <= 0:
-                # ë¸”ë¡ ì¢…ë£Œ
+                # ºí·Ï Á¾·á
                 in_tf = False
-            # terraform ë¸”ë¡ ë¼ì¸ì€ ì œê±°
+            # terraform ºí·Ï ¶óÀÎÀº Á¦°Å
             continue
-        # terraform ë¸”ë¡ ë‚´ë¶€ ì²˜ë¦¬
+        # terraform ºí·Ï ³»ºÎ Ã³¸®
         if in_tf:
-            # ì¤‘ê´„í˜¸ ì¹´ìš´íŠ¸ ê°±ì‹ 
+            # Áß°ıÈ£ Ä«¿îÆ® °»½Å
             brace += _brace_delta(line)
-            # ë¸”ë¡ ì¢…ë£Œ ì¡°ê±´
+            # ºí·Ï Á¾·á Á¶°Ç
             if brace <= 0:
-                # ë¸”ë¡ ì¢…ë£Œ
+                # ºí·Ï Á¾·á
                 in_tf = False
-            # ë¸”ë¡ ë‚´ë¶€ ë¼ì¸ì€ ì œê±°
+            # ºí·Ï ³»ºÎ ¶óÀÎÀº Á¦°Å
             continue
-        # ì¼ë°˜ ë¼ì¸ì€ ìœ ì§€
+        # ÀÏ¹İ ¶óÀÎÀº À¯Áö
         out.append(line)
-    # ê²°ê³¼ ë°˜í™˜
+    # °á°ú ¹İÈ¯
     return out
 
 
@@ -596,7 +596,7 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
         attrs.update(extra_attrs)
     if not attrs:
         return lines
-    # arn/key_idê°€ í•„ìˆ˜ ì…ë ¥ì¸ ë¦¬ì†ŒìŠ¤ íƒ€ì… â†’ í•´ë‹¹ ì†ì„±ì„ ì œê±°í•˜ì§€ ì•ŠìŒ
+    # arn/key_id°¡ ÇÊ¼ö ÀÔ·ÂÀÎ ¸®¼Ò½º Å¸ÀÔ ¡æ ÇØ´ç ¼Ó¼ºÀ» Á¦°ÅÇÏÁö ¾ÊÀ½
     _ARN_REQUIRED = {
         "aws_sns_topic_policy": {"arn"},
         "aws_kms_key_policy": {"key_id"},
@@ -611,7 +611,7 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
     current_rtype = None
     exempt_attrs = set()
     for line in lines:
-        # heredoc ë‚´ë¶€ì—ì„œëŠ” attr ë§¤ì¹­/brace ì¹´ìš´íŒ… ê±´ë„ˆëœ€
+        # heredoc ³»ºÎ¿¡¼­´Â attr ¸ÅÄª/brace Ä«¿îÆÃ °Ç³Ê¶Ü
         if in_heredoc:
             out.append(line)
             if line.strip() == heredoc_marker:
@@ -628,7 +628,7 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
                 out.append(line)
                 continue
         if in_resource:
-            # heredoc ì‹œì‘ ê°ì§€
+            # heredoc ½ÃÀÛ °¨Áö
             m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
             if m:
                 in_heredoc = True
@@ -650,229 +650,229 @@ def _strip_unconfigurable_attrs_in_resources(lines, extra_attrs=None):
 
 
 def _strip_schema_computed_attrs(lines):
-    # ìŠ¤í‚¤ë§ˆ ê¸°ë°˜ computed-only ì†ì„± ì œê±°
-    schema_map = _load_schema_computed_attrs()  # computed-only ë§µ ë¡œë“œ
-    # ìŠ¤í‚¤ë§ˆê°€ ì—†ìœ¼ë©´ ê·¸ëŒ€ë¡œ ë°˜í™˜
-    if not schema_map:  # ìŠ¤í‚¤ë§ˆ ë§µì´ ë¹„ì–´ìˆìœ¼ë©´
-        return lines  # ì›ë³¸ ë¼ì¸ ë°˜í™˜
-    # ê²°ê³¼ ë¼ì¸ ë¦¬ìŠ¤íŠ¸
-    out = []  # ì¶œë ¥ ë¼ì¸ ë²„í¼
-    # resource ë¸”ë¡ ë‚´ë¶€ ì—¬ë¶€
-    in_resource = False  # resource ë¸”ë¡ ìƒíƒœ
-    # í˜„ì¬ resource íƒ€ì…
-    current_type = None  # í˜„ì¬ ë¦¬ì†ŒìŠ¤ íƒ€ì…
-    # í˜„ì¬ resourceì˜ computed-only ì†ì„±
-    current_attrs = set()  # í˜„ì¬ ë¦¬ì†ŒìŠ¤ ì†ì„± ì§‘í•©
-    # í˜„ì¬ resourceì˜ ì†ì„± ë§¤ì¹­ ì •ê·œì‹
-    current_re = None  # ì†ì„± ì œê±°ìš© ì •ê·œì‹
-    # heredoc ë‚´ë¶€ ì—¬ë¶€
-    in_heredoc = False  # heredoc ìƒíƒœ
-    # heredoc ì¢…ë£Œ ë§ˆì»¤
-    heredoc_marker = None  # heredoc ì¢…ë£Œ ë¼ë²¨
-    # ì¤‘ê´„í˜¸ ì¹´ìš´íŠ¸
-    brace = 0  # ë¸”ë¡ ê¹Šì´ ì¹´ìš´í„°
-    # ë¼ì¸ ìˆœíšŒ
-    for line in lines:  # ì…ë ¥ ë¼ì¸ ë°˜ë³µ
-        # heredoc ë‚´ë¶€ëŠ” ê·¸ëŒ€ë¡œ ìœ ì§€
-        if in_heredoc:  # heredoc ë‚´ë¶€ë©´
-            out.append(line)  # ë¼ì¸ ê·¸ëŒ€ë¡œ ìœ ì§€
-            if line.strip() == heredoc_marker:  # ì¢…ë£Œ ë§ˆì»¤ ì²´í¬
-                in_heredoc = False  # heredoc ì¢…ë£Œ
-                heredoc_marker = None  # ë§ˆì»¤ ì´ˆê¸°í™”
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        # heredoc ì‹œì‘ ê°ì§€
-        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ì‹œì‘ íŒ¨í„´
-        if m:  # heredoc ì‹œì‘ì´ë©´
-            in_heredoc = True  # heredoc ì§„ì…
-            heredoc_marker = m.group(1)  # ì¢…ë£Œ ë§ˆì»¤ ì €ì¥
-            out.append(line)  # ë¼ì¸ ìœ ì§€
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        # resource ë¸”ë¡ ì‹œì‘ ê°ì§€
-        if not in_resource:  # resource ë‚´ë¶€ê°€ ì•„ë‹ˆë©´
-            m = re.match(r'^\s*resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)  # resource ì‹œì‘
-            if m:  # resource ì‹œì‘ì´ë©´
-                in_resource = True  # resource ì§„ì…
-                current_type = m.group(1)  # ë¦¬ì†ŒìŠ¤ íƒ€ì… ì €ì¥
-                current_attrs = schema_map.get(current_type, set())  # íƒ€ì…ë³„ ì†ì„± ì§‘í•©
-                if current_attrs:  # ì†ì„±ì´ ìˆìœ¼ë©´
-                    current_re = re.compile(  # ì†ì„± ì œê±° ì •ê·œì‹ ìƒì„±
+    # ½ºÅ°¸¶ ±â¹İ computed-only ¼Ó¼º Á¦°Å
+    schema_map = _load_schema_computed_attrs()  # computed-only ¸Ê ·Îµå
+    # ½ºÅ°¸¶°¡ ¾øÀ¸¸é ±×´ë·Î ¹İÈ¯
+    if not schema_map:  # ½ºÅ°¸¶ ¸ÊÀÌ ºñ¾îÀÖÀ¸¸é
+        return lines  # ¿øº» ¶óÀÎ ¹İÈ¯
+    # °á°ú ¶óÀÎ ¸®½ºÆ®
+    out = []  # Ãâ·Â ¶óÀÎ ¹öÆÛ
+    # resource ºí·Ï ³»ºÎ ¿©ºÎ
+    in_resource = False  # resource ºí·Ï »óÅÂ
+    # ÇöÀç resource Å¸ÀÔ
+    current_type = None  # ÇöÀç ¸®¼Ò½º Å¸ÀÔ
+    # ÇöÀç resourceÀÇ computed-only ¼Ó¼º
+    current_attrs = set()  # ÇöÀç ¸®¼Ò½º ¼Ó¼º ÁıÇÕ
+    # ÇöÀç resourceÀÇ ¼Ó¼º ¸ÅÄª Á¤±Ô½Ä
+    current_re = None  # ¼Ó¼º Á¦°Å¿ë Á¤±Ô½Ä
+    # heredoc ³»ºÎ ¿©ºÎ
+    in_heredoc = False  # heredoc »óÅÂ
+    # heredoc Á¾·á ¸¶Ä¿
+    heredoc_marker = None  # heredoc Á¾·á ¶óº§
+    # Áß°ıÈ£ Ä«¿îÆ®
+    brace = 0  # ºí·Ï ±íÀÌ Ä«¿îÅÍ
+    # ¶óÀÎ ¼øÈ¸
+    for line in lines:  # ÀÔ·Â ¶óÀÎ ¹İº¹
+        # heredoc ³»ºÎ´Â ±×´ë·Î À¯Áö
+        if in_heredoc:  # heredoc ³»ºÎ¸é
+            out.append(line)  # ¶óÀÎ ±×´ë·Î À¯Áö
+            if line.strip() == heredoc_marker:  # Á¾·á ¸¶Ä¿ Ã¼Å©
+                in_heredoc = False  # heredoc Á¾·á
+                heredoc_marker = None  # ¸¶Ä¿ ÃÊ±âÈ­
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        # heredoc ½ÃÀÛ °¨Áö
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ½ÃÀÛ ÆĞÅÏ
+        if m:  # heredoc ½ÃÀÛÀÌ¸é
+            in_heredoc = True  # heredoc ÁøÀÔ
+            heredoc_marker = m.group(1)  # Á¾·á ¸¶Ä¿ ÀúÀå
+            out.append(line)  # ¶óÀÎ À¯Áö
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        # resource ºí·Ï ½ÃÀÛ °¨Áö
+        if not in_resource:  # resource ³»ºÎ°¡ ¾Æ´Ï¸é
+            m = re.match(r'^\s*resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)  # resource ½ÃÀÛ
+            if m:  # resource ½ÃÀÛÀÌ¸é
+                in_resource = True  # resource ÁøÀÔ
+                current_type = m.group(1)  # ¸®¼Ò½º Å¸ÀÔ ÀúÀå
+                current_attrs = schema_map.get(current_type, set())  # Å¸ÀÔº° ¼Ó¼º ÁıÇÕ
+                if current_attrs:  # ¼Ó¼ºÀÌ ÀÖÀ¸¸é
+                    current_re = re.compile(  # ¼Ó¼º Á¦°Å Á¤±Ô½Ä »ı¼º
                         r"^\s*(" + "|".join(sorted(current_attrs)) + r")\s*="
                     )
-                else:  # ì†ì„±ì´ ì—†ìœ¼ë©´
-                    current_re = None  # ì •ê·œì‹ ë¹„í™œì„±
-                brace = _brace_delta(line)  # brace ì´ˆê¸°í™”
-                out.append(line)  # ë¸”ë¡ ì‹œì‘ ë¼ì¸ ìœ ì§€
-                continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        # resource ë¸”ë¡ ë‚´ë¶€ ì²˜ë¦¬
-        if in_resource:  # resource ë‚´ë¶€ë©´
-            if current_re and current_re.match(line):  # computed-only ì†ì„±ì´ë©´
-                brace += _brace_delta(line)  # brace ê°±ì‹ 
-                if brace <= 0:  # ë¸”ë¡ ì¢…ë£Œë©´
-                    in_resource = False  # resource ì¢…ë£Œ
-                    current_type = None  # íƒ€ì… ì´ˆê¸°í™”
-                    current_attrs = set()  # ì†ì„± ì´ˆê¸°í™”
-                    current_re = None  # ì •ê·œì‹ ì´ˆê¸°í™”
-                continue  # í•´ë‹¹ ë¼ì¸ ì œê±°
-            brace += _brace_delta(line)  # brace ê°±ì‹ 
-            out.append(line)  # ë¼ì¸ ìœ ì§€
-            if brace <= 0:  # ë¸”ë¡ ì¢…ë£Œë©´
-                in_resource = False  # resource ì¢…ë£Œ
-                current_type = None  # íƒ€ì… ì´ˆê¸°í™”
-                current_attrs = set()  # ì†ì„± ì´ˆê¸°í™”
-                current_re = None  # ì •ê·œì‹ ì´ˆê¸°í™”
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        # ì¼ë°˜ ë¼ì¸ì€ ìœ ì§€
-        out.append(line)  # ì¼ë°˜ ë¼ì¸ ìœ ì§€
-    # ì²˜ë¦¬ ê²°ê³¼ ë°˜í™˜
-    return out  # ê²°ê³¼ ë¼ì¸ ë°˜í™˜
+                else:  # ¼Ó¼ºÀÌ ¾øÀ¸¸é
+                    current_re = None  # Á¤±Ô½Ä ºñÈ°¼º
+                brace = _brace_delta(line)  # brace ÃÊ±âÈ­
+                out.append(line)  # ºí·Ï ½ÃÀÛ ¶óÀÎ À¯Áö
+                continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        # resource ºí·Ï ³»ºÎ Ã³¸®
+        if in_resource:  # resource ³»ºÎ¸é
+            if current_re and current_re.match(line):  # computed-only ¼Ó¼ºÀÌ¸é
+                brace += _brace_delta(line)  # brace °»½Å
+                if brace <= 0:  # ºí·Ï Á¾·á¸é
+                    in_resource = False  # resource Á¾·á
+                    current_type = None  # Å¸ÀÔ ÃÊ±âÈ­
+                    current_attrs = set()  # ¼Ó¼º ÃÊ±âÈ­
+                    current_re = None  # Á¤±Ô½Ä ÃÊ±âÈ­
+                continue  # ÇØ´ç ¶óÀÎ Á¦°Å
+            brace += _brace_delta(line)  # brace °»½Å
+            out.append(line)  # ¶óÀÎ À¯Áö
+            if brace <= 0:  # ºí·Ï Á¾·á¸é
+                in_resource = False  # resource Á¾·á
+                current_type = None  # Å¸ÀÔ ÃÊ±âÈ­
+                current_attrs = set()  # ¼Ó¼º ÃÊ±âÈ­
+                current_re = None  # Á¤±Ô½Ä ÃÊ±âÈ­
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        # ÀÏ¹İ ¶óÀÎÀº À¯Áö
+        out.append(line)  # ÀÏ¹İ ¶óÀÎ À¯Áö
+    # Ã³¸® °á°ú ¹İÈ¯
+    return out  # °á°ú ¶óÀÎ ¹İÈ¯
 def _repair_unclosed_heredoc(lines):
-    # ë¯¸ë‹«íŒ heredocì„ ì•ˆì „í•˜ê²Œ ëŒ€ì²´í•˜ì—¬ HCL íŒŒì‹± ì˜¤ë¥˜ ë°©ì§€
-    out = []  # ì¶œë ¥ ë¼ì¸ ë²„í¼
-    in_heredoc = False  # heredoc ë‚´ë¶€ ì—¬ë¶€
-    heredoc_marker = None  # heredoc ì¢…ë£Œ ë§ˆì»¤
-    start_idx = None  # heredoc ì‹œì‘ ë¼ì¸ ì¸ë±ìŠ¤
-    start_line = None  # heredoc ì‹œì‘ ë¼ì¸ ë‚´ìš©
-    for line in lines:  # ë¼ì¸ ìˆœíšŒ
-        if not in_heredoc:  # heredoc ë°–ì´ë©´
-            m = re.match(r'^\s*([A-Za-z0-9_]+)\s*=\s*<<-?\s*([A-Za-z0-9_]+)\s*$', line)  # heredoc ì‹œì‘ ê°ì§€
-            if m:  # heredoc ì‹œì‘ì´ë©´
-                in_heredoc = True  # heredoc ì§„ì…
-                heredoc_marker = m.group(2)  # ì¢…ë£Œ ë§ˆì»¤ ì €ì¥
-                start_idx = len(out)  # ì‹œì‘ ìœ„ì¹˜ ê¸°ë¡
-                start_line = line  # ì‹œì‘ ë¼ì¸ ê¸°ë¡
-                out.append(line)  # ì›ë³¸ ë¼ì¸ ë³´ì¡´
-                continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-            out.append(line)  # ì¼ë°˜ ë¼ì¸ ì¶”ê°€
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        # heredoc ë‚´ë¶€ ì²˜ë¦¬
-        out.append(line)  # heredoc ë‚´ìš© ìœ ì§€
-        if line.strip() == heredoc_marker:  # ì¢…ë£Œ ë§ˆì»¤ë©´
-            in_heredoc = False  # heredoc ì¢…ë£Œ
-            heredoc_marker = None  # ë§ˆì»¤ ì´ˆê¸°í™”
-            start_idx = None  # ì‹œì‘ ì¸ë±ìŠ¤ ì´ˆê¸°í™”
-            start_line = None  # ì‹œì‘ ë¼ì¸ ì´ˆê¸°í™”
-    # íŒŒì¼ ëê¹Œì§€ heredocì´ ë‹«íˆì§€ ì•Šì•˜ìœ¼ë©´ ëŒ€ì²´
-    if in_heredoc and start_idx is not None and start_line:  # ë¯¸ë‹«í˜ ìƒíƒœ í™•ì¸
-        indent = re.match(r'^(\s*)', start_line).group(1)  # ë“¤ì—¬ì“°ê¸° ì¶”ì¶œ
-        attr = re.match(r'^\s*([A-Za-z0-9_]+)\s*=', start_line).group(1)  # ì†ì„±ëª… ì¶”ì¶œ
-        out = out[:start_idx]  # heredoc ì‹œì‘ ì´ì „ìœ¼ë¡œ ì˜ë¼ëƒ„
-        out.append(f'{indent}{attr} = "{{}}"')  # ì•ˆì „í•œ ë¹ˆ JSONìœ¼ë¡œ ëŒ€ì²´
-    return out  # ê²°ê³¼ ë°˜í™˜
+    # ¹Ì´İÈù heredocÀ» ¾ÈÀüÇÏ°Ô ´ëÃ¼ÇÏ¿© HCL ÆÄ½Ì ¿À·ù ¹æÁö
+    out = []  # Ãâ·Â ¶óÀÎ ¹öÆÛ
+    in_heredoc = False  # heredoc ³»ºÎ ¿©ºÎ
+    heredoc_marker = None  # heredoc Á¾·á ¸¶Ä¿
+    start_idx = None  # heredoc ½ÃÀÛ ¶óÀÎ ÀÎµ¦½º
+    start_line = None  # heredoc ½ÃÀÛ ¶óÀÎ ³»¿ë
+    for line in lines:  # ¶óÀÎ ¼øÈ¸
+        if not in_heredoc:  # heredoc ¹ÛÀÌ¸é
+            m = re.match(r'^\s*([A-Za-z0-9_]+)\s*=\s*<<-?\s*([A-Za-z0-9_]+)\s*$', line)  # heredoc ½ÃÀÛ °¨Áö
+            if m:  # heredoc ½ÃÀÛÀÌ¸é
+                in_heredoc = True  # heredoc ÁøÀÔ
+                heredoc_marker = m.group(2)  # Á¾·á ¸¶Ä¿ ÀúÀå
+                start_idx = len(out)  # ½ÃÀÛ À§Ä¡ ±â·Ï
+                start_line = line  # ½ÃÀÛ ¶óÀÎ ±â·Ï
+                out.append(line)  # ¿øº» ¶óÀÎ º¸Á¸
+                continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+            out.append(line)  # ÀÏ¹İ ¶óÀÎ Ãß°¡
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        # heredoc ³»ºÎ Ã³¸®
+        out.append(line)  # heredoc ³»¿ë À¯Áö
+        if line.strip() == heredoc_marker:  # Á¾·á ¸¶Ä¿¸é
+            in_heredoc = False  # heredoc Á¾·á
+            heredoc_marker = None  # ¸¶Ä¿ ÃÊ±âÈ­
+            start_idx = None  # ½ÃÀÛ ÀÎµ¦½º ÃÊ±âÈ­
+            start_line = None  # ½ÃÀÛ ¶óÀÎ ÃÊ±âÈ­
+    # ÆÄÀÏ ³¡±îÁö heredocÀÌ ´İÈ÷Áö ¾Ê¾ÒÀ¸¸é ´ëÃ¼
+    if in_heredoc and start_idx is not None and start_line:  # ¹Ì´İÈû »óÅÂ È®ÀÎ
+        indent = re.match(r'^(\s*)', start_line).group(1)  # µé¿©¾²±â ÃßÃâ
+        attr = re.match(r'^\s*([A-Za-z0-9_]+)\s*=', start_line).group(1)  # ¼Ó¼º¸í ÃßÃâ
+        out = out[:start_idx]  # heredoc ½ÃÀÛ ÀÌÀüÀ¸·Î Àß¶ó³¿
+        out.append(f'{indent}{attr} = "{{}}"')  # ¾ÈÀüÇÑ ºó JSONÀ¸·Î ´ëÃ¼
+    return out  # °á°ú ¹İÈ¯
 
 
 def _balance_braces(lines):
-    # ì¤‘ê´„í˜¸ ê°œìˆ˜ê°€ ë§ì§€ ì•Šìœ¼ë©´ ë³´ì •í•˜ì—¬ "Unclosed config" ì™„í™”
-    out = []  # ì¶œë ¥ ë¼ì¸ ë²„í¼
-    brace = 0  # ì¤‘ê´„í˜¸ ì¹´ìš´í„°
-    in_heredoc = False  # heredoc ë‚´ë¶€ ì—¬ë¶€
-    heredoc_marker = None  # heredoc ì¢…ë£Œ ë§ˆì»¤
-    for line in lines:  # ë¼ì¸ ìˆœíšŒ
-        if in_heredoc:  # heredoc ë‚´ë¶€ë©´
-            out.append(line)  # ê·¸ëŒ€ë¡œ ì¶”ê°€
-            if line.strip() == heredoc_marker:  # ì¢…ë£Œ ë§ˆì»¤ë©´
-                in_heredoc = False  # heredoc ì¢…ë£Œ
-                heredoc_marker = None  # ë§ˆì»¤ ì´ˆê¸°í™”
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ì‹œì‘ ê°ì§€
-        if m:  # heredoc ì‹œì‘ì´ë©´
-            in_heredoc = True  # heredoc ì§„ì…
-            heredoc_marker = m.group(1)  # ì¢…ë£Œ ë§ˆì»¤ ì €ì¥
-            out.append(line)  # ë¼ì¸ ì¶”ê°€
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        brace += _brace_delta(line)  # ì¤‘ê´„í˜¸ ì¹´ìš´íŠ¸ ê°±ì‹ 
-        out.append(line)  # ë¼ì¸ ì¶”ê°€
-    # ë‚¨ì€ ì¤‘ê´„í˜¸ë§Œí¼ ë‹«ê¸°
-    if brace > 0:  # ë‹«íˆì§€ ì•Šì€ ë¸”ë¡ì´ ìˆìœ¼ë©´
-        out.extend(["}"] * brace)  # ë¶€ì¡±í•œ ë‹«ëŠ” ê´„í˜¸ ì¶”ê°€
-    return out  # ê²°ê³¼ ë°˜í™˜
+    # Áß°ıÈ£ °³¼ö°¡ ¸ÂÁö ¾ÊÀ¸¸é º¸Á¤ÇÏ¿© "Unclosed config" ¿ÏÈ­
+    out = []  # Ãâ·Â ¶óÀÎ ¹öÆÛ
+    brace = 0  # Áß°ıÈ£ Ä«¿îÅÍ
+    in_heredoc = False  # heredoc ³»ºÎ ¿©ºÎ
+    heredoc_marker = None  # heredoc Á¾·á ¸¶Ä¿
+    for line in lines:  # ¶óÀÎ ¼øÈ¸
+        if in_heredoc:  # heredoc ³»ºÎ¸é
+            out.append(line)  # ±×´ë·Î Ãß°¡
+            if line.strip() == heredoc_marker:  # Á¾·á ¸¶Ä¿¸é
+                in_heredoc = False  # heredoc Á¾·á
+                heredoc_marker = None  # ¸¶Ä¿ ÃÊ±âÈ­
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ½ÃÀÛ °¨Áö
+        if m:  # heredoc ½ÃÀÛÀÌ¸é
+            in_heredoc = True  # heredoc ÁøÀÔ
+            heredoc_marker = m.group(1)  # Á¾·á ¸¶Ä¿ ÀúÀå
+            out.append(line)  # ¶óÀÎ Ãß°¡
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        brace += _brace_delta(line)  # Áß°ıÈ£ Ä«¿îÆ® °»½Å
+        out.append(line)  # ¶óÀÎ Ãß°¡
+    # ³²Àº Áß°ıÈ£¸¸Å­ ´İ±â
+    if brace > 0:  # ´İÈ÷Áö ¾ÊÀº ºí·ÏÀÌ ÀÖÀ¸¸é
+        out.extend(["}"] * brace)  # ºÎÁ·ÇÑ ´İ´Â °ıÈ£ Ãß°¡
+    return out  # °á°ú ¹İÈ¯
 def _balance_parens_brackets(lines):
-    # ê´„í˜¸/ëŒ€ê´„í˜¸ ê· í˜• ë³´ì • (ë¯¸ë‹«í˜ ì™„í™”)
-    out = []  # ì¶œë ¥ ë¼ì¸ ë²„í¼
-    paren = 0  # ì†Œê´„í˜¸ ì¹´ìš´í„°
-    bracket = 0  # ëŒ€ê´„í˜¸ ì¹´ìš´í„°
-    in_heredoc = False  # heredoc ë‚´ë¶€ ì—¬ë¶€
-    heredoc_marker = None  # heredoc ì¢…ë£Œ ë§ˆì»¤
-    for line in lines:  # ë¼ì¸ ìˆœíšŒ
-        if in_heredoc:  # heredoc ë‚´ë¶€ë©´
-            out.append(line)  # ê·¸ëŒ€ë¡œ ì¶”ê°€
-            if line.strip() == heredoc_marker:  # ì¢…ë£Œ ë§ˆì»¤ë©´
-                in_heredoc = False  # heredoc ì¢…ë£Œ
-                heredoc_marker = None  # ë§ˆì»¤ ì´ˆê¸°í™”
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ì‹œì‘ ê°ì§€
-        if m:  # heredoc ì‹œì‘ì´ë©´
-            in_heredoc = True  # heredoc ì§„ì…
-            heredoc_marker = m.group(1)  # ì¢…ë£Œ ë§ˆì»¤ ì €ì¥
-            out.append(line)  # ë¼ì¸ ì¶”ê°€
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        safe_line = re.sub(r'"([^"\\]|\\.)*"', '""', line)  # ë¬¸ìì—´ ë‚´ë¶€ ê´„í˜¸ ì œê±°
-        paren += safe_line.count("(") - safe_line.count(")")  # ì†Œê´„í˜¸ ê· í˜• ê°±ì‹ 
-        bracket += safe_line.count("[") - safe_line.count("]")  # ëŒ€ê´„í˜¸ ê· í˜• ê°±ì‹ 
-        out.append(line)  # ë¼ì¸ ì¶”ê°€
-    if paren > 0:  # ì†Œê´„í˜¸ê°€ ë¶€ì¡±í•˜ë©´
-        out.extend([")"] * paren)  # ë‹«ëŠ” ì†Œê´„í˜¸ ì¶”ê°€
-    if bracket > 0:  # ëŒ€ê´„í˜¸ê°€ ë¶€ì¡±í•˜ë©´
-        out.extend(["]"] * bracket)  # ë‹«ëŠ” ëŒ€ê´„í˜¸ ì¶”ê°€
-    return out  # ê²°ê³¼ ë°˜í™˜
+    # °ıÈ£/´ë°ıÈ£ ±ÕÇü º¸Á¤ (¹Ì´İÈû ¿ÏÈ­)
+    out = []  # Ãâ·Â ¶óÀÎ ¹öÆÛ
+    paren = 0  # ¼Ò°ıÈ£ Ä«¿îÅÍ
+    bracket = 0  # ´ë°ıÈ£ Ä«¿îÅÍ
+    in_heredoc = False  # heredoc ³»ºÎ ¿©ºÎ
+    heredoc_marker = None  # heredoc Á¾·á ¸¶Ä¿
+    for line in lines:  # ¶óÀÎ ¼øÈ¸
+        if in_heredoc:  # heredoc ³»ºÎ¸é
+            out.append(line)  # ±×´ë·Î Ãß°¡
+            if line.strip() == heredoc_marker:  # Á¾·á ¸¶Ä¿¸é
+                in_heredoc = False  # heredoc Á¾·á
+                heredoc_marker = None  # ¸¶Ä¿ ÃÊ±âÈ­
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ½ÃÀÛ °¨Áö
+        if m:  # heredoc ½ÃÀÛÀÌ¸é
+            in_heredoc = True  # heredoc ÁøÀÔ
+            heredoc_marker = m.group(1)  # Á¾·á ¸¶Ä¿ ÀúÀå
+            out.append(line)  # ¶óÀÎ Ãß°¡
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        safe_line = re.sub(r'"([^"\\]|\\.)*"', '""', line)  # ¹®ÀÚ¿­ ³»ºÎ °ıÈ£ Á¦°Å
+        paren += safe_line.count("(") - safe_line.count(")")  # ¼Ò°ıÈ£ ±ÕÇü °»½Å
+        bracket += safe_line.count("[") - safe_line.count("]")  # ´ë°ıÈ£ ±ÕÇü °»½Å
+        out.append(line)  # ¶óÀÎ Ãß°¡
+    if paren > 0:  # ¼Ò°ıÈ£°¡ ºÎÁ·ÇÏ¸é
+        out.extend([")"] * paren)  # ´İ´Â ¼Ò°ıÈ£ Ãß°¡
+    if bracket > 0:  # ´ë°ıÈ£°¡ ºÎÁ·ÇÏ¸é
+        out.extend(["]"] * bracket)  # ´İ´Â ´ë°ıÈ£ Ãß°¡
+    return out  # °á°ú ¹İÈ¯
 
 
 def _repair_unbalanced_quotes(lines):
-    # ë”°ì˜´í‘œ ê°œìˆ˜ê°€ í™€ìˆ˜ì¸ ë¼ì¸ì„ ë³´ì •í•˜ì—¬ íŒŒì‹± ì˜¤ë¥˜ ì™„í™”
-    out = []  # ì¶œë ¥ ë¼ì¸ ë²„í¼
-    in_heredoc = False  # heredoc ë‚´ë¶€ ì—¬ë¶€
-    heredoc_marker = None  # heredoc ì¢…ë£Œ ë§ˆì»¤
-    for line in lines:  # ë¼ì¸ ìˆœíšŒ
-        if in_heredoc:  # heredoc ë‚´ë¶€ë©´
-            out.append(line)  # ê·¸ëŒ€ë¡œ ì¶”ê°€
-            if line.strip() == heredoc_marker:  # ì¢…ë£Œ ë§ˆì»¤ë©´
-                in_heredoc = False  # heredoc ì¢…ë£Œ
-                heredoc_marker = None  # ë§ˆì»¤ ì´ˆê¸°í™”
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ì‹œì‘ ê°ì§€
-        if m:  # heredoc ì‹œì‘ì´ë©´
-            in_heredoc = True  # heredoc ì§„ì…
-            heredoc_marker = m.group(1)  # ì¢…ë£Œ ë§ˆì»¤ ì €ì¥
-            out.append(line)  # ë¼ì¸ ì¶”ê°€
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        # ë”°ì˜´í‘œ ê°œìˆ˜ ê³„ì‚° (ê°„ë‹¨ íœ´ë¦¬ìŠ¤í‹±)
-        quote_count = line.count('"')  # ì´ì¤‘ ë”°ì˜´í‘œ ê°œìˆ˜
-        if quote_count % 2 == 1:  # í™€ìˆ˜ë©´ ë¯¸ë‹«í˜ìœ¼ë¡œ íŒë‹¨
-            out.append(line + '"')  # ë‹«ëŠ” ë”°ì˜´í‘œ ì¶”ê°€
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        out.append(line)  # ì •ìƒ ë¼ì¸ ìœ ì§€
-    return out  # ê²°ê³¼ ë°˜í™˜
+    # µû¿ÈÇ¥ °³¼ö°¡ È¦¼öÀÎ ¶óÀÎÀ» º¸Á¤ÇÏ¿© ÆÄ½Ì ¿À·ù ¿ÏÈ­
+    out = []  # Ãâ·Â ¶óÀÎ ¹öÆÛ
+    in_heredoc = False  # heredoc ³»ºÎ ¿©ºÎ
+    heredoc_marker = None  # heredoc Á¾·á ¸¶Ä¿
+    for line in lines:  # ¶óÀÎ ¼øÈ¸
+        if in_heredoc:  # heredoc ³»ºÎ¸é
+            out.append(line)  # ±×´ë·Î Ãß°¡
+            if line.strip() == heredoc_marker:  # Á¾·á ¸¶Ä¿¸é
+                in_heredoc = False  # heredoc Á¾·á
+                heredoc_marker = None  # ¸¶Ä¿ ÃÊ±âÈ­
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ½ÃÀÛ °¨Áö
+        if m:  # heredoc ½ÃÀÛÀÌ¸é
+            in_heredoc = True  # heredoc ÁøÀÔ
+            heredoc_marker = m.group(1)  # Á¾·á ¸¶Ä¿ ÀúÀå
+            out.append(line)  # ¶óÀÎ Ãß°¡
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        # µû¿ÈÇ¥ °³¼ö °è»ê (°£´Ü ÈŞ¸®½ºÆ½)
+        quote_count = line.count('"')  # ÀÌÁß µû¿ÈÇ¥ °³¼ö
+        if quote_count % 2 == 1:  # È¦¼ö¸é ¹Ì´İÈûÀ¸·Î ÆÇ´Ü
+            out.append(line + '"')  # ´İ´Â µû¿ÈÇ¥ Ãß°¡
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        out.append(line)  # Á¤»ó ¶óÀÎ À¯Áö
+    return out  # °á°ú ¹İÈ¯
 
 
 def _strip_backtick_lines(lines):
-    # ë°±í‹±(`)ì´ í¬í•¨ëœ ë¼ì¸ì„ ì£¼ì„ ì²˜ë¦¬í•˜ì—¬ HCL ì˜¤ë¥˜ ë°©ì§€
-    out = []  # ì¶œë ¥ ë¼ì¸ ë²„í¼
-    in_heredoc = False  # heredoc ë‚´ë¶€ ì—¬ë¶€
-    heredoc_marker = None  # heredoc ì¢…ë£Œ ë§ˆì»¤
-    for line in lines:  # ë¼ì¸ ìˆœíšŒ
-        if in_heredoc:  # heredoc ë‚´ë¶€ë©´
-            out.append(line)  # ê·¸ëŒ€ë¡œ ì¶”ê°€
-            if line.strip() == heredoc_marker:  # ì¢…ë£Œ ë§ˆì»¤ë©´
-                in_heredoc = False  # heredoc ì¢…ë£Œ
-                heredoc_marker = None  # ë§ˆì»¤ ì´ˆê¸°í™”
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ì‹œì‘ ê°ì§€
-        if m:  # heredoc ì‹œì‘ì´ë©´
-            in_heredoc = True  # heredoc ì§„ì…
-            heredoc_marker = m.group(1)  # ì¢…ë£Œ ë§ˆì»¤ ì €ì¥
-            out.append(line)  # ë¼ì¸ ì¶”ê°€
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        if '`' in line and not line.lstrip().startswith("#"):  # ë°±í‹± í¬í•¨ + ì£¼ì„ ì•„ë‹˜
-            out.append("# " + line)  # ì£¼ì„ ì²˜ë¦¬
-            continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        out.append(line)  # ì •ìƒ ë¼ì¸ ìœ ì§€
-    return out  # ê²°ê³¼ ë°˜í™˜
+    # ¹éÆ½(`)ÀÌ Æ÷ÇÔµÈ ¶óÀÎÀ» ÁÖ¼® Ã³¸®ÇÏ¿© HCL ¿À·ù ¹æÁö
+    out = []  # Ãâ·Â ¶óÀÎ ¹öÆÛ
+    in_heredoc = False  # heredoc ³»ºÎ ¿©ºÎ
+    heredoc_marker = None  # heredoc Á¾·á ¸¶Ä¿
+    for line in lines:  # ¶óÀÎ ¼øÈ¸
+        if in_heredoc:  # heredoc ³»ºÎ¸é
+            out.append(line)  # ±×´ë·Î Ãß°¡
+            if line.strip() == heredoc_marker:  # Á¾·á ¸¶Ä¿¸é
+                in_heredoc = False  # heredoc Á¾·á
+                heredoc_marker = None  # ¸¶Ä¿ ÃÊ±âÈ­
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)  # heredoc ½ÃÀÛ °¨Áö
+        if m:  # heredoc ½ÃÀÛÀÌ¸é
+            in_heredoc = True  # heredoc ÁøÀÔ
+            heredoc_marker = m.group(1)  # Á¾·á ¸¶Ä¿ ÀúÀå
+            out.append(line)  # ¶óÀÎ Ãß°¡
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        if '`' in line and not line.lstrip().startswith("#"):  # ¹éÆ½ Æ÷ÇÔ + ÁÖ¼® ¾Æ´Ô
+            out.append("# " + line)  # ÁÖ¼® Ã³¸®
+            continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        out.append(line)  # Á¤»ó ¶óÀÎ À¯Áö
+    return out  # °á°ú ¹İÈ¯
 
 
 def _strip_deprecated_s3_bucket_attrs(lines):
-    """aws_s3_bucket ë¦¬ì†ŒìŠ¤ì—ì„œ deprecatedëœ acl, server_side_encryption_configuration ì œê±°.
+    """aws_s3_bucket ¸®¼Ò½º¿¡¼­ deprecatedµÈ acl, server_side_encryption_configuration Á¦°Å.
 
-    AWS provider v4+ ì—ì„œëŠ” ë³„ë„ ë¦¬ì†ŒìŠ¤(aws_s3_bucket_acl,
-    aws_s3_bucket_server_side_encryption_configuration)ë¥¼ ì‚¬ìš©í•´ì•¼ í•œë‹¤.
+    AWS provider v4+ ¿¡¼­´Â º°µµ ¸®¼Ò½º(aws_s3_bucket_acl,
+    aws_s3_bucket_server_side_encryption_configuration)¸¦ »ç¿ëÇØ¾ß ÇÑ´Ù.
     """
     out = []
     in_s3_bucket = False
@@ -882,7 +882,7 @@ def _strip_deprecated_s3_bucket_attrs(lines):
     in_heredoc = False
     heredoc_marker = None
     for line in lines:
-        # heredoc ë‚´ë¶€ëŠ” ê·¸ëŒ€ë¡œ ìœ ì§€
+        # heredoc ³»ºÎ´Â ±×´ë·Î À¯Áö
         if in_heredoc:
             out.append(line)
             if line.strip() == heredoc_marker:
@@ -896,7 +896,7 @@ def _strip_deprecated_s3_bucket_attrs(lines):
             if not in_deprecated_block:
                 out.append(line)
             continue
-        # aws_s3_bucket ë¦¬ì†ŒìŠ¤ ë¸”ë¡ ì‹œì‘ ê°ì§€
+        # aws_s3_bucket ¸®¼Ò½º ºí·Ï ½ÃÀÛ °¨Áö
         if not in_s3_bucket:
             m = re.match(r'^\s*resource\s+"aws_s3_bucket"\s+"[^"]+"\s*\{', line)
             if m:
@@ -905,23 +905,23 @@ def _strip_deprecated_s3_bucket_attrs(lines):
                 out.append(line)
                 continue
         if in_s3_bucket:
-            # deprecated nested block ë‚´ë¶€ ì²˜ë¦¬
+            # deprecated nested block ³»ºÎ Ã³¸®
             if in_deprecated_block:
                 dep_brace += _brace_delta(line)
                 if dep_brace <= 0:
                     in_deprecated_block = False
-                # deprecated block ë¼ì¸ì€ ëª¨ë‘ ì œê±°
+                # deprecated block ¶óÀÎÀº ¸ğµÎ Á¦°Å
                 brace += _brace_delta(line)
                 if brace <= 0:
                     in_s3_bucket = False
                 continue
-            # acl = "..." ë¼ì¸ ì œê±°
+            # acl = "..." ¶óÀÎ Á¦°Å
             if re.match(r'^\s*acl\s*=', line):
                 brace += _brace_delta(line)
                 if brace <= 0:
                     in_s3_bucket = False
                 continue
-            # server_side_encryption_configuration ë¸”ë¡ ì‹œì‘ â†’ deprecated block ì§„ì…
+            # server_side_encryption_configuration ºí·Ï ½ÃÀÛ ¡æ deprecated block ÁøÀÔ
             if re.match(r'^\s*server_side_encryption_configuration\s*\{', line):
                 in_deprecated_block = True
                 dep_brace = _brace_delta(line)
@@ -941,10 +941,10 @@ def _strip_deprecated_s3_bucket_attrs(lines):
 
 
 def _remove_duplicate_data_blocks(lines):
-    """ê²€ì¦/apply í”„ë ˆì„ì›Œí¬ê°€ ì´ë¯¸ ì œê³µí•˜ëŠ” data ë¸”ë¡ ì œê±°.
+    """°ËÁõ/apply ÇÁ·¹ÀÓ¿öÅ©°¡ ÀÌ¹Ì Á¦°øÇÏ´Â data ºí·Ï Á¦°Å.
 
-    00-data.tfì—ì„œ aws_caller_identity, aws_region, aws_partitionì´ ìë™ ì œê³µë˜ë¯€ë¡œ
-    ìƒì„± ì½”ë“œì— ì¤‘ë³µìœ¼ë¡œ ë“¤ì–´ê°€ë©´ ì¶©ëŒí•œë‹¤.
+    00-data.tf¿¡¼­ aws_caller_identity, aws_region, aws_partitionÀÌ ÀÚµ¿ Á¦°øµÇ¹Ç·Î
+    »ı¼º ÄÚµå¿¡ Áßº¹À¸·Î µé¾î°¡¸é Ãæµ¹ÇÑ´Ù.
     """
     FRAMEWORK_DATA = {
         ("aws_caller_identity", "current"),
@@ -987,27 +987,27 @@ def _extract_log_group_name_from_arn(value: str) -> str | None:
 
 
 def _fix_log_group_name_arn(lines):
-    # log_group_nameì— ARNì´ ë“¤ì–´ê°„ ê²½ìš° ë¡œê·¸ ê·¸ë£¹ ì´ë¦„ìœ¼ë¡œ ì¹˜í™˜
-    out = []  # ì¶œë ¥ ë¼ì¸ ë²„í¼
-    for line in lines:  # ë¼ì¸ ìˆœíšŒ
-        m = re.match(r'^\s*log_group_name\s*=\s*"([^"]+)"\s*$', line)  # log_group_name ë¼ì¸ ê°ì§€
-        if m:  # ë§¤ì¹­ë˜ë©´
-            value = m.group(1)  # ê°’ ì¶”ì¶œ
+    # log_group_name¿¡ ARNÀÌ µé¾î°£ °æ¿ì ·Î±× ±×·ì ÀÌ¸§À¸·Î Ä¡È¯
+    out = []  # Ãâ·Â ¶óÀÎ ¹öÆÛ
+    for line in lines:  # ¶óÀÎ ¼øÈ¸
+        m = re.match(r'^\s*log_group_name\s*=\s*"([^"]+)"\s*$', line)  # log_group_name ¶óÀÎ °¨Áö
+        if m:  # ¸ÅÄªµÇ¸é
+            value = m.group(1)  # °ª ÃßÃâ
             if value.startswith("arn:aws:logs:"):
                 name = _extract_log_group_name_from_arn(value)
-                indent = re.match(r'^(\s*)', line).group(1)  # ë“¤ì—¬ì“°ê¸° ì¶”ì¶œ
+                indent = re.match(r'^(\s*)', line).group(1)  # µé¿©¾²±â ÃßÃâ
                 if name:
-                    out.append(f'{indent}log_group_name = "{name}"')  # ì´ë¦„ìœ¼ë¡œ ì¹˜í™˜
+                    out.append(f'{indent}log_group_name = "{name}"')  # ÀÌ¸§À¸·Î Ä¡È¯
                 else:
-                    # ARNì¸ë° ë¡œê·¸ ê·¸ë£¹ ì´ë¦„ì„ ì¶”ì¶œí•  ìˆ˜ ì—†ìœ¼ë©´ ìœ íš¨í•œ ì´ë¦„ placeholderë¡œ ëŒ€ì²´
+                    # ARNÀÎµ¥ ·Î±× ±×·ì ÀÌ¸§À» ÃßÃâÇÒ ¼ö ¾øÀ¸¸é À¯È¿ÇÑ ÀÌ¸§ placeholder·Î ´ëÃ¼
                     out.append(f'{indent}log_group_name = "YOUR_LOG_GROUP_NAME"')
-                continue  # ë‹¤ìŒ ë¼ì¸ìœ¼ë¡œ
-        out.append(line)  # ë³€ê²½ ì—†ìŒ
-    return out  # ê²°ê³¼ ë°˜í™˜
+                continue  # ´ÙÀ½ ¶óÀÎÀ¸·Î
+        out.append(line)  # º¯°æ ¾øÀ½
+    return out  # °á°ú ¹İÈ¯
 
 
 def _fix_data_cloudwatch_log_group_name_arn(lines):
-    # data "aws_cloudwatch_log_group"ì˜ nameì— ARNì´ ë“¤ì–´ê°„ ê²½ìš° ì´ë¦„ìœ¼ë¡œ ì¹˜í™˜
+    # data "aws_cloudwatch_log_group"ÀÇ name¿¡ ARNÀÌ µé¾î°£ °æ¿ì ÀÌ¸§À¸·Î Ä¡È¯
     out = []
     in_block = False
     brace = 0
@@ -1021,7 +1021,7 @@ def _fix_data_cloudwatch_log_group_name_arn(lines):
                 continue
             out.append(line)
             continue
-        # block ë‚´ë¶€
+        # block ³»ºÎ
         m = re.match(r'^(\s*)name\s*=\s*"([^"]+)"\s*$', line)
         if m:
             value = m.group(2)
@@ -1044,7 +1044,7 @@ def _fix_data_cloudwatch_log_group_name_arn(lines):
 
 
 def _ensure_metric_transformation(lines):
-    # aws_cloudwatch_log_metric_filterì— metric_transformation ë¸”ë¡ì´ ì—†ìœ¼ë©´ ì¶”ê°€
+    # aws_cloudwatch_log_metric_filter¿¡ metric_transformation ºí·ÏÀÌ ¾øÀ¸¸é Ãß°¡
     out = []
     in_block = False
     brace = 0
@@ -1084,7 +1084,7 @@ def _ensure_metric_transformation(lines):
 
 
 def _lift_resources_from_data_blocks(lines):
-    # data ë¸”ë¡ ë‚´ë¶€ì— ì¤‘ì²©ëœ resource ë¸”ë¡ì„ ìµœìƒìœ„ë¡œ ì´ë™
+    # data ºí·Ï ³»ºÎ¿¡ ÁßÃ¸µÈ resource ºí·ÏÀ» ÃÖ»óÀ§·Î ÀÌµ¿
     out = []
     lifted = []
     in_data = False
@@ -1109,7 +1109,7 @@ def _lift_resources_from_data_blocks(lines):
                 continue
             out.append(line)
             continue
-        # data ë¸”ë¡ ë‚´ë¶€
+        # data ºí·Ï ³»ºÎ
         if re.match(r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{', line):
             in_lift = True
             lift_brace = _brace_delta(line)
@@ -1128,7 +1128,7 @@ def _lift_resources_from_data_blocks(lines):
 
 
 def _ensure_sns_topic_policy_arn(lines):
-    # aws_sns_topic_policyì— arnì´ ì—†ìœ¼ë©´ ìë™ ì‚½ì…
+    # aws_sns_topic_policy¿¡ arnÀÌ ¾øÀ¸¸é ÀÚµ¿ »ğÀÔ
     sns_resource = None
     sns_data = None
     sns_has_count = False
@@ -1195,7 +1195,7 @@ def _ensure_sns_topic_policy_arn(lines):
 
 
 def _ensure_kms_key_policy_key_id(lines):
-    # aws_kms_key_policyì— key_idê°€ ì—†ìœ¼ë©´ ìë™ ì‚½ì…
+    # aws_kms_key_policy¿¡ key_id°¡ ¾øÀ¸¸é ÀÚµ¿ »ğÀÔ
     kms_resource = None
     kms_data = None
     for line in lines:
@@ -1248,10 +1248,10 @@ def _ensure_kms_key_policy_key_id(lines):
 
 
 def _fix_kms_alias_name(lines):
-    """aws_kms_aliasì˜ name ì†ì„±ì´ 'alias/'ë¡œ ì‹œì‘í•˜ë„ë¡ ë³´ì¥.
+    """aws_kms_aliasÀÇ name ¼Ó¼ºÀÌ 'alias/'·Î ½ÃÀÛÇÏµµ·Ï º¸Àå.
 
-    AI ëª¨ë¸ì´ KMS alias ì´ë¦„ì„ "my-key" í˜•íƒœë¡œ ìƒì„±í•˜ëŠ” ê²½ìš°ê°€ ë¹ˆë²ˆí•˜ë‹¤.
-    AWSëŠ” ëª¨ë“  KMS alias ì´ë¦„ì´ "alias/"ë¡œ ì‹œì‘í•´ì•¼ í•œë‹¤.
+    AI ¸ğµ¨ÀÌ KMS alias ÀÌ¸§À» "my-key" ÇüÅÂ·Î »ı¼ºÇÏ´Â °æ¿ì°¡ ºó¹øÇÏ´Ù.
+    AWS´Â ¸ğµç KMS alias ÀÌ¸§ÀÌ "alias/"·Î ½ÃÀÛÇØ¾ß ÇÑ´Ù.
     """
     out = []
     in_alias_block = False
@@ -1275,47 +1275,47 @@ def _fix_kms_alias_name(lines):
 
 
 def _sanitize_label(name: str, prefix: str | None = None) -> str:
-    # ë¼ë²¨ì— í—ˆìš©ë˜ì§€ ì•ŠëŠ” ë¬¸ìë¥¼ '_'ë¡œ ì¹˜í™˜
+    # ¶óº§¿¡ Çã¿ëµÇÁö ¾Ê´Â ¹®ÀÚ¸¦ '_'·Î Ä¡È¯
     label = re.sub(r"[^A-Za-z0-9_]", "_", name or "")
-    # ì—°ì†ëœ '_'ë¥¼ í•˜ë‚˜ë¡œ ì¶•ì†Œ
+    # ¿¬¼ÓµÈ '_'¸¦ ÇÏ³ª·Î Ãà¼Ò
     label = re.sub(r"_+", "_", label).strip("_")
-    # ë¹ˆ ë¼ë²¨ì´ë©´ ê¸°ë³¸ê°’ ì‚¬ìš©
+    # ºó ¶óº§ÀÌ¸é ±âº»°ª »ç¿ë
     if not label:
         label = "resource"
-    # ìˆ«ìë¡œ ì‹œì‘í•˜ë©´ ì ‘ë‘ì–´ ì¶”ê°€
+    # ¼ıÀÚ·Î ½ÃÀÛÇÏ¸é Á¢µÎ¾î Ãß°¡
     if re.match(r"^\d", label):
         label = f"r_{label}"
-    # prefixê°€ ìˆê³  ì´ë¯¸ ì—†ìœ¼ë©´ prefix ì¶”ê°€
+    # prefix°¡ ÀÖ°í ÀÌ¹Ì ¾øÀ¸¸é prefix Ãß°¡
     if prefix and not label.startswith(prefix):
         label = f"{prefix}{label}"
-    # ì •ê·œí™”ëœ ë¼ë²¨ ë°˜í™˜
+    # Á¤±ÔÈ­µÈ ¶óº§ ¹İÈ¯
     return label
 
 
 def _replace_refs(lines, mapping):
-    # ê²°ê³¼ ë¼ì¸ ì €ì¥
+    # °á°ú ¶óÀÎ ÀúÀå
     out = []
-    # heredoc ë‚´ë¶€ ì—¬ë¶€
+    # heredoc ³»ºÎ ¿©ºÎ
     in_heredoc = False
-    # heredoc ì¢…ë£Œ ë§ˆì»¤
+    # heredoc Á¾·á ¸¶Ä¿
     heredoc_marker = None
-    # ë¼ì¸ ìˆœíšŒ
+    # ¶óÀÎ ¼øÈ¸
     for line in lines:
-        # heredoc ë‚´ë¶€ëŠ” ì¹˜í™˜í•˜ì§€ ì•ŠìŒ
+        # heredoc ³»ºÎ´Â Ä¡È¯ÇÏÁö ¾ÊÀ½
         if in_heredoc:
             out.append(line)
             if line.strip() == heredoc_marker:
                 in_heredoc = False
                 heredoc_marker = None
             continue
-        # heredoc ì‹œì‘ ê°ì§€
+        # heredoc ½ÃÀÛ °¨Áö
         m = re.search(r"<<-?\s*([A-Za-z0-9_]+)\s*$", line)
         if m:
             in_heredoc = True
             heredoc_marker = m.group(1)
             out.append(line)
             continue
-        # ë§¤í•‘ëœ ì°¸ì¡° ì¹˜í™˜
+        # ¸ÅÇÎµÈ ÂüÁ¶ Ä¡È¯
         for kind, rtype, old, new in mapping:
             if old == new:
                 continue
@@ -1331,57 +1331,57 @@ def _replace_refs(lines, mapping):
                 line,
             )
         out.append(line)
-    # ì¹˜í™˜ ê²°ê³¼ ë°˜í™˜
+    # Ä¡È¯ °á°ú ¹İÈ¯
     return out
 
 
 def _normalize_block_names(lines):
-    # ë³€ê²½ ë§¤í•‘ ì €ì¥
+    # º¯°æ ¸ÅÇÎ ÀúÀå
     mapping = []
-    # ì´ë¦„ ì¤‘ë³µ ì¹´ìš´íŠ¸
+    # ÀÌ¸§ Áßº¹ Ä«¿îÆ®
     counts = {}
-    # ê²°ê³¼ ë¼ì¸ ì €ì¥
+    # °á°ú ¶óÀÎ ÀúÀå
     out = []
-    # ë¼ì¸ ìˆœíšŒ
+    # ¶óÀÎ ¼øÈ¸
     for line in lines:
-        # resource/data ë¸”ë¡ ì„ ì–¸ ê°ì§€
+        # resource/data ºí·Ï ¼±¾ğ °¨Áö
         m = re.match(r'^(\s*)(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
         if m:
-            # ìº¡ì²˜ëœ ì •ë³´ ì¶”ì¶œ
+            # Ä¸Ã³µÈ Á¤º¸ ÃßÃâ
             indent, kind, rtype, name = m.groups()
-            # ì‹±ê¸€í†¤ ë¦¬ì†ŒìŠ¤ëŠ” ê³ ì • ì´ë¦„ ì‚¬ìš© (state ì¶©ëŒ ë°©ì§€)
+            # ½Ì±ÛÅæ ¸®¼Ò½º´Â °íÁ¤ ÀÌ¸§ »ç¿ë (state Ãæµ¹ ¹æÁö)
             if kind == "resource" and rtype in SINGLETON_RESOURCE_NAMES:
                 new_name = SINGLETON_RESOURCE_NAMES[rtype]
                 mapping.append((kind, rtype, name, new_name))
                 line = f'{indent}{kind} "{rtype}" "{new_name}" {{'
                 out.append(line)
                 continue
-            # resourceëŠ” remediation_ ì ‘ë‘ì–´ ê°•ì œ
+            # resource´Â remediation_ Á¢µÎ¾î °­Á¦
             prefix = "remediation_" if kind == "resource" else None
-            # ë¼ë²¨ ì •ê·œí™”
+            # ¶óº§ Á¤±ÔÈ­
             base_name = _sanitize_label(name, prefix=prefix)
-            # ì¤‘ë³µ íŒë‹¨ í‚¤
+            # Áßº¹ ÆÇ´Ü Å°
             key = (kind, rtype, base_name)
-            # í˜„ì¬ ì¤‘ë³µ ì¸ë±ìŠ¤
+            # ÇöÀç Áßº¹ ÀÎµ¦½º
             idx = counts.get(key, 0)
-            # ì¤‘ë³µì´ë©´ suffix ë¶€ì—¬
+            # Áßº¹ÀÌ¸é suffix ºÎ¿©
             new_name = base_name if idx == 0 else f"{base_name}_{idx}"
-            # ì¹´ìš´íŠ¸ ê°±ì‹ 
+            # Ä«¿îÆ® °»½Å
             counts[key] = idx + 1
-            # ì°¸ì¡° ì¹˜í™˜ì„ ìœ„í•œ ë§¤í•‘ ì €ì¥
+            # ÂüÁ¶ Ä¡È¯À» À§ÇÑ ¸ÅÇÎ ÀúÀå
             mapping.append((kind, rtype, name, new_name))
-            # ë¼ë²¨ì´ ë°”ë€ ë¸”ë¡ ì„ ì–¸ ë¼ì¸ ìƒì„±
+            # ¶óº§ÀÌ ¹Ù²ï ºí·Ï ¼±¾ğ ¶óÀÎ »ı¼º
             line = f'{indent}{kind} "{rtype}" "{new_name}" {{'
         out.append(line)
-    # ë§¤í•‘ì´ ì—†ìœ¼ë©´ ê·¸ëŒ€ë¡œ ë°˜í™˜
+    # ¸ÅÇÎÀÌ ¾øÀ¸¸é ±×´ë·Î ¹İÈ¯
     if not mapping:
         return out
-    # ì°¸ì¡° ì¹˜í™˜ ì ìš©
+    # ÂüÁ¶ Ä¡È¯ Àû¿ë
     return _replace_refs(out, mapping)
 
 
 def _convert_iam_resources_to_data(lines):
-    """IAM ë¦¬ì†ŒìŠ¤ ìƒì„±ì´ ê¸ˆì§€ëœ ê²½ìš° resource â†’ dataë¡œ ì „í™˜."""
+    """IAM ¸®¼Ò½º »ı¼ºÀÌ ±İÁöµÈ °æ¿ì resource ¡æ data·Î ÀüÈ¯."""
     if ALLOW_IAM_CREATE:
         return lines
     IAM_TYPES = {
@@ -1401,7 +1401,7 @@ def _convert_iam_resources_to_data(lines):
 
 
 def _strip_iam_resource_only_attrs(lines):
-    """data IAM ë¸”ë¡ì—ì„œ resource ì „ìš© ì†ì„± ì œê±°."""
+    """data IAM ºí·Ï¿¡¼­ resource Àü¿ë ¼Ó¼º Á¦°Å."""
     if ALLOW_IAM_CREATE:
         return lines
     REMOVE_ATTRS = {
@@ -1459,7 +1459,7 @@ def _strip_iam_resource_only_attrs(lines):
 
 
 def _ensure_iam_data_required_attrs(lines):
-    """IAM data ì†ŒìŠ¤ì— í•„ìˆ˜ ì¸ì(name/arn) ìë™ ì‚½ì…."""
+    """IAM data ¼Ò½º¿¡ ÇÊ¼ö ÀÎÀÚ(name/arn) ÀÚµ¿ »ğÀÔ."""
     if ALLOW_IAM_CREATE:
         return lines
     REQUIRED = {
@@ -1505,12 +1505,12 @@ def _ensure_iam_data_required_attrs(lines):
     return out
 
 
-# AWS ê³„ì • ID íŒ¨í„´ (12ìë¦¬ ìˆ«ì, ARN ë‚´ë¶€ì—ì„œë§Œ ë§¤ì¹­)
+# AWS °èÁ¤ ID ÆĞÅÏ (12ÀÚ¸® ¼ıÀÚ, ARN ³»ºÎ¿¡¼­¸¸ ¸ÅÄª)
 _ACCOUNT_ID_RE = re.compile(r"(?<=:)\d{12}(?=:)")
 
 
 def _replace_hardcoded_account_id(lines):
-    """ARN ë¬¸ìì—´ ë‚´ í•˜ë“œì½”ë”©ëœ 12ìë¦¬ AWS ê³„ì • IDë¥¼ data source ì°¸ì¡°ë¡œ ì¹˜í™˜."""
+    """ARN ¹®ÀÚ¿­ ³» ÇÏµåÄÚµùµÈ 12ÀÚ¸® AWS °èÁ¤ ID¸¦ data source ÂüÁ¶·Î Ä¡È¯."""
     out = []
     in_heredoc = False
     heredoc_marker = None
@@ -1527,12 +1527,12 @@ def _replace_hardcoded_account_id(lines):
             heredoc_marker = hm.group(1)
             out.append(line)
             continue
-        # ì£¼ì„ ë¼ì¸ì€ ê±´ë„ˆëœ€
+        # ÁÖ¼® ¶óÀÎÀº °Ç³Ê¶Ü
         stripped = line.lstrip()
         if stripped.startswith("#") or stripped.startswith("//"):
             out.append(line)
             continue
-        # ARN íŒ¨í„´ ë‚´ 12ìë¦¬ ê³„ì • ID ì¹˜í™˜
+        # ARN ÆĞÅÏ ³» 12ÀÚ¸® °èÁ¤ ID Ä¡È¯
         if "arn:aws" in line and _ACCOUNT_ID_RE.search(line):
             line = _ACCOUNT_ID_RE.sub(
                 "${data.aws_caller_identity.current.account_id}", line
@@ -1542,7 +1542,7 @@ def _replace_hardcoded_account_id(lines):
 
 
 def _replace_hardcoded_region_in_arns(lines):
-    """ARN ë¬¸ìì—´ ë‚´ í•˜ë“œì½”ë”©ëœ ë¦¬ì „ì„ data source ì°¸ì¡°ë¡œ ì¹˜í™˜."""
+    """ARN ¹®ÀÚ¿­ ³» ÇÏµåÄÚµùµÈ ¸®ÀüÀ» data source ÂüÁ¶·Î Ä¡È¯."""
     out = []
     in_heredoc = False
     heredoc_marker = None
@@ -1573,17 +1573,17 @@ def _replace_hardcoded_region_in_arns(lines):
     return out
 
 
-# í•˜ë“œì½”ë”©ëœ placeholder ID íŒ¨í„´
+# ÇÏµåÄÚµùµÈ placeholder ID ÆĞÅÏ
 _PLACEHOLDER_PATTERNS = [
-    # vpc-0123456789abcdef ìŠ¤íƒ€ì¼ placeholder
+    # vpc-0123456789abcdef ½ºÅ¸ÀÏ placeholder
     (re.compile(r'"vpc-0123456789[a-f0-9]*"'), "var.vpc_id"),
-    # subnet-0123456789abcdef ìŠ¤íƒ€ì¼ placeholder
+    # subnet-0123456789abcdef ½ºÅ¸ÀÏ placeholder
     (re.compile(r'"subnet-0123456789[a-f0-9]*"'), "var.subnet_id"),
-    # sg-0123456789abcdef ìŠ¤íƒ€ì¼ placeholder
+    # sg-0123456789abcdef ½ºÅ¸ÀÏ placeholder
     (re.compile(r'"sg-0123456789[a-f0-9]*"'), "var.security_group_id"),
 ]
 
-# ë¦¬ìŠ¤íŠ¸ ë‚´ë¶€ placeholder (ì—¬ëŸ¬ ê°œ)
+# ¸®½ºÆ® ³»ºÎ placeholder (¿©·¯ °³)
 _PLACEHOLDER_SUBNET_LIST_RE = re.compile(
     r'\[\s*"subnet-0123456789[a-f0-9]*"'
     r'(?:\s*,\s*"subnet-0123456789[a-f0-9]*")*\s*\]'
@@ -1591,10 +1591,10 @@ _PLACEHOLDER_SUBNET_LIST_RE = re.compile(
 
 
 def _replace_placeholder_ids(lines):
-    """í•˜ë“œì½”ë”©ëœ placeholder VPC/subnet/SG IDë¥¼ variable ì°¸ì¡°ë¡œ ì¹˜í™˜.
+    """ÇÏµåÄÚµùµÈ placeholder VPC/subnet/SG ID¸¦ variable ÂüÁ¶·Î Ä¡È¯.
 
-    ì‹¤ì œ AWS ë¦¬ì†ŒìŠ¤ ID(vpc-0565... ë“±)ê°€ ì•„ë‹Œ 0123456789 íŒ¨í„´ì˜
-    placeholderë§Œ ì¹˜í™˜í•œë‹¤.
+    ½ÇÁ¦ AWS ¸®¼Ò½º ID(vpc-0565... µî)°¡ ¾Æ´Ñ 0123456789 ÆĞÅÏÀÇ
+    placeholder¸¸ Ä¡È¯ÇÑ´Ù.
     """
     out = []
     has_vpc_var = False
@@ -1605,7 +1605,7 @@ def _replace_placeholder_ids(lines):
         if stripped.startswith("#") or stripped.startswith("//"):
             out.append(line)
             continue
-        # ì„œë¸Œë„· ë¦¬ìŠ¤íŠ¸ íŒ¨í„´ (["subnet-...", "subnet-..."]) â†’ var.subnet_ids
+        # ¼­ºê³İ ¸®½ºÆ® ÆĞÅÏ (["subnet-...", "subnet-..."]) ¡æ var.subnet_ids
         if _PLACEHOLDER_SUBNET_LIST_RE.search(line):
             line = _PLACEHOLDER_SUBNET_LIST_RE.sub("var.subnet_ids", line)
             has_subnet_var = True
@@ -1622,7 +1622,7 @@ def _replace_placeholder_ids(lines):
                     has_sg_var = True
         out.append(line)
 
-    # ì‚¬ìš©ëœ variable ë¸”ë¡ ì¶”ê°€
+    # »ç¿ëµÈ variable ºí·Ï Ãß°¡
     var_blocks = []
     if has_vpc_var:
         var_blocks.append(
@@ -1663,26 +1663,26 @@ def _replace_placeholder_ids(lines):
 
 
 def _fix_deprecated_resource_types(lines):
-    """Deprecated/invalid ë¦¬ì†ŒìŠ¤ íƒ€ì…ì„ ì˜¬ë°”ë¥¸ íƒ€ì…ìœ¼ë¡œ ì¹˜í™˜."""
-    # data source ì´ë¦„ ë³€ê²½ (AWS provider v4+)
+    """Deprecated/invalid ¸®¼Ò½º Å¸ÀÔÀ» ¿Ã¹Ù¸¥ Å¸ÀÔÀ¸·Î Ä¡È¯."""
+    # data source ÀÌ¸§ º¯°æ (AWS provider v4+)
     DEPRECATED_DATA_SOURCES = {
         "aws_subnet_ids": "aws_subnets",
     }
-    # ì˜ëª»ëœ resource íƒ€ì… â†’ ì˜¬ë°”ë¥¸ íƒ€ì…
+    # Àß¸øµÈ resource Å¸ÀÔ ¡æ ¿Ã¹Ù¸¥ Å¸ÀÔ
     INVALID_RESOURCE_TYPES = {
         "aws_instance_profile_attachment": "aws_iam_instance_profile",
         "aws_ec2_instance_profile": "aws_iam_instance_profile",
     }
     out = []
     for line in lines:
-        # data source íƒ€ì… ì¹˜í™˜
+        # data source Å¸ÀÔ Ä¡È¯
         for old_type, new_type in DEPRECATED_DATA_SOURCES.items():
             if f'"{old_type}"' in line:
                 line = line.replace(f'"{old_type}"', f'"{new_type}"')
-                # ì°¸ì¡°ë„ ì¹˜í™˜ (data.aws_subnet_ids â†’ data.aws_subnets)
+                # ÂüÁ¶µµ Ä¡È¯ (data.aws_subnet_ids ¡æ data.aws_subnets)
             if f"data.{old_type}." in line:
                 line = line.replace(f"data.{old_type}.", f"data.{new_type}.")
-        # resource íƒ€ì… ì¹˜í™˜
+        # resource Å¸ÀÔ Ä¡È¯
         for old_type, new_type in INVALID_RESOURCE_TYPES.items():
             if f'"{old_type}"' in line:
                 line = line.replace(f'"{old_type}"', f'"{new_type}"')
@@ -1693,8 +1693,8 @@ def _fix_deprecated_resource_types(lines):
 
 
 def _fix_set_indexing(lines):
-    """Set íƒ€ì… ì†ì„±ì— ì¸ë±ìŠ¤ ì ‘ê·¼([0])ì„ tolist() í˜¸ì¶œë¡œ ìˆ˜ì •."""
-    # vpc_security_group_ids[0] â†’ tolist(xxx.vpc_security_group_ids)[0]
+    """Set Å¸ÀÔ ¼Ó¼º¿¡ ÀÎµ¦½º Á¢±Ù([0])À» tolist() È£Ãâ·Î ¼öÁ¤."""
+    # vpc_security_group_ids[0] ¡æ tolist(xxx.vpc_security_group_ids)[0]
     SET_ATTRS = {
         "vpc_security_group_ids",
         "security_groups",
@@ -1702,7 +1702,7 @@ def _fix_set_indexing(lines):
     out = []
     for line in lines:
         for attr in SET_ATTRS:
-            # data.xxx.yyy.attr[N] íŒ¨í„´ ìˆ˜ì •
+            # data.xxx.yyy.attr[N] ÆĞÅÏ ¼öÁ¤
             pat = re.compile(
                 rf'((?:data\.\w+\.\w+|aws_\w+\.\w+)\.{attr})\[(\d+)\]'
             )
@@ -1713,12 +1713,12 @@ def _fix_set_indexing(lines):
 
 
 def _fix_spurious_index(lines):
-    """count/for_eachê°€ ì—†ëŠ” ë¦¬ì†ŒìŠ¤ì— ëŒ€í•œ [0] ì¸ë±ìŠ¤ë¥¼ ì œê±°.
+    """count/for_each°¡ ¾ø´Â ¸®¼Ò½º¿¡ ´ëÇÑ [0] ÀÎµ¦½º¸¦ Á¦°Å.
 
-    AIê°€ aws_eip.nat_eip[0].id ê°™ì€ ì°¸ì¡°ë¥¼ ìƒì„±í•˜ì§€ë§Œ í•´ë‹¹ ë¦¬ì†ŒìŠ¤ì—
-    countê°€ ì—†ìœ¼ë©´ Terraform validateê°€ ì‹¤íŒ¨í•œë‹¤.
+    AI°¡ aws_eip.nat_eip[0].id °°Àº ÂüÁ¶¸¦ »ı¼ºÇÏÁö¸¸ ÇØ´ç ¸®¼Ò½º¿¡
+    count°¡ ¾øÀ¸¸é Terraform validate°¡ ½ÇÆĞÇÑ´Ù.
     """
-    # 1) count ë˜ëŠ” for_eachê°€ ìˆëŠ” ë¦¬ì†ŒìŠ¤/ë°ì´í„° ë¸”ë¡ ìˆ˜ì§‘
+    # 1) count ¶Ç´Â for_each°¡ ÀÖ´Â ¸®¼Ò½º/µ¥ÀÌÅÍ ºí·Ï ¼öÁı
     has_count = set()
     for line in lines:
         m = re.match(r'^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
@@ -1727,20 +1727,20 @@ def _fix_spurious_index(lines):
         if re.match(r'^\s*(count|for_each)\s*=', line):
             if _cur_block:
                 has_count.add(_cur_block)
-    # 2) [0] ì°¸ì¡°ì—ì„œ í•´ë‹¹ ë¦¬ì†ŒìŠ¤ê°€ countê°€ ì—†ìœ¼ë©´ ì¸ë±ìŠ¤ ì œê±°
+    # 2) [0] ÂüÁ¶¿¡¼­ ÇØ´ç ¸®¼Ò½º°¡ count°¡ ¾øÀ¸¸é ÀÎµ¦½º Á¦°Å
     out = []
     _cur_block = None
     for line in lines:
         m = re.match(r'^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
         if m:
             _cur_block = (m.group(1), m.group(2), m.group(3))
-        # aws_xxx.yyy[0].attr ë˜ëŠ” data.aws_xxx.yyy[0].attr íŒ¨í„´
+        # aws_xxx.yyy[0].attr ¶Ç´Â data.aws_xxx.yyy[0].attr ÆĞÅÏ
         def _strip_idx(match):
             prefix = match.group(1)
             rtype = match.group(2)
             rname = match.group(3)
             suffix = match.group(4)
-            # data.xxx.yyy[0] í˜•íƒœ
+            # data.xxx.yyy[0] ÇüÅÂ
             if prefix.startswith("data."):
                 key = ("data", rtype, rname)
             else:
@@ -1758,10 +1758,10 @@ def _fix_spurious_index(lines):
 
 
 def _fix_deprecated_interpolation(lines):
-    """Interpolation-only í‘œí˜„ì‹ì„ ë‹¨ìˆœ ì°¸ì¡°ë¡œ ë³€í™˜.
+    """Interpolation-only Ç¥Çö½ÄÀ» ´Ü¼ø ÂüÁ¶·Î º¯È¯.
 
-    Terraform 0.12+ì—ì„œ "${var.x}" í˜•íƒœì˜ interpolation-only í‘œí˜„ì‹ì€
-    deprecatedì´ë‹¤. var.x, local.x, data.x ë“±ìœ¼ë¡œ ë³€í™˜í•œë‹¤.
+    Terraform 0.12+¿¡¼­ "${var.x}" ÇüÅÂÀÇ interpolation-only Ç¥Çö½ÄÀº
+    deprecatedÀÌ´Ù. var.x, local.x, data.x µîÀ¸·Î º¯È¯ÇÑ´Ù.
     """
     out = []
     for line in lines:
@@ -1769,10 +1769,10 @@ def _fix_deprecated_interpolation(lines):
         if stripped.startswith("#") or stripped.startswith("//"):
             out.append(line)
             continue
-        # "${var.xxx}" â†’ var.xxx  /  "${local.xxx}" â†’ local.xxx
-        # "${data.xxx.yyy.zzz}" â†’ data.xxx.yyy.zzz
-        # "${aws_s3_bucket.xxx.arn}" â†’ aws_s3_bucket.xxx.arn
-        # "${each.value}" â†’ each.value  /  "${self.arn}" â†’ self.arn
+        # "${var.xxx}" ¡æ var.xxx  /  "${local.xxx}" ¡æ local.xxx
+        # "${data.xxx.yyy.zzz}" ¡æ data.xxx.yyy.zzz
+        # "${aws_s3_bucket.xxx.arn}" ¡æ aws_s3_bucket.xxx.arn
+        # "${each.value}" ¡æ each.value  /  "${self.arn}" ¡æ self.arn
         line = re.sub(
             r'"\$\{([^}"]+)\}"',
             r'\1',
@@ -1783,7 +1783,7 @@ def _fix_deprecated_interpolation(lines):
 
 
 def _ensure_visibility_config(lines):
-    """aws_wafv2_web_acl ë¦¬ì†ŒìŠ¤ì— visibility_config ë¸”ë¡ì´ ì—†ìœ¼ë©´ ì¶”ê°€."""
+    """aws_wafv2_web_acl ¸®¼Ò½º¿¡ visibility_config ºí·ÏÀÌ ¾øÀ¸¸é Ãß°¡."""
     out = []
     in_block = False
     brace = 0
@@ -1825,7 +1825,7 @@ def _ensure_visibility_config(lines):
 
 
 def _ensure_cloudwatch_alarm_required_attrs(lines):
-    """aws_cloudwatch_metric_alarmì— evaluation_periods ëˆ„ë½ ì‹œ ê¸°ë³¸ê°’ ì¶”ê°€."""
+    """aws_cloudwatch_metric_alarm¿¡ evaluation_periods ´©¶ô ½Ã ±âº»°ª Ãß°¡."""
     out = []
     in_alarm = False
     alarm_brace = 0
@@ -1866,14 +1866,14 @@ def _ensure_cloudwatch_alarm_required_attrs(lines):
 
 
 def _remove_dangerous_iam_attachments(lines):
-    """ê¸°ì¡´ IAM ë¦¬ì†ŒìŠ¤ë¥¼ ìˆ˜ì •í•˜ëŠ” ìœ„í—˜í•œ ë¸”ë¡ ì œê±°.
+    """±âÁ¸ IAM ¸®¼Ò½º¸¦ ¼öÁ¤ÇÏ´Â À§ÇèÇÑ ºí·Ï Á¦°Å.
 
-    ì œê±° ëŒ€ìƒ:
-    - aws_iam_policy_attachment (exclusive ë¦¬ì†ŒìŠ¤, empty result ì˜¤ë¥˜)
-    - aws_iam_role/user/group_policy_attachment (bootstrap ê¶Œí•œ ë°– ëŒ€ìƒ)
-    - aws_iam_user_login_profile (ì´ë¯¸ ì¡´ì¬í•˜ëŠ” í”„ë¡œí•„ ì¤‘ë³µ ìƒì„± ì˜¤ë¥˜)
-    - aws_iam_access_key (ê¸°ì¡´ ì‚¬ìš©ìì— í‚¤ ìƒì„± ì‹œë„)
-    - aws_iam_user_policy (ê¸°ì¡´ ì‚¬ìš©ìì— ì¸ë¼ì¸ ì •ì±…)
+    Á¦°Å ´ë»ó:
+    - aws_iam_policy_attachment (exclusive ¸®¼Ò½º, empty result ¿À·ù)
+    - aws_iam_role/user/group_policy_attachment (bootstrap ±ÇÇÑ ¹Û ´ë»ó)
+    - aws_iam_user_login_profile (ÀÌ¹Ì Á¸ÀçÇÏ´Â ÇÁ·ÎÇÊ Áßº¹ »ı¼º ¿À·ù)
+    - aws_iam_access_key (±âÁ¸ »ç¿ëÀÚ¿¡ Å° »ı¼º ½Ãµµ)
+    - aws_iam_user_policy (±âÁ¸ »ç¿ëÀÚ¿¡ ÀÎ¶óÀÎ Á¤Ã¥)
     """
     DANGEROUS_TYPES = re.compile(
         r'^\s*resource\s+"('
@@ -1905,7 +1905,7 @@ def _remove_dangerous_iam_attachments(lines):
 
 
 def _strip_lifecycle_from_data_blocks(lines):
-    """data ë¸”ë¡ ë‚´ë¶€ì˜ lifecycle {} ë¸”ë¡ ì œê±° (data ë¸”ë¡ì—ì„œëŠ” ìœ íš¨í•˜ì§€ ì•ŠìŒ)."""
+    """data ºí·Ï ³»ºÎÀÇ lifecycle {} ºí·Ï Á¦°Å (data ºí·Ï¿¡¼­´Â À¯È¿ÇÏÁö ¾ÊÀ½)."""
     out = []
     in_data = False
     data_brace = 0
@@ -1946,7 +1946,7 @@ def _strip_lifecycle_from_data_blocks(lines):
 
 
 def _ensure_launch_template_id_or_name(lines):
-    """aws_instance ë‚´ launch_template ë¸”ë¡ì— id/name ëˆ„ë½ ì‹œ ë³€ìˆ˜ ì°¸ì¡° ì¶”ê°€."""
+    """aws_instance ³» launch_template ºí·Ï¿¡ id/name ´©¶ô ½Ã º¯¼ö ÂüÁ¶ Ãß°¡."""
     out = []
     in_instance = False
     instance_brace = 0
@@ -1996,7 +1996,7 @@ def _ensure_launch_template_id_or_name(lines):
 
 
 def _ensure_network_acl_vpc_id(lines):
-    """aws_network_acl ë¦¬ì†ŒìŠ¤ì— vpc_id ëˆ„ë½ ì‹œ ë³€ìˆ˜ ì°¸ì¡° ì¶”ê°€."""
+    """aws_network_acl ¸®¼Ò½º¿¡ vpc_id ´©¶ô ½Ã º¯¼ö ÂüÁ¶ Ãß°¡."""
     out = []
     in_nacl = False
     nacl_brace = 0
@@ -2034,10 +2034,10 @@ def _ensure_network_acl_vpc_id(lines):
 
 
 def _lift_resources_from_resource_blocks(lines):
-    """resource ë¸”ë¡ ë‚´ë¶€ì— ì¤‘ì²©ëœ resource/data ë¸”ë¡ì„ ìµœìƒìœ„ë¡œ ì¶”ì¶œ."""
+    """resource ºí·Ï ³»ºÎ¿¡ ÁßÃ¸µÈ resource/data ºí·ÏÀ» ÃÖ»óÀ§·Î ÃßÃâ."""
     out = []
     lifted = []
-    depth = 0  # resource ë¸”ë¡ ì¤‘ì²© ê¹Šì´
+    depth = 0  # resource ºí·Ï ÁßÃ¸ ±íÀÌ
     brace = 0
     in_resource = False
     inner_block_lines = []
@@ -2057,7 +2057,7 @@ def _lift_resources_from_resource_blocks(lines):
             continue
 
         if not capturing_inner:
-            # ë‚´ë¶€ì— ë˜ ë‹¤ë¥¸ resource/data ë¸”ë¡ì´ ìˆëŠ”ì§€ í™•ì¸
+            # ³»ºÎ¿¡ ¶Ç ´Ù¸¥ resource/data ºí·ÏÀÌ ÀÖ´ÂÁö È®ÀÎ
             m = re.match(
                 r'^\s*(resource|data)\s+"[^"]+"\s+"[^"]+"\s*\{', line
             )
@@ -2097,7 +2097,7 @@ def _lift_resources_from_resource_blocks(lines):
 
 
 def _ensure_lifecycle_rule_id(lines):
-    """aws_s3_bucket_lifecycle_configurationì˜ rule ë¸”ë¡ì— id ëˆ„ë½ ì‹œ ê¸°ë³¸ê°’ ì¶”ê°€."""
+    """aws_s3_bucket_lifecycle_configurationÀÇ rule ºí·Ï¿¡ id ´©¶ô ½Ã ±âº»°ª Ãß°¡."""
     out = []
     in_lifecycle_cfg = False
     lifecycle_brace = 0
@@ -2157,7 +2157,7 @@ def _ensure_lifecycle_rule_id(lines):
 
 
 def _ensure_noncurrent_days_in_lifecycle(lines):
-    """noncurrent_version_expiration ë¸”ë¡ì— noncurrent_days ëˆ„ë½ ì‹œ ê¸°ë³¸ê°’ ì¶”ê°€."""
+    """noncurrent_version_expiration ºí·Ï¿¡ noncurrent_days ´©¶ô ½Ã ±âº»°ª Ãß°¡."""
     out = []
     in_block = False
     brace = 0
@@ -2193,7 +2193,7 @@ def _ensure_noncurrent_days_in_lifecycle(lines):
 
 
 def _replace_placeholder_values(lines):
-    """placeholder ì´ë©”ì¼, í‚¤í˜ì–´ ë“±ì„ variable ì°¸ì¡°ë¡œ ì¹˜í™˜."""
+    """placeholder ÀÌ¸ŞÀÏ, Å°Æä¾î µîÀ» variable ÂüÁ¶·Î Ä¡È¯."""
     REPLACEMENTS = [
         (re.compile(r'"example@example\.com"'), "var.notification_email"),
         (re.compile(r'"your-key-pair-name"'), "var.key_pair_name"),
@@ -2251,12 +2251,12 @@ def _replace_placeholder_values(lines):
 
 
 def _convert_s3_bucket_resource_to_data(lines):
-    """resource "aws_s3_bucket" with hardcoded bucket names â†’ data source.
+    """resource "aws_s3_bucket" with hardcoded bucket names ¡æ data source.
 
-    ê¸°ì¡´ S3 ë²„í‚·ì„ ë‹¤ì‹œ ìƒì„±í•˜ë©´ BucketAlreadyOwnedByYou ì˜¤ë¥˜ê°€ ë°œìƒí•˜ë¯€ë¡œ
-    í•˜ë“œì½”ë”©ëœ ë²„í‚· ì´ë¦„ì„ ê°€ì§„ resource ë¸”ë¡ì„ data sourceë¡œ ë³€í™˜í•œë‹¤.
+    ±âÁ¸ S3 ¹öÅ¶À» ´Ù½Ã »ı¼ºÇÏ¸é BucketAlreadyOwnedByYou ¿À·ù°¡ ¹ß»ıÇÏ¹Ç·Î
+    ÇÏµåÄÚµùµÈ ¹öÅ¶ ÀÌ¸§À» °¡Áø resource ºí·ÏÀ» data source·Î º¯È¯ÇÑ´Ù.
     """
-    # 1ë‹¨ê³„: resource "aws_s3_bucket" ë¸”ë¡ì—ì„œ í•˜ë“œì½”ë”©ëœ ë²„í‚· ì´ë¦„ ìˆ˜ì§‘
+    # 1´Ü°è: resource "aws_s3_bucket" ºí·Ï¿¡¼­ ÇÏµåÄÚµùµÈ ¹öÅ¶ ÀÌ¸§ ¼öÁı
     conversions = {}  # {resource_name: bucket_value}
     i = 0
     while i < len(lines):
@@ -2272,7 +2272,7 @@ def _convert_s3_bucket_resource_to_data(lines):
                     bucket_value = bm.group(1)
                 brace += _brace_delta(lines[j])
                 j += 1
-            # ë³´ê°„(${...})ì´ ì—†ëŠ” ë¦¬í„°ëŸ´ ë¬¸ìì—´ë§Œ ë³€í™˜ ëŒ€ìƒ
+            # º¸°£(${...})ÀÌ ¾ø´Â ¸®ÅÍ·² ¹®ÀÚ¿­¸¸ º¯È¯ ´ë»ó
             if bucket_value and "${" not in bucket_value:
                 conversions[res_name] = bucket_value
         i += 1
@@ -2280,7 +2280,7 @@ def _convert_s3_bucket_resource_to_data(lines):
     if not conversions:
         return lines
 
-    # 2ë‹¨ê³„: resource ë¸”ë¡ì„ data ë¸”ë¡ìœ¼ë¡œ ë³€í™˜í•˜ê³  ì°¸ì¡° ì—…ë°ì´íŠ¸
+    # 2´Ü°è: resource ºí·ÏÀ» data ºí·ÏÀ¸·Î º¯È¯ÇÏ°í ÂüÁ¶ ¾÷µ¥ÀÌÆ®
     out = []
     skip_block = False
     skip_brace = 0
@@ -2304,7 +2304,7 @@ def _convert_s3_bucket_resource_to_data(lines):
                 skip_block = True
             continue
 
-        # ì°¸ì¡° ì—…ë°ì´íŠ¸: aws_s3_bucket.name â†’ data.aws_s3_bucket.name
+        # ÂüÁ¶ ¾÷µ¥ÀÌÆ®: aws_s3_bucket.name ¡æ data.aws_s3_bucket.name
         for res_name in conversions:
             line = re.sub(
                 rf'(?<!data\.)aws_s3_bucket\.{re.escape(res_name)}',
@@ -2317,10 +2317,10 @@ def _convert_s3_bucket_resource_to_data(lines):
 
 
 def _remove_s3_bucket_acl_resources(lines):
-    """aws_s3_bucket_acl ë¦¬ì†ŒìŠ¤ ë¸”ë¡ ì œê±°.
+    """aws_s3_bucket_acl ¸®¼Ò½º ºí·Ï Á¦°Å.
 
-    BucketOwnerEnforced ì„¤ì •ëœ ë²„í‚·ì—ì„œëŠ” ACLì„ ì‚¬ìš©í•  ìˆ˜ ì—†ìœ¼ë¯€ë¡œ
-    AccessControlListNotSupported ì˜¤ë¥˜ë¥¼ ë°©ì§€í•œë‹¤.
+    BucketOwnerEnforced ¼³Á¤µÈ ¹öÅ¶¿¡¼­´Â ACLÀ» »ç¿ëÇÒ ¼ö ¾øÀ¸¹Ç·Î
+    AccessControlListNotSupported ¿À·ù¸¦ ¹æÁöÇÑ´Ù.
     """
     out = []
     skip_block = False
@@ -2342,10 +2342,10 @@ def _remove_s3_bucket_acl_resources(lines):
 
 
 def _fix_mfa_delete(lines):
-    """mfa_delete = "Enabled" â†’ "Disabled" (Terraformìœ¼ë¡œ MFA ì„¤ì • ë¶ˆê°€).
+    """mfa_delete = "Enabled" ¡æ "Disabled" (TerraformÀ¸·Î MFA ¼³Á¤ ºÒ°¡).
 
-    MFA ì‚­ì œëŠ” AWS CLIì—ì„œ MFA ì„¸ì…˜ìœ¼ë¡œë§Œ í™œì„±í™”í•  ìˆ˜ ìˆìœ¼ë¯€ë¡œ
-    Terraformì—ì„œ "Enabled" ì„¤ì • ì‹œ AccessDenied ì˜¤ë¥˜ê°€ ë°œìƒí•œë‹¤.
+    MFA »èÁ¦´Â AWS CLI¿¡¼­ MFA ¼¼¼ÇÀ¸·Î¸¸ È°¼ºÈ­ÇÒ ¼ö ÀÖÀ¸¹Ç·Î
+    Terraform¿¡¼­ "Enabled" ¼³Á¤ ½Ã AccessDenied ¿À·ù°¡ ¹ß»ıÇÑ´Ù.
     """
     out = []
     for line in lines:
@@ -2359,13 +2359,13 @@ def _fix_mfa_delete(lines):
 
 
 def _ensure_cloudtrail_s3_bucket_policy(lines):
-    """CloudTrail ë¦¬ì†ŒìŠ¤ê°€ ìˆì„ ë•Œ S3 bucket policyì— CloudTrail ê¶Œí•œì„ ë³´ì¥.
+    """CloudTrail ¸®¼Ò½º°¡ ÀÖÀ» ¶§ S3 bucket policy¿¡ CloudTrail ±ÇÇÑÀ» º¸Àå.
 
-    InsufficientS3BucketPolicyException ë°©ì§€: CloudTrailì´ S3 ë²„í‚·ì—
-    ë¡œê·¸ë¥¼ ê¸°ë¡í•˜ë ¤ë©´ bucket policyì— cloudtrail.amazonaws.com ì„œë¹„ìŠ¤
-    ì£¼ì²´ì˜ s3:PutObject, s3:GetBucketAcl ê¶Œí•œì´ í•„ìš”í•˜ë‹¤.
+    InsufficientS3BucketPolicyException ¹æÁö: CloudTrailÀÌ S3 ¹öÅ¶¿¡
+    ·Î±×¸¦ ±â·ÏÇÏ·Á¸é bucket policy¿¡ cloudtrail.amazonaws.com ¼­ºñ½º
+    ÁÖÃ¼ÀÇ s3:PutObject, s3:GetBucketAcl ±ÇÇÑÀÌ ÇÊ¿äÇÏ´Ù.
     """
-    # CloudTrail ë¦¬ì†ŒìŠ¤ ì¡´ì¬ ì—¬ë¶€ í™•ì¸
+    # CloudTrail ¸®¼Ò½º Á¸Àç ¿©ºÎ È®ÀÎ
     has_cloudtrail = False
     cloudtrail_bucket_expr = None
     for line in lines:
@@ -2386,14 +2386,14 @@ def _ensure_cloudtrail_s3_bucket_policy(lines):
         bucket_arn_expr = f'"arn:aws:s3:::${{{cloudtrail_bucket_expr}}}"'
         bucket_arn_object_expr = f'"arn:aws:s3:::${{{cloudtrail_bucket_expr}}}/*"'
 
-    # ì´ë¯¸ cloudtrail.amazonaws.com ê¶Œí•œì´ ìˆìœ¼ë©´ ê±´ë„ˆëœ€
+    # ÀÌ¹Ì cloudtrail.amazonaws.com ±ÇÇÑÀÌ ÀÖÀ¸¸é °Ç³Ê¶Ü
     has_cloudtrail_principal = any(
         "cloudtrail.amazonaws.com" in line for line in lines
     )
     if has_cloudtrail_principal:
         return lines
 
-    # ê¸°ì¡´ bucket policyê°€ ìˆìœ¼ë©´ Statement ë°°ì—´ì— CloudTrail ê¶Œí•œ ì£¼ì…
+    # ±âÁ¸ bucket policy°¡ ÀÖÀ¸¸é Statement ¹è¿­¿¡ CloudTrail ±ÇÇÑ ÁÖÀÔ
     has_existing_policy = False
     for line in lines:
         if re.match(r'^\s*resource\s+"aws_s3_bucket_policy"\s+"[^"]+"\s*\{', line):
@@ -2401,7 +2401,7 @@ def _ensure_cloudtrail_s3_bucket_policy(lines):
             break
 
     if has_existing_policy:
-        # ê¸°ì¡´ bucket policyì˜ Statement = [ ë’¤ì— CloudTrail ë¬¸ ì‚½ì…
+        # ±âÁ¸ bucket policyÀÇ Statement = [ µÚ¿¡ CloudTrail ¹® »ğÀÔ
         CT_STMTS = [
             '      {',
             '        Sid       = "AWSCloudTrailAclCheck"',
@@ -2436,7 +2436,7 @@ def _ensure_cloudtrail_s3_bucket_policy(lines):
                     injected = True
         return out
 
-    # bucket policyê°€ ì—†ìœ¼ë©´ ìƒˆë¡œ ì¶”ê°€
+    # bucket policy°¡ ¾øÀ¸¸é »õ·Î Ãß°¡
     POLICY_TEMPLATE = [
         '',
         'resource "aws_s3_bucket_policy" "remediation_cloudtrail_bucket_policy" {',
@@ -2472,11 +2472,11 @@ def _ensure_cloudtrail_s3_bucket_policy(lines):
 
 
 def _fix_unsupported_data_attrs(lines):
-    """data sourceì—ì„œ ì§€ì›í•˜ì§€ ì•ŠëŠ” ì†ì„± ì°¸ì¡°ë¥¼ variableë¡œ ì¹˜í™˜.
+    """data source¿¡¼­ Áö¿øÇÏÁö ¾Ê´Â ¼Ó¼º ÂüÁ¶¸¦ variable·Î Ä¡È¯.
 
-    ì˜ˆ: data.aws_instance.*.vpc_id â†’ var.vpc_id (aws_instanceëŠ” vpc_idë¥¼ exportí•˜ì§€ ì•ŠìŒ)
+    ¿¹: data.aws_instance.*.vpc_id ¡æ var.vpc_id (aws_instance´Â vpc_id¸¦ exportÇÏÁö ¾ÊÀ½)
     """
-    # data.aws_instance.<name>.vpc_id â†’ var.vpc_id
+    # data.aws_instance.<name>.vpc_id ¡æ var.vpc_id
     out = []
     for line in lines:
         stripped = line.lstrip()
@@ -2488,7 +2488,7 @@ def _fix_unsupported_data_attrs(lines):
             'var.vpc_id',
             line,
         )
-        # data.aws_subnets.<name>.vpc_id / data.aws_security_groups.<name>.vpc_id â†’ var.vpc_id
+        # data.aws_subnets.<name>.vpc_id / data.aws_security_groups.<name>.vpc_id ¡æ var.vpc_id
         line = re.sub(
             r'data\.aws_subnets\.\w+\.vpc_id',
             'var.vpc_id',
@@ -2499,19 +2499,19 @@ def _fix_unsupported_data_attrs(lines):
             'var.vpc_id',
             line,
         )
-        # data.aws_instance.<name>.primary_network_interface_id â†’ var.network_interface_id
+        # data.aws_instance.<name>.primary_network_interface_id ¡æ var.network_interface_id
         line = re.sub(
             r'data\.aws_instance\.\w+\.primary_network_interface_id',
             'var.network_interface_id',
             line,
         )
-        # data.aws_instance.<name>.launch_time (string) used in math â†’ 0
+        # data.aws_instance.<name>.launch_time (string) used in math ¡æ 0
         line = re.sub(
             r'data\.aws_instance\.\w+\.launch_time',
             '0',
             line,
         )
-        # data.aws_date_time.<name>.<attr> â†’ 0 (unsupported data source)
+        # data.aws_date_time.<name>.<attr> ¡æ 0 (unsupported data source)
         line = re.sub(
             r'data\.aws_date_time\.\w+\.\w+',
             '0',
@@ -2522,7 +2522,7 @@ def _fix_unsupported_data_attrs(lines):
 
 
 def _normalize_cloudtrail_bucket_inputs(lines, row=None):
-    """CloudTrail ì½”ë“œì˜ placeholder ë²„í‚·ì„ ì…ë ¥ ë³€ìˆ˜í™”í•˜ê³  ì‹¤ì œ ë²„í‚· ê¸°ë³¸ê°’ì„ ì£¼ì…."""
+    """CloudTrail ÄÚµåÀÇ placeholder ¹öÅ¶À» ÀÔ·Â º¯¼öÈ­ÇÏ°í ½ÇÁ¦ ¹öÅ¶ ±âº»°ªÀ» ÁÖÀÔ."""
     row_obj = row if row is not None else {}
     check_id = _safe_str(row_obj.get("check_id", ""))
     has_cloudtrail = any("aws_cloudtrail" in line for line in lines) or check_id.startswith("cloudtrail_")
@@ -2592,16 +2592,16 @@ def _normalize_cloudtrail_bucket_inputs(lines, row=None):
 
 
 def _ensure_required_resource_attrs(lines):
-    """ì—¬ëŸ¬ ë¦¬ì†ŒìŠ¤ íƒ€ì…ì—ì„œ ìì£¼ ëˆ„ë½ë˜ëŠ” í•„ìˆ˜ ì†ì„±ì„ ìë™ ì‚½ì…."""
-    # 1ì°¨ íŒ¨ìŠ¤: ê¸°ì¡´ ë¦¬ì†ŒìŠ¤ ì´ë¦„ ìˆ˜ì§‘ (cross-referenceìš©)
+    """¿©·¯ ¸®¼Ò½º Å¸ÀÔ¿¡¼­ ÀÚÁÖ ´©¶ôµÇ´Â ÇÊ¼ö ¼Ó¼ºÀ» ÀÚµ¿ »ğÀÔ."""
+    # 1Â÷ ÆĞ½º: ±âÁ¸ ¸®¼Ò½º ÀÌ¸§ ¼öÁı (cross-reference¿ë)
     existing_resources = {}
     for line in lines:
         m = re.match(r'^\s*resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
         if m:
             existing_resources.setdefault(m.group(1), []).append(m.group(2))
 
-    # ë¦¬ì†ŒìŠ¤ë³„ í•„ìˆ˜ ì†ì„± ì •ì˜: {attr: default_value}
-    # ê°’ì´ callableì´ë©´ existing_resourcesë¥¼ ì¸ìë¡œ í˜¸ì¶œ
+    # ¸®¼Ò½ºº° ÇÊ¼ö ¼Ó¼º Á¤ÀÇ: {attr: default_value}
+    # °ªÀÌ callableÀÌ¸é existing_resources¸¦ ÀÎÀÚ·Î È£Ãâ
     REQUIRED = {
         "aws_iam_role": {
             "assume_role_policy": (
@@ -2645,7 +2645,7 @@ def _ensure_required_resource_attrs(lines):
         },
     }
 
-    # inspector_assessment_templateì˜ target_arn: ê¸°ì¡´ target ë¦¬ì†ŒìŠ¤ê°€ ìˆìœ¼ë©´ ì°¸ì¡°
+    # inspector_assessment_templateÀÇ target_arn: ±âÁ¸ target ¸®¼Ò½º°¡ ÀÖÀ¸¸é ÂüÁ¶
     if "aws_inspector_assessment_target" in existing_resources:
         target_name = existing_resources["aws_inspector_assessment_target"][0]
         REQUIRED["aws_inspector_assessment_template"]["target_arn"] = (
@@ -2656,7 +2656,7 @@ def _ensure_required_resource_attrs(lines):
             "var.inspector_target_arn"
         )
 
-    # cloudtrailì˜ s3_bucket_name: ê¸°ì¡´ S3 bucket ë¦¬ì†ŒìŠ¤ê°€ ìˆìœ¼ë©´ ì°¸ì¡°
+    # cloudtrailÀÇ s3_bucket_name: ±âÁ¸ S3 bucket ¸®¼Ò½º°¡ ÀÖÀ¸¸é ÂüÁ¶
     if "aws_s3_bucket" in existing_resources:
         bucket_name = existing_resources["aws_s3_bucket"][0]
         REQUIRED["aws_cloudtrail"]["s3_bucket_name"] = (
@@ -2686,7 +2686,7 @@ def _ensure_required_resource_attrs(lines):
             out.append(line)
             continue
 
-        # ì†ì„± ì¡´ì¬ ì—¬ë¶€ í™•ì¸
+        # ¼Ó¼º Á¸Àç ¿©ºÎ È®ÀÎ
         for attr in REQUIRED[current_type]:
             if re.match(rf'^\s*{re.escape(attr)}\s*=', line):
                 found_attrs.add(attr)
@@ -2694,7 +2694,7 @@ def _ensure_required_resource_attrs(lines):
         out.append(line)
 
         if brace <= 0:
-            # ë¸”ë¡ ì¢…ë£Œ ì‹œ ëˆ„ë½ ì†ì„± ì‚½ì…
+            # ºí·Ï Á¾·á ½Ã ´©¶ô ¼Ó¼º »ğÀÔ
             missing = set(REQUIRED[current_type].keys()) - found_attrs
             if missing and insert_idx >= 0:
                 for i, attr in enumerate(sorted(missing)):
@@ -2706,7 +2706,7 @@ def _ensure_required_resource_attrs(lines):
 
 
 def _ensure_default_vpc_data(lines):
-    """data.aws_vpc.default ì°¸ì¡°ê°€ ìˆìœ¼ë©´ data ë¸”ë¡ì„ ìë™ ì¶”ê°€."""
+    """data.aws_vpc.default ÂüÁ¶°¡ ÀÖÀ¸¸é data ºí·ÏÀ» ÀÚµ¿ Ãß°¡."""
     has_ref = any("data.aws_vpc.default" in line for line in lines)
     if not has_ref:
         return lines
@@ -2723,7 +2723,7 @@ def _ensure_default_vpc_data(lines):
 
 
 def _strip_unsupported_data_sources(lines):
-    """ì§€ì›í•˜ì§€ ì•ŠëŠ” data source ë¸”ë¡ ì œê±°."""
+    """Áö¿øÇÏÁö ¾Ê´Â data source ºí·Ï Á¦°Å."""
     UNSUPPORTED = {"aws_date_time"}
     out = []
     in_block = False
@@ -2751,13 +2751,13 @@ def _strip_unsupported_data_sources(lines):
 
 
 def _remove_unsafe_data_sources(lines):
-    """ì‹¤ì œ ì¸í”„ë¼ ì¡´ì¬ë¥¼ ê°€ì •í•˜ëŠ” data source ë¸”ë¡ ì œê±° + variable ì°¸ì¡°ë¡œ ì¹˜í™˜.
+    """½ÇÁ¦ ÀÎÇÁ¶ó Á¸Àç¸¦ °¡Á¤ÇÏ´Â data source ºí·Ï Á¦°Å + variable ÂüÁ¶·Î Ä¡È¯.
 
-    AIê°€ data "aws_vpc", data "aws_instance" ë“±ì„ ìƒì„±í•˜ë©´ plan ì‹œì ì—
-    í•´ë‹¹ ë¦¬ì†ŒìŠ¤ê°€ ì—†ìœ¼ë©´ ì‹¤íŒ¨í•œë‹¤. ë¸”ë¡ì„ ì œê±°í•˜ê³  ì°¸ì¡°ë¥¼ var.xxxë¡œ ì¹˜í™˜í•˜ì—¬
-    _auto_declare_variables()ê°€ variable ì„ ì–¸ì„ ì¶”ê°€í•˜ë„ë¡ ìœ„ì„í•œë‹¤.
+    AI°¡ data "aws_vpc", data "aws_instance" µîÀ» »ı¼ºÇÏ¸é plan ½ÃÁ¡¿¡
+    ÇØ´ç ¸®¼Ò½º°¡ ¾øÀ¸¸é ½ÇÆĞÇÑ´Ù. ºí·ÏÀ» Á¦°ÅÇÏ°í ÂüÁ¶¸¦ var.xxx·Î Ä¡È¯ÇÏ¿©
+    _auto_declare_variables()°¡ variable ¼±¾ğÀ» Ãß°¡ÇÏµµ·Ï À§ÀÓÇÑ´Ù.
 
-    í”„ë ˆì„ì›Œí¬ data source (aws_caller_identity, aws_region ë“±)ëŠ” ë³´ì¡´í•œë‹¤.
+    ÇÁ·¹ÀÓ¿öÅ© data source (aws_caller_identity, aws_region µî)´Â º¸Á¸ÇÑ´Ù.
     """
     UNSAFE_DATA_TYPES = {
         "aws_vpc", "aws_instance", "aws_subnet",
@@ -2778,7 +2778,7 @@ def _remove_unsafe_data_sources(lines):
         "aws_network_interface": {"id": "var.network_interface_id"},
     }
 
-    # Pass 1: unsafe data ë¸”ë¡ ì´ë¦„ ìˆ˜ì§‘
+    # Pass 1: unsafe data ºí·Ï ÀÌ¸§ ¼öÁı
     blocks_to_remove = {}
     for line in lines:
         m = re.match(r'^\s*data\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
@@ -2788,7 +2788,7 @@ def _remove_unsafe_data_sources(lines):
     if not blocks_to_remove:
         return lines
 
-    # Pass 2: ë¸”ë¡ ì œê±°
+    # Pass 2: ºí·Ï Á¦°Å
     out = []
     skip_block = False
     skip_brace = 0
@@ -2807,7 +2807,7 @@ def _remove_unsafe_data_sources(lines):
             continue
         out.append(line)
 
-    # Pass 3: ì°¸ì¡°ë¥¼ variableë¡œ ì¹˜í™˜
+    # Pass 3: ÂüÁ¶¸¦ variable·Î Ä¡È¯
     result = []
     for line in out:
         stripped = line.lstrip()
@@ -2821,7 +2821,7 @@ def _remove_unsafe_data_sources(lines):
                     rf'data\.{re.escape(dtype)}\.{re.escape(dname)}\.{re.escape(attr)}',
                     var_ref, line,
                 )
-            # ë§¤í•‘ë˜ì§€ ì•Šì€ ì†ì„± catch-all
+            # ¸ÅÇÎµÇÁö ¾ÊÀº ¼Ó¼º catch-all
             fallback = attr_map.get("id", f"var.{dtype.replace('aws_', '')}_id")
             line = re.sub(
                 rf'data\.{re.escape(dtype)}\.{re.escape(dname)}\.\w+',
@@ -2832,7 +2832,7 @@ def _remove_unsafe_data_sources(lines):
 
 
 def _fix_time_function_assignments(lines):
-    """time() í•¨ìˆ˜ê°€ í¬í•¨ëœ í• ë‹¹ì€ 0ìœ¼ë¡œ ì¹˜í™˜."""
+    """time() ÇÔ¼ö°¡ Æ÷ÇÔµÈ ÇÒ´çÀº 0À¸·Î Ä¡È¯."""
     out = []
     for line in lines:
         if "time()" in line:
@@ -2846,7 +2846,7 @@ def _fix_time_function_assignments(lines):
 
 
 def _ensure_flow_log_target(lines):
-    """aws_flow_logì— í•„ìˆ˜ ëŒ€ìƒ(vpc_id/eni_id/...)ì´ ì—†ìœ¼ë©´ vpc_idë¥¼ ì¶”ê°€."""
+    """aws_flow_log¿¡ ÇÊ¼ö ´ë»ó(vpc_id/eni_id/...)ÀÌ ¾øÀ¸¸é vpc_id¸¦ Ãß°¡."""
     out = []
     in_block = False
     brace = 0
@@ -2890,7 +2890,7 @@ def _ensure_flow_log_target(lines):
 
 
 def _sanitize_invalid_name_values(lines):
-    """name ì†ì„±ì— í—ˆìš©ë˜ì§€ ì•ŠëŠ” ë¬¸ìê°€ ìˆìœ¼ë©´ ì•ˆì „í•œ ê°’ìœ¼ë¡œ ì¹˜í™˜."""
+    """name ¼Ó¼º¿¡ Çã¿ëµÇÁö ¾Ê´Â ¹®ÀÚ°¡ ÀÖÀ¸¸é ¾ÈÀüÇÑ °ªÀ¸·Î Ä¡È¯."""
     out = []
     for line in lines:
         m = re.match(r'^(\s*)name\s*=\s*"([^"]+)"\s*$', line)
@@ -2942,7 +2942,7 @@ def _inject_required_attr(tf_code, resource_type, attr, value_expr):
 
 
 def _ensure_variable_defaults(lines):
-    """AIê°€ ì„ ì–¸í•œ variable ë¸”ë¡ì— defaultê°€ ì—†ìœ¼ë©´ íƒ€ì…ì— ë§ëŠ” defaultë¥¼ ì‚½ì…."""
+    """AI°¡ ¼±¾ğÇÑ variable ºí·Ï¿¡ default°¡ ¾øÀ¸¸é Å¸ÀÔ¿¡ ¸Â´Â default¸¦ »ğÀÔ."""
     out = []
     i = 0
     while i < len(lines):
@@ -2952,7 +2952,7 @@ def _ensure_variable_defaults(lines):
             out.append(line)
             i += 1
             continue
-        # variable ë¸”ë¡ ì „ì²´ ìˆ˜ì§‘
+        # variable ºí·Ï ÀüÃ¼ ¼öÁı
         indent = m.group(1)
         var_name = m.group(2)
         block = [line]
@@ -2962,12 +2962,12 @@ def _ensure_variable_defaults(lines):
             block.append(lines[i])
             depth += _brace_delta(lines[i])
             i += 1
-        # defaultê°€ ì´ë¯¸ ìˆëŠ”ì§€ í™•ì¸
+        # default°¡ ÀÌ¹Ì ÀÖ´ÂÁö È®ÀÎ
         has_default = any(re.match(r'^\s*default\s*=', bl) for bl in block)
         if has_default:
             out.extend(block)
             continue
-        # íƒ€ì… íŒŒì•…í•˜ì—¬ ì ì ˆí•œ default ê²°ì •
+        # Å¸ÀÔ ÆÄ¾ÇÇÏ¿© ÀûÀıÇÑ default °áÁ¤
         var_type = "string"
         for bl in block:
             tm = re.match(r'^\s*type\s*=\s*(\S+)', bl)
@@ -2984,7 +2984,7 @@ def _ensure_variable_defaults(lines):
             default_val = "false"
         else:
             default_val = '""'
-        # ë‹«ëŠ” } ì•ì— default ì‚½ì…
+        # ´İ´Â } ¾Õ¿¡ default »ğÀÔ
         inner_indent = indent + "  "
         closing = block.pop()  # }
         block.append(f"{inner_indent}default     = {default_val}")
@@ -2994,15 +2994,15 @@ def _ensure_variable_defaults(lines):
 
 
 def _auto_declare_variables(lines):
-    """ì½”ë“œì—ì„œ ì°¸ì¡°ë˜ëŠ” var.xxx ì¤‘ ì„ ì–¸ë˜ì§€ ì•Šì€ variable ë¸”ë¡ì„ ìë™ ì¶”ê°€."""
-    # ê¸°ì¡´ variable ì„ ì–¸ ìˆ˜ì§‘
+    """ÄÚµå¿¡¼­ ÂüÁ¶µÇ´Â var.xxx Áß ¼±¾ğµÇÁö ¾ÊÀº variable ºí·ÏÀ» ÀÚµ¿ Ãß°¡."""
+    # ±âÁ¸ variable ¼±¾ğ ¼öÁı
     declared = set()
     for line in lines:
         m = re.match(r'^\s*variable\s+"([^"]+)"\s*\{', line)
         if m:
             declared.add(m.group(1))
 
-    # var.xxx ì°¸ì¡° ìˆ˜ì§‘ (ì£¼ì„ ì œì™¸)
+    # var.xxx ÂüÁ¶ ¼öÁı (ÁÖ¼® Á¦¿Ü)
     referenced = set()
     in_heredoc = False
     heredoc_marker = None
@@ -3026,7 +3026,7 @@ def _auto_declare_variables(lines):
     if not undeclared:
         return lines
 
-    # ë³€ìˆ˜ë³„ ê¸°ë³¸ ì„¤ëª…/íƒ€ì… ë§¤í•‘
+    # º¯¼öº° ±âº» ¼³¸í/Å¸ÀÔ ¸ÅÇÎ
     VAR_DEFAULTS = {
         "vpc_id": ('description = "Target VPC ID"\n  type        = string\n  default     = ""', None),
         "vpc_cidr": ('description = "VPC CIDR block"\n  type        = string\n  default     = "10.0.0.0/16"', None),
@@ -3213,27 +3213,27 @@ def sanitize_tf_code_v2(code, extra_unconfig_attrs=None, row=None):
     lines = code.splitlines()
     lines = _comment_explanations(lines)
     lines = _remove_import_blocks(lines)
-    # terraform { } ë¸”ë¡ ì œê±°
+    # terraform { } ºí·Ï Á¦°Å
     lines = _remove_terraform_blocks(lines)
     lines = _convert_data_only_resources(lines)
     lines = _remove_provider_blocks(lines)
-    # deprecated/invalid ë¦¬ì†ŒìŠ¤ íƒ€ì… ìˆ˜ì •
+    # deprecated/invalid ¸®¼Ò½º Å¸ÀÔ ¼öÁ¤
     lines = _fix_deprecated_resource_types(lines)
-    # set ì¸ë±ì‹± ì˜¤ë¥˜ ìˆ˜ì •
+    # set ÀÎµ¦½Ì ¿À·ù ¼öÁ¤
     lines = _fix_set_indexing(lines)
-    # count/for_each ì—†ëŠ” ë¦¬ì†ŒìŠ¤ì˜ [0] ì¸ë±ìŠ¤ ì œê±°
+    # count/for_each ¾ø´Â ¸®¼Ò½ºÀÇ [0] ÀÎµ¦½º Á¦°Å
     lines = _fix_spurious_index(lines)
-    # deprecated interpolation-only í‘œí˜„ì‹ ìˆ˜ì •
+    # deprecated interpolation-only Ç¥Çö½Ä ¼öÁ¤
     lines = _fix_deprecated_interpolation(lines)
-    # deprecated S3 bucket ì†ì„± ì œê±° (acl, inline encryption)
+    # deprecated S3 bucket ¼Ó¼º Á¦°Å (acl, inline encryption)
     lines = _strip_deprecated_s3_bucket_attrs(lines)
-    # í”„ë ˆì„ì›Œí¬ ì¤‘ë³µ data ë¸”ë¡ ì œê±°
+    # ÇÁ·¹ÀÓ¿öÅ© Áßº¹ data ºí·Ï Á¦°Å
     lines = _remove_duplicate_data_blocks(lines)
-    # data ë¸”ë¡ ë‚´ë¶€ì— ì¤‘ì²©ëœ resource ë¸”ë¡ ì¶”ì¶œ
+    # data ºí·Ï ³»ºÎ¿¡ ÁßÃ¸µÈ resource ºí·Ï ÃßÃâ
     lines = _lift_resources_from_data_blocks(lines)
-    # ì§€ì›í•˜ì§€ ì•ŠëŠ” data source ì œê±°
+    # Áö¿øÇÏÁö ¾Ê´Â data source Á¦°Å
     lines = _strip_unsupported_data_sources(lines)
-    # ì‹¤ì œ ì¸í”„ë¼ë¥¼ ê°€ì •í•˜ëŠ” unsafe data source ì œê±° + variable ì°¸ì¡°ë¡œ ì¹˜í™˜
+    # ½ÇÁ¦ ÀÎÇÁ¶ó¸¦ °¡Á¤ÇÏ´Â unsafe data source Á¦°Å + variable ÂüÁ¶·Î Ä¡È¯
     lines = _remove_unsafe_data_sources(lines)
     code = "\n".join(lines)
     code, flags = _fix_invalid_ec2_resource_type(code)
@@ -3243,97 +3243,97 @@ def sanitize_tf_code_v2(code, extra_unconfig_attrs=None, row=None):
     code, flags = _fix_incorrect_tolist_usage(code)
     sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
     lines = code.splitlines()
-    # provider ìŠ¤í‚¤ë§ˆ ê¸°ë°˜ computed-only ì†ì„± ì œê±°
+    # provider ½ºÅ°¸¶ ±â¹İ computed-only ¼Ó¼º Á¦°Å
     lines = _strip_schema_computed_attrs(lines)
     lines = _strip_unconfigurable_attrs_in_resources(lines, extra_unconfig_attrs)
-    # resource/data ì´ë¦„ ì •ê·œí™” ë° ì°¸ì¡° ë™ê¸°í™”
+    # resource/data ÀÌ¸§ Á¤±ÔÈ­ ¹× ÂüÁ¶ µ¿±âÈ­
     lines = _normalize_block_names(lines)
-    # IAM ìƒì„± ê¸ˆì§€ ì‹œ resource â†’ data ì „í™˜ ë° í•„ìˆ˜ ì¸ì ë³´ê°•
+    # IAM »ı¼º ±İÁö ½Ã resource ¡æ data ÀüÈ¯ ¹× ÇÊ¼ö ÀÎÀÚ º¸°­
     lines = _convert_iam_resources_to_data(lines)
     lines = _strip_iam_resource_only_attrs(lines)
     lines = _ensure_iam_data_required_attrs(lines)
-    # name ì†ì„±ì˜ í—ˆìš©ë˜ì§€ ì•ŠëŠ” ë¬¸ì ì¹˜í™˜
+    # name ¼Ó¼ºÀÇ Çã¿ëµÇÁö ¾Ê´Â ¹®ÀÚ Ä¡È¯
     lines = _sanitize_invalid_name_values(lines)
-    # ë¯¸ë‹«íŒ heredoc ë³´ì •
+    # ¹Ì´İÈù heredoc º¸Á¤
     lines = _repair_unclosed_heredoc(lines)
-    # ë°±í‹± í¬í•¨ ë¼ì¸ ì£¼ì„ ì²˜ë¦¬
+    # ¹éÆ½ Æ÷ÇÔ ¶óÀÎ ÁÖ¼® Ã³¸®
     lines = _strip_backtick_lines(lines)
-    # ARN í˜•íƒœ log_group_name ë³´ì •
+    # ARN ÇüÅÂ log_group_name º¸Á¤
     lines = _fix_log_group_name_arn(lines)
-    # data aws_cloudwatch_log_groupì˜ nameì— ARNì´ ë“¤ì–´ê°„ ê²½ìš° ë³´ì •
+    # data aws_cloudwatch_log_groupÀÇ name¿¡ ARNÀÌ µé¾î°£ °æ¿ì º¸Á¤
     lines = _fix_data_cloudwatch_log_group_name_arn(lines)
-    # metric_transformation ëˆ„ë½ ë³´ì •
+    # metric_transformation ´©¶ô º¸Á¤
     lines = _ensure_metric_transformation(lines)
-    # aws_sns_topic_policy arn ëˆ„ë½ ë³´ì •
+    # aws_sns_topic_policy arn ´©¶ô º¸Á¤
     lines = _ensure_sns_topic_policy_arn(lines)
-    # aws_kms_key_policy key_id ëˆ„ë½ ë³´ì •
+    # aws_kms_key_policy key_id ´©¶ô º¸Á¤
     lines = _ensure_kms_key_policy_key_id(lines)
-    # aws_cloudwatch_metric_alarm evaluation_periods ëˆ„ë½ ë³´ì •
+    # aws_cloudwatch_metric_alarm evaluation_periods ´©¶ô º¸Á¤
     lines = _ensure_cloudwatch_alarm_required_attrs(lines)
-    # WAFv2 visibility_config ëˆ„ë½ ë³´ì •
+    # WAFv2 visibility_config ´©¶ô º¸Á¤
     lines = _ensure_visibility_config(lines)
-    # ì™¸ë¶€ IAM ì—­í• /ì‚¬ìš©ìì— ëŒ€í•œ ìœ„í—˜í•œ attachment ì œê±°
+    # ¿ÜºÎ IAM ¿ªÇÒ/»ç¿ëÀÚ¿¡ ´ëÇÑ À§ÇèÇÑ attachment Á¦°Å
     lines = _remove_dangerous_iam_attachments(lines)
-    # data ë¸”ë¡ ë‚´ë¶€ì˜ lifecycle ë¸”ë¡ ì œê±°
+    # data ºí·Ï ³»ºÎÀÇ lifecycle ºí·Ï Á¦°Å
     lines = _strip_lifecycle_from_data_blocks(lines)
-    # aws_instance launch_templateì— id/name ëˆ„ë½ ë³´ì •
+    # aws_instance launch_template¿¡ id/name ´©¶ô º¸Á¤
     lines = _ensure_launch_template_id_or_name(lines)
-    # aws_network_aclì— vpc_id ëˆ„ë½ ë³´ì •
+    # aws_network_acl¿¡ vpc_id ´©¶ô º¸Á¤
     lines = _ensure_network_acl_vpc_id(lines)
-    # resource ë¸”ë¡ ë‚´ë¶€ì— ì¤‘ì²©ëœ resource ë¸”ë¡ ì¶”ì¶œ
+    # resource ºí·Ï ³»ºÎ¿¡ ÁßÃ¸µÈ resource ºí·Ï ÃßÃâ
     lines = _lift_resources_from_resource_blocks(lines)
-    # S3 lifecycle ruleì— id ëˆ„ë½ ë³´ì •
+    # S3 lifecycle rule¿¡ id ´©¶ô º¸Á¤
     lines = _ensure_lifecycle_rule_id(lines)
-    # S3 lifecycle noncurrent_version_expiration noncurrent_days ëˆ„ë½ ë³´ì •
+    # S3 lifecycle noncurrent_version_expiration noncurrent_days ´©¶ô º¸Á¤
     lines = _ensure_noncurrent_days_in_lifecycle(lines)
-    # í•˜ë“œì½”ë”©ëœ AWS ê³„ì • ID â†’ data source ì°¸ì¡°ë¡œ ì¹˜í™˜
+    # ÇÏµåÄÚµùµÈ AWS °èÁ¤ ID ¡æ data source ÂüÁ¶·Î Ä¡È¯
     lines = _replace_hardcoded_account_id(lines)
-    # í•˜ë“œì½”ë”©ëœ ë¦¬ì „ â†’ data source ì°¸ì¡°ë¡œ ì¹˜í™˜
+    # ÇÏµåÄÚµùµÈ ¸®Àü ¡æ data source ÂüÁ¶·Î Ä¡È¯
     lines = _replace_hardcoded_region_in_arns(lines)
-    # placeholder VPC/subnet/SG ID â†’ variable ì°¸ì¡°ë¡œ ì¹˜í™˜
+    # placeholder VPC/subnet/SG ID ¡æ variable ÂüÁ¶·Î Ä¡È¯
     lines = _replace_placeholder_ids(lines)
-    # placeholder ì´ë©”ì¼/í‚¤í˜ì–´ â†’ variable ì°¸ì¡°ë¡œ ì¹˜í™˜
+    # placeholder ÀÌ¸ŞÀÏ/Å°Æä¾î ¡æ variable ÂüÁ¶·Î Ä¡È¯
     lines = _replace_placeholder_values(lines)
-    # CloudTrail placeholder ë²„í‚· ì œê±° + ì‹¤ì œ ë²„í‚· ê¸°ë³¸ê°’ ì£¼ì…
+    # CloudTrail placeholder ¹öÅ¶ Á¦°Å + ½ÇÁ¦ ¹öÅ¶ ±âº»°ª ÁÖÀÔ
     lines = _normalize_cloudtrail_bucket_inputs(lines, row=row)
-    # S3 apply ì˜¤ë¥˜ ë°©ì§€: ê¸°ì¡´ ë²„í‚· resource â†’ data ë³€í™˜
+    # S3 apply ¿À·ù ¹æÁö: ±âÁ¸ ¹öÅ¶ resource ¡æ data º¯È¯
     lines = _convert_s3_bucket_resource_to_data(lines)
-    # S3 apply ì˜¤ë¥˜ ë°©ì§€: BucketOwnerEnforcedì™€ ì¶©ëŒí•˜ëŠ” ACL ì œê±°
+    # S3 apply ¿À·ù ¹æÁö: BucketOwnerEnforced¿Í Ãæµ¹ÇÏ´Â ACL Á¦°Å
     lines = _remove_s3_bucket_acl_resources(lines)
-    # S3 apply ì˜¤ë¥˜ ë°©ì§€: MFA deleteëŠ” Terraformìœ¼ë¡œ ì„¤ì • ë¶ˆê°€
+    # S3 apply ¿À·ù ¹æÁö: MFA delete´Â TerraformÀ¸·Î ¼³Á¤ ºÒ°¡
     lines = _fix_mfa_delete(lines)
-    # CloudTrailìš© S3 bucket policy ëˆ„ë½ ë³´ì •
+    # CloudTrail¿ë S3 bucket policy ´©¶ô º¸Á¤
     lines = _ensure_cloudtrail_s3_bucket_policy(lines)
-    # data sourceì—ì„œ ì§€ì›í•˜ì§€ ì•ŠëŠ” ì†ì„± ì°¸ì¡° ì¹˜í™˜
+    # data source¿¡¼­ Áö¿øÇÏÁö ¾Ê´Â ¼Ó¼º ÂüÁ¶ Ä¡È¯
     lines = _fix_unsupported_data_attrs(lines)
-    # time() í•¨ìˆ˜ í¬í•¨ í• ë‹¹ ë³´ì •
+    # time() ÇÔ¼ö Æ÷ÇÔ ÇÒ´ç º¸Á¤
     lines = _fix_time_function_assignments(lines)
-    # ë¦¬ì†ŒìŠ¤ë³„ í•„ìˆ˜ ì†ì„± ëˆ„ë½ ë³´ì •
+    # ¸®¼Ò½ºº° ÇÊ¼ö ¼Ó¼º ´©¶ô º¸Á¤
     lines = _ensure_required_resource_attrs(lines)
-    # data.aws_vpc.default ì°¸ì¡° ë³´ì •
+    # data.aws_vpc.default ÂüÁ¶ º¸Á¤
     lines = _ensure_default_vpc_data(lines)
-    # aws_flow_log ëŒ€ìƒ ëˆ„ë½ ë³´ì •
+    # aws_flow_log ´ë»ó ´©¶ô º¸Á¤
     lines = _ensure_flow_log_target(lines)
-    # ì„ ì–¸ ì—†ì´ ì°¸ì¡°ëœ variable ìë™ ì„ ì–¸
+    # ¼±¾ğ ¾øÀÌ ÂüÁ¶µÈ variable ÀÚµ¿ ¼±¾ğ
     lines = _auto_declare_variables(lines)
-    # variable ë¸”ë¡ì— default ì—†ìœ¼ë©´ ìë™ ì¶”ê°€ (apply ì‹œ "No value" ì—ëŸ¬ ë°©ì§€)
+    # variable ºí·Ï¿¡ default ¾øÀ¸¸é ÀÚµ¿ Ãß°¡ (apply ½Ã "No value" ¿¡·¯ ¹æÁö)
     lines = _ensure_variable_defaults(lines)
     code = "\n".join(lines)
-    # ë¯¸ë‹«íŒ ë”°ì˜´í‘œ ë³´ì •
+    # ¹Ì´İÈù µû¿ÈÇ¥ º¸Á¤
     code = "\n".join(_repair_unbalanced_quotes(code.splitlines()))
-    # ê´„í˜¸/ëŒ€ê´„í˜¸ ê· í˜• ë³´ì •
+    # °ıÈ£/´ë°ıÈ£ ±ÕÇü º¸Á¤
     code = "\n".join(_balance_parens_brackets(code.splitlines()))
-    # KMS alias name ë³´ì • (alias/ ì ‘ë‘ì–´ ë³´ì¥)
+    # KMS alias name º¸Á¤ (alias/ Á¢µÎ¾î º¸Àå)
     code = "\n".join(_fix_kms_alias_name(code.splitlines()))
-    # ì¤‘ê´„í˜¸ ê· í˜•/ë¸”ë¡ ì¢…ë£Œ ë³´ì • ë° malformed ê°ì§€
+    # Áß°ıÈ£ ±ÕÇü/ºí·Ï Á¾·á º¸Á¤ ¹× malformed °¨Áö
     code, flags = _normalize_block_termination(code)
     sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
-    # ìƒì„± ì½”ë“œ íš¨ê³¼ì„± ì •ì  ê²Œì´íŠ¸
+    # »ı¼º ÄÚµå È¿°ú¼º Á¤Àû °ÔÀÌÆ®
     flags = _check_effectiveness_guard(code, row)
     sanitize_flags = _merge_sanitize_flags(sanitize_flags, flags)
 
     lines = code.splitlines()
-    # ì•/ë’¤ ê³µë°± ë¼ì¸ ì œê±°
+    # ¾Õ/µÚ °ø¹é ¶óÀÎ Á¦°Å
     while lines and lines[0].strip() == "":
         lines.pop(0)
     while lines and lines[-1].strip() == "":
@@ -3350,7 +3350,7 @@ def _check_effectiveness_guard(tf_code: str, row) -> dict:
     if not STRICT_EFFECTIVENESS_GUARD:
         return flags
 
-    check_id = _safe_str((row or {}).get("check_id", "")).strip()
+    check_id = _safe_str(row.get("check_id", "") if row is not None else "").strip()
     text = tf_code or ""
 
     if check_id in NON_AUTOFIXABLE_CHECKS:
@@ -3521,7 +3521,7 @@ def apply_error_fixes(tf_code, error_msg, row=None):
     if "invalid value for name" in error_msg.lower():
         fixed_lines = _sanitize_invalid_name_values(tf_code.splitlines())
         return sanitize_tf_code("\n".join(fixed_lines))
-    # Unsupported argument ì˜¤ë¥˜ì¼ ê²½ìš° í•´ë‹¹ ì¸ì ì œê±°
+    # Unsupported argument ¿À·ùÀÏ °æ¿ì ÇØ´ç ÀÎÀÚ Á¦°Å
     m = re.search(r"Error: Unsupported argument.*?\n.*?:\s+([A-Za-z0-9_]+)\s*=", error_msg, flags=re.DOTALL)
     if m:
         bad_attr = m.group(1)
@@ -3532,13 +3532,13 @@ def apply_error_fixes(tf_code, error_msg, row=None):
                 continue
             filtered.append(line)
         return sanitize_tf_code("\n".join(filtered))
-    # Unsupported attribute ì˜¤ë¥˜ (data source ì†ì„± ë¯¸ì§€ì›) â†’ sanitize ì¬ì ìš©
+    # Unsupported attribute ¿À·ù (data source ¼Ó¼º ¹ÌÁö¿ø) ¡æ sanitize ÀçÀû¿ë
     if "Unsupported attribute" in error_msg:
         return sanitize_tf_code(tf_code)
-    # ì„ ì–¸ë˜ì§€ ì•Šì€ ë³€ìˆ˜ ì°¸ì¡° â†’ _auto_declare_variablesê°€ ì²˜ë¦¬
+    # ¼±¾ğµÇÁö ¾ÊÀº º¯¼ö ÂüÁ¶ ¡æ _auto_declare_variables°¡ Ã³¸®
     if "Reference to undeclared input variable" in error_msg:
         return sanitize_tf_code(tf_code)
-    # Unexpected resource instance key (count/for_each ë¯¸ì‚¬ìš© ì‹œ ì¸ë±ìŠ¤ ì ‘ê·¼) â†’ ì¸ë±ìŠ¤ ì œê±°
+    # Unexpected resource instance key (count/for_each ¹Ì»ç¿ë ½Ã ÀÎµ¦½º Á¢±Ù) ¡æ ÀÎµ¦½º Á¦°Å
     if "Unexpected resource instance key" in error_msg:
         m2 = re.search(r'(\w+\.\w+\.\w+)\[(\d+)\]', error_msg)
         if m2:
@@ -3546,15 +3546,15 @@ def apply_error_fixes(tf_code, error_msg, row=None):
             good_ref = m2.group(1)
             tf_code = re.sub(bad_ref, good_ref, tf_code)
         return sanitize_tf_code(tf_code)
-    # log_group_nameì— ARNì´ ë“¤ì–´ê°„ ê²½ìš° ë³´ì • ì‹œë„
+    # log_group_name¿¡ ARNÀÌ µé¾î°£ °æ¿ì º¸Á¤ ½Ãµµ
     if "log_group_name" in error_msg and "arn:aws:logs" in error_msg:
         return sanitize_tf_code(tf_code)
     if "Insufficient metric_transformation blocks" in error_msg:
         return sanitize_tf_code(tf_code)
-    # Invalid resource type â†’ sanitizeê°€ deprecated íƒ€ì…ì„ ê³ ì³ì¤Œ
+    # Invalid resource type ¡æ sanitize°¡ deprecated Å¸ÀÔÀ» °íÃÄÁÜ
     if "Invalid resource type" in error_msg or "Invalid data source" in error_msg:
         return sanitize_tf_code(tf_code)
-    # Missing required argument â†’ sanitize ì¬ì ìš© (visibility_config ë“±)
+    # Missing required argument ¡æ sanitize ÀçÀû¿ë (visibility_config µî)
     if "Missing required argument" in error_msg:
         m_attr = re.search(r'The argument "([^"]+)" is required', error_msg)
         m_res = re.search(r'in resource "([^"]+)"', error_msg)
@@ -3566,10 +3566,10 @@ def apply_error_fixes(tf_code, error_msg, row=None):
                 tf_code = _inject_required_attr(tf_code, rtype, attr, value_expr)
                 return sanitize_tf_code(tf_code)
         return sanitize_tf_code(tf_code)
-    # Insufficient blocks (visibility_config ë“±) â†’ sanitize ì¬ì ìš©
+    # Insufficient blocks (visibility_config µî) ¡æ sanitize ÀçÀû¿ë
     if "Insufficient" in error_msg and "blocks" in error_msg:
         return sanitize_tf_code(tf_code)
-    # Invalid index (set ì¸ë±ì‹± ë“±) â†’ sanitize ì¬ì ìš©
+    # Invalid index (set ÀÎµ¦½Ì µî) ¡æ sanitize ÀçÀû¿ë
     if "Invalid index" in error_msg:
         return sanitize_tf_code(tf_code)
     if any(
@@ -3620,7 +3620,7 @@ def _normalize_terraform_error(error_msg, max_len=200):
 
 
 def categorize_check_id(check_id: str) -> str:
-    """ì²´í¬ ID ì ‘ë‘ì–´ ê¸°ì¤€ìœ¼ë¡œ ëŒ€ëµì ì¸ ì¹´í…Œê³ ë¦¬ ë¶„ë¥˜ (ë¦¬í¬íŒ…ìš©)."""
+    """Ã¼Å© ID Á¢µÎ¾î ±âÁØÀ¸·Î ´ë·«ÀûÀÎ Ä«Å×°í¸® ºĞ·ù (¸®Æ÷ÆÃ¿ë)."""
     cid = (check_id or "").lower()
     if cid.startswith("iam_"):
         return "iam"
@@ -3640,7 +3640,7 @@ def categorize_check_id(check_id: str) -> str:
 
 
 def call_bedrock(prompt):
-    """AWS Bedrock Claude 3 Haiku APIë¥¼ í˜¸ì¶œí•´ Terraform ì½”ë“œë¥¼ ìƒì„±."""
+    """AWS Bedrock Claude 3 Haiku API¸¦ È£ÃâÇØ Terraform ÄÚµå¸¦ »ı¼º."""
     if not USE_BEDROCK or boto3 is None:
         print("Bedrock disabled or boto3 unavailable")
         return None
@@ -3649,7 +3649,7 @@ def call_bedrock(prompt):
         body = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": MAX_TOKENS,
-            "temperature": 0.1,  # ë‚®ì€ temperatureë¡œ ì¼ê´€ëœ ì½”ë“œ ìƒì„± ìœ ë„
+            "temperature": 0.1,  # ³·Àº temperature·Î ÀÏ°üµÈ ÄÚµå »ı¼º À¯µµ
             "messages": [{"role": "user", "content": prompt}],
         }
         resp = client.invoke_model(
@@ -3668,27 +3668,27 @@ def call_bedrock(prompt):
         return None
 
 
-# Bedrock ì˜¤ë¥˜ ìˆ˜ì • ì¬ì‹œë„ íšŸìˆ˜ (í™˜ê²½ ë³€ìˆ˜ë¡œ ì¡°ì • ê°€ëŠ¥)
+# Bedrock ¿À·ù ¼öÁ¤ Àç½Ãµµ È½¼ö (È¯°æ º¯¼ö·Î Á¶Á¤ °¡´É)
 MAX_RETRIES = int(os.getenv("BEDROCK_MAX_RETRIES", "2"))
 
 
 def validate_terraform(tf_code):
-    """ì„ì‹œ ë””ë ‰í„°ë¦¬ì— ì½”ë“œë¥¼ ì‘ì„±í•˜ê³  terraform init/validateë¡œ ê²€ì¦.
+    """ÀÓ½Ã µğ·ºÅÍ¸®¿¡ ÄÚµå¸¦ ÀÛ¼ºÇÏ°í terraform init/validate·Î °ËÁõ.
 
-    í•µì‹¬:
-    - main.tf í•˜ë‚˜ë¡œ 'ì¡°ë¦½'í•˜ì§€ ì•ŠëŠ”ë‹¤ (ì¤‘ì²© ë¸”ë¡ ì‚¬ê³  ë°©ì§€)
-    - ê³µí†µ data/provier/terraform ë¸”ë¡ì€ ê³ ì • íŒŒì¼ë¡œ ë¶„ë¦¬
-    - tf_codeëŠ” ë‹¨ì¼ íŒŒì¼(candidate.tf)ë¡œë§Œ ë„£ê³  validate
+    ÇÙ½É:
+    - main.tf ÇÏ³ª·Î 'Á¶¸³'ÇÏÁö ¾Ê´Â´Ù (ÁßÃ¸ ºí·Ï »ç°í ¹æÁö)
+    - °øÅë data/provier/terraform ºí·ÏÀº °íÁ¤ ÆÄÀÏ·Î ºĞ¸®
+    - tf_code´Â ´ÜÀÏ ÆÄÀÏ(candidate.tf)·Î¸¸ ³Ö°í validate
     """
     import tempfile, subprocess, shutil
 
     work = tempfile.mkdtemp(prefix="tf-validate-")
     try:
-        # 1) candidate.tf : ìƒì„±ëœ ì½”ë“œ(ì´ë¯¸ sanitizeëœ ê²°ê³¼)
+        # 1) candidate.tf : »ı¼ºµÈ ÄÚµå(ÀÌ¹Ì sanitizeµÈ °á°ú)
         with open(os.path.join(work, "candidate.tf"), "w", encoding="utf-8") as f:
             f.write(tf_code.strip() + "\n")
 
-        # 2) 00-data.tf : ê³µí†µ dataëŠ” 'ìµœìƒìœ„ ë¸”ë¡'ìœ¼ë¡œë§Œ ì œê³µ (ì¤‘ì²© ê¸ˆì§€)
+        # 2) 00-data.tf : °øÅë data´Â 'ÃÖ»óÀ§ ºí·Ï'À¸·Î¸¸ Á¦°ø (ÁßÃ¸ ±İÁö)
         with open(os.path.join(work, "00-data.tf"), "w", encoding="utf-8") as f:
             f.write(
                 'data "aws_caller_identity" "current" {}\n'
@@ -3696,7 +3696,7 @@ def validate_terraform(tf_code):
                 'data "aws_partition" "current" {}\n'
             )
 
-        # 3) providers.tf : providerëŠ” í•œ ë²ˆë§Œ
+        # 3) providers.tf : provider´Â ÇÑ ¹ø¸¸
         with open(os.path.join(work, "providers.tf"), "w", encoding="utf-8") as f:
             f.write(
                 'provider "aws" {\n'
@@ -3704,7 +3704,7 @@ def validate_terraform(tf_code):
                 '}\n'
             )
 
-        # 4) versions.tf : required_providers ê³ ì • (ê°€ë“œë ˆì¼)
+        # 4) versions.tf : required_providers °íÁ¤ (°¡µå·¹ÀÏ)
         with open(os.path.join(work, "versions.tf"), "w", encoding="utf-8") as f:
             f.write(
                 'terraform {\n'
@@ -3716,7 +3716,7 @@ def validate_terraform(tf_code):
                 '}\n'
             )
 
-        # 5) init (backend ë¶ˆí•„ìš”: -backend=false)
+        # 5) init (backend ºÒÇÊ¿ä: -backend=false)
         r1 = subprocess.run(
             ["terraform", "init", "-backend=false", "-input=false", "-no-color"],
             cwd=work, capture_output=True, text=True, timeout=120
@@ -3740,7 +3740,7 @@ def validate_terraform(tf_code):
 
 
 def _terraform_fmt(tf_code):
-    """terraform fmtë¡œ ì½”ë“œë¥¼ í¬ë§·íŒ…. ì‹¤íŒ¨ ì‹œ ì›ë³¸ ë°˜í™˜."""
+    """terraform fmt·Î ÄÚµå¸¦ Æ÷¸ËÆÃ. ½ÇÆĞ ½Ã ¿øº» ¹İÈ¯."""
     import tempfile, subprocess, shutil
 
     work = tempfile.mkdtemp(prefix="tf-fmt-")
@@ -3763,7 +3763,7 @@ def _terraform_fmt(tf_code):
 
 
 def make_fix_prompt(original_prompt, tf_code, error_msg):
-    """ê²€ì¦ ì‹¤íŒ¨ ì—ëŸ¬ë¥¼ í¬í•¨í•´ ì¬ìƒì„±ìš© í”„ë¡¬í”„íŠ¸ë¥¼ êµ¬ì„±."""
+    """°ËÁõ ½ÇÆĞ ¿¡·¯¸¦ Æ÷ÇÔÇØ Àç»ı¼º¿ë ÇÁ·ÒÇÁÆ®¸¦ ±¸¼º."""
     return f"""You are a senior Terraform engineer.
 
 Task:
@@ -3809,36 +3809,36 @@ terraform validate error:
 
 
 def _read_snippet_file(path):
-    # ìŠ¤ë‹ˆí« íŒŒì¼ ì½ê¸° í—¬í¼
-    if not path:  # ê²½ë¡œê°€ ì—†ìœ¼ë©´
-        return None  # None ë°˜í™˜
-    if not path.endswith(".tf"):  # .tfë§Œ í—ˆìš©
-        return None  # .tfê°€ ì•„ë‹ˆë©´ ë¬´ì‹œ
-    if os.path.exists(path):  # íŒŒì¼ì´ ì¡´ì¬í•˜ë©´
-        with open(path) as f:  # íŒŒì¼ ì—´ê¸°
-            return f.read().strip()  # ë‚´ìš© ë°˜í™˜
-    return None  # íŒŒì¼ ì—†ìœ¼ë©´ None
+    # ½º´ÏÆê ÆÄÀÏ ÀĞ±â ÇïÆÛ
+    if not path:  # °æ·Î°¡ ¾øÀ¸¸é
+        return None  # None ¹İÈ¯
+    if not path.endswith(".tf"):  # .tf¸¸ Çã¿ë
+        return None  # .tf°¡ ¾Æ´Ï¸é ¹«½Ã
+    if os.path.exists(path):  # ÆÄÀÏÀÌ Á¸ÀçÇÏ¸é
+        with open(path) as f:  # ÆÄÀÏ ¿­±â
+            return f.read().strip()  # ³»¿ë ¹İÈ¯
+    return None  # ÆÄÀÏ ¾øÀ¸¸é None
 
 
 def fallback_from_iac_snippet(check_id, category=None):
-    """Bedrock ì‹¤íŒ¨ ì‹œ check_to_iac.yaml ë§¤í•‘ì—ì„œ ìŠ¤ë‹ˆí«ì„ ë¡œë“œ."""
-    snippet_path = iac_map.get(check_id)  # ì²´í¬ ID ë§¤í•‘ ê²½ë¡œ ì¡°íšŒ
-    snippet = _read_snippet_file(snippet_path)  # ë§¤í•‘ëœ ìŠ¤ë‹ˆí« ì½ê¸°
-    if snippet:  # ë§¤í•‘ëœ ìŠ¤ë‹ˆí«ì´ ìˆìœ¼ë©´
-        return snippet  # ë§¤í•‘ ìŠ¤ë‹ˆí« ë°˜í™˜
-    if not USE_CATEGORY_SNIPPET:  # ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí« ë¹„í™œì„±í™”ë©´
-        return None  # ë°”ë¡œ ì¢…ë£Œ
-    if category:  # ì¹´í…Œê³ ë¦¬ê°€ ìˆìœ¼ë©´
-        category_path = os.path.join(IAC_SNIPPET_DIR, f"{category}.tf")  # ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí« ê²½ë¡œ
-        snippet = _read_snippet_file(category_path)  # ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí« ì½ê¸°
-        if snippet:  # ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí«ì´ ìˆìœ¼ë©´
-            return snippet  # ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí« ë°˜í™˜
-    default_path = os.path.join(IAC_SNIPPET_DIR, "default.tf")  # ê¸°ë³¸ ìŠ¤ë‹ˆí« ê²½ë¡œ
-    return _read_snippet_file(default_path)  # ê¸°ë³¸ ìŠ¤ë‹ˆí« ë°˜í™˜
+    """Bedrock ½ÇÆĞ ½Ã check_to_iac.yaml ¸ÅÇÎ¿¡¼­ ½º´ÏÆêÀ» ·Îµå."""
+    snippet_path = iac_map.get(check_id)  # Ã¼Å© ID ¸ÅÇÎ °æ·Î Á¶È¸
+    snippet = _read_snippet_file(snippet_path)  # ¸ÅÇÎµÈ ½º´ÏÆê ÀĞ±â
+    if snippet:  # ¸ÅÇÎµÈ ½º´ÏÆêÀÌ ÀÖÀ¸¸é
+        return snippet  # ¸ÅÇÎ ½º´ÏÆê ¹İÈ¯
+    if not USE_CATEGORY_SNIPPET:  # Ä«Å×°í¸® ½º´ÏÆê ºñÈ°¼ºÈ­¸é
+        return None  # ¹Ù·Î Á¾·á
+    if category:  # Ä«Å×°í¸®°¡ ÀÖÀ¸¸é
+        category_path = os.path.join(IAC_SNIPPET_DIR, f"{category}.tf")  # Ä«Å×°í¸® ½º´ÏÆê °æ·Î
+        snippet = _read_snippet_file(category_path)  # Ä«Å×°í¸® ½º´ÏÆê ÀĞ±â
+        if snippet:  # Ä«Å×°í¸® ½º´ÏÆêÀÌ ÀÖÀ¸¸é
+            return snippet  # Ä«Å×°í¸® ½º´ÏÆê ¹İÈ¯
+    default_path = os.path.join(IAC_SNIPPET_DIR, "default.tf")  # ±âº» ½º´ÏÆê °æ·Î
+    return _read_snippet_file(default_path)  # ±âº» ½º´ÏÆê ¹İÈ¯
 
 
 def make_remediation_prompt(row):
-    """finding ì •ë³´ë¥¼ ê¸°ë°˜ìœ¼ë¡œ Terraform ìƒì„± í”„ë¡¬í”„íŠ¸ë¥¼ êµ¬ì„±."""
+    """finding Á¤º¸¸¦ ±â¹İÀ¸·Î Terraform »ı¼º ÇÁ·ÒÇÁÆ®¸¦ ±¸¼º."""
     iam_guard = ""
     no_iam_create_guard = ""
     stable_guard = ""
@@ -3883,7 +3883,7 @@ Requirements:
 - Do NOT use placeholder names like "my-cloudtrail-bucket", "security-cloudtrail-logs", or "remediation-cloudtrail-bucket"
 - For CloudTrail/S3 findings, always use input variables (for example var.s3_bucket_name) instead of hardcoded bucket names
 - If existing resource identifiers are available in the finding, prefer those values over placeholders
-- Do NOT define data "aws_caller_identity" "current", data "aws_region" "current", or data "aws_partition" "current" â€” these are pre-provided by the framework. Just reference them directly (e.g., data.aws_caller_identity.current.account_id)
+- Do NOT define data "aws_caller_identity" "current", data "aws_region" "current", or data "aws_partition" "current" ? these are pre-provided by the framework. Just reference them directly (e.g., data.aws_caller_identity.current.account_id)
 - NEVER use provider aliases (no "provider = aws.xxx" in resources)
 - For IAM policies, use jsonencode() instead of heredoc (<<EOF) to avoid string termination issues
 - Add HCL comments (lines starting with #) explaining what the code does
@@ -3892,12 +3892,12 @@ Requirements:
 - For aws_s3_bucket: do NOT use deprecated "acl" argument or inline "server_side_encryption_configuration" block. Use separate resources: aws_s3_bucket_acl, aws_s3_bucket_server_side_encryption_configuration
 - For IAM user policy attachments: the "user" argument must be an IAM user name (string), NOT an ARN. Do NOT use data.aws_caller_identity.current.arn as a user name
 - For aws_iam_role_policy_attachment: use correct managed policy ARNs (e.g., "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"), NOT deprecated policy names
-- For aws_sns_topic_policy: the "arn" argument is REQUIRED â€” set it to the SNS topic ARN (e.g., aws_sns_topic.xxx.arn)
-- For aws_kms_key_policy: the "key_id" argument is REQUIRED â€” set it to the KMS key ID (e.g., aws_kms_key.xxx.id)
+- For aws_sns_topic_policy: the "arn" argument is REQUIRED ? set it to the SNS topic ARN (e.g., aws_sns_topic.xxx.arn)
+- For aws_kms_key_policy: the "key_id" argument is REQUIRED ? set it to the KMS key ID (e.g., aws_kms_key.xxx.id)
 - For aws_wafv2_web_acl: the "visibility_config" block is REQUIRED inside both the web ACL and each rule
 - For aws_backup_vault: do NOT use "lifecycle_rule" block (it doesn't exist). Lifecycle rules go in aws_backup_plan
-- Do NOT use the deprecated "aws_subnet_ids" data source â€” use "aws_subnets" instead
-- Do NOT use "aws_instance_profile_attachment" or "aws_ec2_instance_profile" resource types â€” they don't exist. Use "aws_iam_instance_profile" instead
+- Do NOT use the deprecated "aws_subnet_ids" data source ? use "aws_subnets" instead
+- Do NOT use "aws_instance_profile_attachment" or "aws_ec2_instance_profile" resource types ? they don't exist. Use "aws_iam_instance_profile" instead
 - For aws_instance: either "ami" or "launch_template" must be specified
 - For launch_template blocks inside aws_instance: either "id" or "name" must be specified
 - Do NOT index set-type attributes directly (e.g., vpc_security_group_ids[0]). Use tolist() first: tolist(data.xxx.vpc_security_group_ids)[0]
@@ -3908,25 +3908,25 @@ Requirements:
 Output the Terraform code:"""
 
 
-# ì¶œë ¥ ë””ë ‰í„°ë¦¬ ë³´ì¥
+# Ãâ·Â µğ·ºÅÍ¸® º¸Àå
 os.makedirs(args.output_dir, exist_ok=True)
 
-# P0/P1/P2 ìš°ì„ ìˆœìœ„ë§Œ ìë™ ë¦¬ë©”ë””ì—ì´ì…˜ ëŒ€ìƒ (P3ëŠ” ìˆ˜ë™)
+# P0/P1/P2 ¿ì¼±¼øÀ§¸¸ ÀÚµ¿ ¸®¸Şµğ¿¡ÀÌ¼Ç ´ë»ó (P3´Â ¼öµ¿)
 high_priority = df[df['priority'].isin(['P0', 'P1', 'P2'])]
-# check_idê°€ ë¹„ì–´ìˆëŠ” í–‰ì€ ì œì™¸
+# check_id°¡ ºñ¾îÀÖ´Â ÇàÀº Á¦¿Ü
 high_priority = high_priority[
     high_priority['check_id'].notna()
     & ~high_priority['check_id'].astype(str).str.strip().str.lower().isin(["", "nan", "none"])
 ]
 print(f"Found {len(high_priority)} high-priority findings (P0/P1/P2) out of {len(df)} total")
 
-# check_id ê¸°ì¤€ ì¤‘ë³µ ì œê±° (ê°™ì€ ì²´í¬ê°€ ì—¬ëŸ¬ ë¦¬ì†ŒìŠ¤ì— ë°˜ë³µë  ìˆ˜ ìˆìŒ)
+# check_id ±âÁØ Áßº¹ Á¦°Å (°°Àº Ã¼Å©°¡ ¿©·¯ ¸®¼Ò½º¿¡ ¹İº¹µÉ ¼ö ÀÖÀ½)
 unique_checks = high_priority.drop_duplicates(subset=['check_id'], keep='first')
 skipped_checks = [c for c in unique_checks['check_id'] if c in SKIP_CHECKS]
 unique_checks = unique_checks[~unique_checks['check_id'].isin(SKIP_CHECKS)]
 print(f"Unique check_ids: {len(unique_checks)} (skipped {len(skipped_checks)} non-terraform checks: {skipped_checks})")
 
-# ìë™ ì ìš© í—ˆìš© ëª©ë¡ í•„í„°
+# ÀÚµ¿ Àû¿ë Çã¿ë ¸ñ·Ï ÇÊÅÍ
 if AUTO_REMEDIATE_ALLOWLIST is None:
     print("Auto-remediation allowlist: * (all checks enabled)")
 else:
@@ -3938,10 +3938,10 @@ else:
         f"(filtered out {skipped_by_allowlist})"
     )
 
-# ìƒì„± ê²°ê³¼/í†µê³„
+# »ı¼º °á°ú/Åë°è
 generated = []
 bedrock_failures = 0
-_consolidated_files_written = set()   # CONSOLIDATE_CHECKSìš©: ì´ë¯¸ ê¸°ë¡í•œ íŒŒì¼ ì¶”ì 
+_consolidated_files_written = set()   # CONSOLIDATE_CHECKS¿ë: ÀÌ¹Ì ±â·ÏÇÑ ÆÄÀÏ ÃßÀû
 
 
 def _manifest_entry(row, category, source, output_path, validation_status="ok", error_message="", sanitizers_applied=None):
@@ -3961,41 +3961,41 @@ def _manifest_entry(row, category, source, output_path, validation_status="ok", 
 
 
 for _, row in unique_checks.iterrows():
-    # check_idë¥¼ íŒŒì¼ëª…ì— ì•ˆì „í•˜ê²Œ ì‚¬ìš©í•˜ë„ë¡ ë¬¸ì ì¹˜í™˜
+    # check_id¸¦ ÆÄÀÏ¸í¿¡ ¾ÈÀüÇÏ°Ô »ç¿ëÇÏµµ·Ï ¹®ÀÚ Ä¡È¯
     check_id = str(row.get('check_id', 'unknown')).replace('/', '-').replace(':', '-')
     category = categorize_check_id(row.get('check_id', ''))
 
-    # ìƒì„±ìš© í”„ë¡¬í”„íŠ¸ êµ¬ì„±
+    # »ı¼º¿ë ÇÁ·ÒÇÁÆ® ±¸¼º
     original_prompt = make_remediation_prompt(row)
 
-    # í…œí”Œë¦¿(IaC ìŠ¤ë‹ˆí«) ìš°ì„  ì ìš© ì˜µì…˜
-    # ì´ˆê¸° ì½”ë“œ ê²°ê³¼ëŠ” ì—†ìŒ
+    # ÅÛÇÃ¸´(IaC ½º´ÏÆê) ¿ì¼± Àû¿ë ¿É¼Ç
+    # ÃÊ±â ÄÚµå °á°ú´Â ¾øÀ½
     tf_code = None
-    # ê¸°ë³¸ ì†ŒìŠ¤ëŠ” bedrockìœ¼ë¡œ í‘œì‹œ
+    # ±âº» ¼Ò½º´Â bedrockÀ¸·Î Ç¥½Ã
     source = "bedrock"
-    # í…œí”Œë¦¿ ìš°ì„  ì˜µì…˜ì´ ì¼œì ¸ ìˆìœ¼ë©´ ìŠ¤ë‹ˆí«ë¶€í„° ì‹œë„
+    # ÅÛÇÃ¸´ ¿ì¼± ¿É¼ÇÀÌ ÄÑÁ® ÀÖÀ¸¸é ½º´ÏÆêºÎÅÍ ½Ãµµ
     if PREFER_IAC_SNIPPET:
-        # ì²´í¬ IDì— ë§¤í•‘ëœ ìŠ¤ë‹ˆí« ë¡œë“œ
-        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # ì²´í¬ ID/ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí« ì¡°íšŒ
-        # ìŠ¤ë‹ˆí«ì´ ìˆìœ¼ë©´ ì†ŒìŠ¤ë¥¼ ê°±ì‹ í•˜ê³  ë¡œê·¸ ì¶œë ¥
+        # Ã¼Å© ID¿¡ ¸ÅÇÎµÈ ½º´ÏÆê ·Îµå
+        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # Ã¼Å© ID/Ä«Å×°í¸® ½º´ÏÆê Á¶È¸
+        # ½º´ÏÆêÀÌ ÀÖÀ¸¸é ¼Ò½º¸¦ °»½ÅÇÏ°í ·Î±× Ãâ·Â
         if tf_code:
             source = "iac_snippet"
             print(f"IaC snippet used for: {check_id}")
 
-    # IaC ìŠ¤ë‹ˆí«ì´ ì—†ê±°ë‚˜ ë¹„í™œì„±ì¸ ê²½ìš° Bedrock ì‚¬ìš©
+    # IaC ½º´ÏÆêÀÌ ¾ø°Å³ª ºñÈ°¼ºÀÎ °æ¿ì Bedrock »ç¿ë
     if not tf_code:
-        # Bedrockìœ¼ë¡œ ì½”ë“œ ìƒì„± ì‹œë„
+        # BedrockÀ¸·Î ÄÚµå »ı¼º ½Ãµµ
         tf_code = call_bedrock(original_prompt)
-        # ì†ŒìŠ¤ëŠ” bedrockìœ¼ë¡œ ìœ ì§€
+        # ¼Ò½º´Â bedrockÀ¸·Î À¯Áö
         source = "bedrock"
 
-    # Bedrock ì‹¤íŒ¨ ì‹œ IaC ìŠ¤ë‹ˆí«ìœ¼ë¡œ ëŒ€ì²´
+    # Bedrock ½ÇÆĞ ½Ã IaC ½º´ÏÆêÀ¸·Î ´ëÃ¼
     if not tf_code:
-        # Bedrock ì‹¤íŒ¨ ì¹´ìš´íŠ¸ ì¦ê°€
+        # Bedrock ½ÇÆĞ Ä«¿îÆ® Áõ°¡
         bedrock_failures += 1
-        # ìŠ¤ë‹ˆí«ìœ¼ë¡œ ëŒ€ì²´ ì‹œë„
-        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # ì²´í¬ ID/ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí« ì¡°íšŒ
-        # ìŠ¤ë‹ˆí«ì´ ìˆìœ¼ë©´ ì†ŒìŠ¤ ê°±ì‹  ë° ë¡œê·¸ ì¶œë ¥
+        # ½º´ÏÆêÀ¸·Î ´ëÃ¼ ½Ãµµ
+        tf_code = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # Ã¼Å© ID/Ä«Å×°í¸® ½º´ÏÆê Á¶È¸
+        # ½º´ÏÆêÀÌ ÀÖÀ¸¸é ¼Ò½º °»½Å ¹× ·Î±× Ãâ·Â
         if tf_code:
             source = "iac_snippet"
             print(f"Fallback IaC snippet used for: {check_id}")
@@ -4031,15 +4031,15 @@ for _, row in unique_checks.iterrows():
             print(f"SKIP {check_id}: {reason}")
             continue
 
-        # terraform fmtë¡œ í¬ë§·íŒ…
+        # terraform fmt·Î Æ÷¸ËÆÃ
         tf_code = _terraform_fmt(tf_code)
 
-        # ìƒì„± ì½”ë“œ ê²€ì¦ + ìë™ ìˆ˜ì •(ê°€ë“œë ˆì¼) ì ìš©
+        # »ı¼º ÄÚµå °ËÁõ + ÀÚµ¿ ¼öÁ¤(°¡µå·¹ÀÏ) Àû¿ë
         ok, tf_code, err = validate_with_autofix(tf_code, row=row)
 
-        # Bedrock ì½”ë“œê°€ ì‹¤íŒ¨í•˜ë©´ IaC ìŠ¤ë‹ˆí«ìœ¼ë¡œ ì¬ì‹œë„
+        # Bedrock ÄÚµå°¡ ½ÇÆĞÇÏ¸é IaC ½º´ÏÆêÀ¸·Î Àç½Ãµµ
         if not ok and source == "bedrock":
-            fallback = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # ì²´í¬ ID/ì¹´í…Œê³ ë¦¬ ìŠ¤ë‹ˆí« ì¡°íšŒ
+            fallback = fallback_from_iac_snippet(str(row.get('check_id', '')), category)  # Ã¼Å© ID/Ä«Å×°í¸® ½º´ÏÆê Á¶È¸
             if fallback:
                 fb_code, fb_flags = sanitize_tf_code_v2(fallback, row=row)
                 sanitize_flags = _merge_sanitize_flags(sanitize_flags, fb_flags)
@@ -4052,7 +4052,7 @@ for _, row in unique_checks.iterrows():
                         tf_code = fb_code
                         source = "iac_snippet"
 
-        # ì—¬ì „íˆ ì‹¤íŒ¨í•˜ë©´ Bedrock ìˆ˜ì • ìš”ì²­ ì¬ì‹œë„
+        # ¿©ÀüÈ÷ ½ÇÆĞÇÏ¸é Bedrock ¼öÁ¤ ¿äÃ» Àç½Ãµµ
         if not ok:
             for attempt in range(1, MAX_RETRIES + 1):
                 print(f"  validate FAILED (attempt {attempt}/{MAX_RETRIES}): {err[:500]}")
@@ -4086,7 +4086,7 @@ for _, row in unique_checks.iterrows():
             print(f"SKIP {check_id}: plan/validate failed")
             continue
 
-        # resource/data ë¸”ë¡ì´ í•˜ë‚˜ë„ ì—†ìœ¼ë©´ skip (ì£¼ì„ë§Œ ë‚¨ì€ ê²½ìš°)
+        # resource/data ºí·ÏÀÌ ÇÏ³ªµµ ¾øÀ¸¸é skip (ÁÖ¼®¸¸ ³²Àº °æ¿ì)
         if not re.search(r'^\s*(resource|data)\s+"', tf_code, re.MULTILINE):
             generated.append(
                 _manifest_entry(
@@ -4102,11 +4102,11 @@ for _, row in unique_checks.iterrows():
             print(f"SKIP {check_id}: no resource/data blocks")
             continue
 
-        # singleton í†µí•© ëŒ€ìƒì´ë©´ í•˜ë‚˜ì˜ íŒŒì¼ë¡œ ë³‘í•©
+        # singleton ÅëÇÕ ´ë»óÀÌ¸é ÇÏ³ªÀÇ ÆÄÀÏ·Î º´ÇÕ
         if consolidated_file:
             tracking_key = f"{category}/{filename}"
             if tracking_key in _consolidated_files_written:
-                # ì´ë¯¸ ê¸°ë¡ë¨ â†’ manifestì—ë§Œ ì¶”ê°€
+                # ÀÌ¹Ì ±â·ÏµÊ ¡æ manifest¿¡¸¸ Ãß°¡
                 generated.append(
                     _manifest_entry(
                         row=row,
@@ -4122,7 +4122,7 @@ for _, row in unique_checks.iterrows():
                 continue
             _consolidated_files_written.add(tracking_key)
 
-        # .tf íŒŒì¼ë¡œ ì¹´í…Œê³ ë¦¬ ì„œë¸Œí´ë”ì— ì €ì¥
+        # .tf ÆÄÀÏ·Î Ä«Å×°í¸® ¼­ºêÆú´õ¿¡ ÀúÀå
         category_dir = os.path.join(args.output_dir, category)
         os.makedirs(category_dir, exist_ok=True)
         filepath = os.path.join(category_dir, filename)
@@ -4143,7 +4143,7 @@ for _, row in unique_checks.iterrows():
     else:
         print(f"SKIP (no Bedrock response and no IaC snippet): {check_id}")
 
-# ìƒì„± íŒŒì¼ ëª©ë¡ì„ manifest.jsonìœ¼ë¡œ ì €ì¥
+# »ı¼º ÆÄÀÏ ¸ñ·ÏÀ» manifest.jsonÀ¸·Î ÀúÀå
 with open(os.path.join(args.output_dir, 'manifest.json'), 'w') as f:
     json.dump(generated, f, indent=2)
 

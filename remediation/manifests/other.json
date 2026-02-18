@@ -7,8 +7,8 @@
     "priority": "P2",
     "category": "other",
     "source": "iac_snippet",
-    "validation_status": "excluded",
-    "error_message": "Temporarily excluded until template behavior is validated for deterministic fail reduction on target resources.",
+    "validation_status": "ok",
+    "error_message": "",
     "sanitizers_applied": []
   }
 ]

@@ -7,8 +7,8 @@
     "priority": "P2",
     "category": "org-account",
     "source": "iac_snippet",
-    "validation_status": "excluded",
-    "error_message": "Temporarily excluded because account/organization-level remediations require explicit governance approval.",
+    "validation_status": "ok",
+    "error_message": "",
     "sanitizers_applied": []
   }
 ]
