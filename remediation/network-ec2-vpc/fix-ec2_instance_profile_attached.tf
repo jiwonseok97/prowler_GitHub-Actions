@@ -1,4 +1,4 @@
-#Attach an IAM instance profile to the EC2 instance
+# Attach an IAM instance profile to the EC2 instance
 data "aws_iam_instance_profile" "remediation_instance_profile" {
   name = "remediation-instance-profile"
 }
@@ -9,7 +9,6 @@ resource "aws_instance" "remediation_instance" {
   iam_instance_profile = var.iam_instance_profile_name
 }
 
-#Use an existing IAM role that has the required permissions
 data "aws_iam_role" "existing_role" {
   name = "existing-role-name"
 }
