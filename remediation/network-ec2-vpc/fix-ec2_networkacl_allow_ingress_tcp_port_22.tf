@@ -1,34 +1,11 @@
-# Modify the existing Network ACL to restrict SSH access from the internet
-resource "aws_network_acl" "remediation_network_acl" {
-  vpc_id = var.vpc_id
-  subnet_ids = data.aws_subnets.current.ids
-
-  ingress {
-    from_port  = 22
-    to_port    = 22
-    rule_no    = 100
-    protocol   = "tcp"
-    cidr_block = "10.0.0.0/8"
-    action     = "allow"
-  }
-
-  egress {
-    from_port  = 0
-    to_port    = 0
-    rule_no    = 100
-    protocol   = "-1"
-    cidr_block = "0.0.0.0/0"
-    action     = "allow"
-  }
-}
-
-# Look up the existing Network ACL
-
-data "aws_subnets" "current" {
-}
-
-variable "vpc_id" {
-  description = "Target VPC ID"
-  type        = string
-  default     = ""
+#Update the Network ACL to remove the allow rule for TCP port 22 from 0.0.0.0/0
+resource "aws_network_acl_rule" "remediation_remove_ssh_access" {
+  network_acl_id = "acl-0572e1ab82993bb20"
+  rule_number    = 100
+  egress         = false
+  protocol       = "tcp"
+  rule_action    = "deny"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 22
+  to_port        = 22
 }
