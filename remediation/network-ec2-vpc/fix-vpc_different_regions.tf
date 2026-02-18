@@ -1,22 +1,20 @@
 # Create a new VPC in a different region
 resource "aws_vpc" "remediation_vpc" {
   cidr_block = "10.0.0.0/16"
-  tags = {
-    Name = "Remediation VPC"
-  }
+  region     = "us-west-2"
 }
 
 # Create subnets in the new VPC
 resource "aws_subnet" "remediation_subnet_1" {
-  vpc_id            = aws_vpc.remediation_vpc.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "ap-northeast-1a"
+  vpc_id     = aws_vpc.remediation_vpc.id
+  cidr_block = "10.0.1.0/24"
+  region     = "us-west-2"
 }
 
 resource "aws_subnet" "remediation_subnet_2" {
-  vpc_id            = aws_vpc.remediation_vpc.id
-  cidr_block        = "10.0.2.0/24"
-  availability_zone = "ap-northeast-1b"
+  vpc_id     = aws_vpc.remediation_vpc.id
+  cidr_block = "10.0.2.0/24"
+  region     = "us-west-2"
 }
 
 # Create an internet gateway for the new VPC

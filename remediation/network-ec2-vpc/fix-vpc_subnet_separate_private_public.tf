@@ -1,4 +1,4 @@
-#Create a new public subnet in the existing VPC
+# Create a new public subnet in the existing VPC
 resource "aws_subnet" "remediation_public_subnet" {
   vpc_id            = "vpc-0565167ce4f7cc871"
   cidr_block        = "10.0.1.0/24"
@@ -9,7 +9,7 @@ resource "aws_subnet" "remediation_public_subnet" {
   }
 }
 
-#Create a new private subnet in the existing VPC
+# Create a new private subnet in the existing VPC
 resource "aws_subnet" "remediation_private_subnet" {
   vpc_id            = "vpc-0565167ce4f7cc871"
   cidr_block        = "10.0.2.0/24"
@@ -20,7 +20,7 @@ resource "aws_subnet" "remediation_private_subnet" {
   }
 }
 
-#Create a new internet gateway and attach it to the VPC
+# Create a new internet gateway and attach it to the VPC
 resource "aws_internet_gateway" "remediation_igw" {
   vpc_id = "vpc-0565167ce4f7cc871"
 
@@ -29,7 +29,7 @@ resource "aws_internet_gateway" "remediation_igw" {
   }
 }
 
-#Create a new route table for the public subnet and associate it with the internet gateway
+# Create a new route table for the public subnet and associate it
 resource "aws_route_table" "remediation_public_rt" {
   vpc_id = "vpc-0565167ce4f7cc871"
 
@@ -48,7 +48,7 @@ resource "aws_route_table_association" "remediation_public_subnet_rt_association
   route_table_id = aws_route_table.remediation_public_rt.id
 }
 
-#Create a new NAT gateway and elastic IP for the private subnet
+# Create a new NAT gateway and elastic IP for the private subnet
 resource "aws_eip" "remediation_nat_eip" {
   count = 1
 }
@@ -62,13 +62,12 @@ resource "aws_nat_gateway" "remediation_nat_gw" {
   }
 }
 
-#Create a new route table for the private subnet and associate it with the NAT gateway
+# Create a new route table for the private subnet and associate it
 resource "aws_route_table" "remediation_private_rt" {
   vpc_id = "vpc-0565167ce4f7cc871"
 
   route {
     cidr_block     = "0.0.0.0/0"
-    gateway_id     = aws_nat_gateway.remediation_nat_gw.id
     nat_gateway_id = aws_nat_gateway.remediation_nat_gw.id
   }
 

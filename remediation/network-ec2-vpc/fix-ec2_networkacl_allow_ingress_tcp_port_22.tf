@@ -1,6 +1,6 @@
 # Modify the existing Network ACL to restrict SSH access from the internet
 resource "aws_network_acl" "remediation_network_acl" {
-  vpc_id = var.vpc_id
+  vpc_id     = var.vpc_id
   subnet_ids = data.aws_subnets.current.ids
 
   ingress {
@@ -22,9 +22,13 @@ resource "aws_network_acl" "remediation_network_acl" {
   }
 }
 
-# Look up the existing Network ACL
+# Look up the existing VPC and subnets
 
 data "aws_subnets" "current" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
 }
 
 variable "vpc_id" {
