@@ -12,6 +12,7 @@ resource "aws_sns_topic" "remediation_security_alerts" {
 }
 
 resource "aws_sns_topic_policy" "remediation_security_alerts_policy" {
+  arn = aws_sns_topic.remediation_security_alerts.arn
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -24,7 +25,6 @@ resource "aws_sns_topic_policy" "remediation_security_alerts_policy" {
       }
     ]
   })
-  arn = aws_sns_topic.remediation_security_alerts.arn
 }
 
 # Metric filter for security events
