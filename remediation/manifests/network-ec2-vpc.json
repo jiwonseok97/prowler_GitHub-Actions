@@ -1,5 +1,17 @@
 [
   {
+    "check_id": "ec2_networkacl_allow_ingress_tcp_port_22",
+    "check_title": "Network ACL does not allow ingress from the Internet to TCP port 22 (SSH)",
+    "output_path": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_22.tf",
+    "file": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_22.tf",
+    "priority": "P2",
+    "category": "network-ec2-vpc",
+    "source": "bedrock",
+    "validation_status": "ok",
+    "error_message": "",
+    "sanitizers_applied": []
+  },
+  {
     "check_id": "ec2_networkacl_allow_ingress_tcp_port_3389",
     "check_title": "Network ACL does not allow ingress from the Internet to TCP port 3389 (RDP)",
     "output_path": "network-ec2-vpc/fix-ec2_networkacl_allow_ingress_tcp_port_3389.tf",
