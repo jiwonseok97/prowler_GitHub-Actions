@@ -3938,6 +3938,19 @@ else:
         f"(filtered out {skipped_by_allowlist})"
     )
 
+# score.py의 remediation_class 기반 필터
+# MANUAL_REQUIRED 체크(vpc/subnet/iam_user/access_key 등)는 Terraform으로 해결 불가 → PR 생성 제외
+# PATCH_SAFE / PATCH_RISKY 만 PR 대상 (실제 FAIL 감소 가능)
+if "remediation_class" in unique_checks.columns:
+    before_count = len(unique_checks)
+    unique_checks = unique_checks[unique_checks["remediation_class"] != "MANUAL_REQUIRED"]
+    skipped_manual = before_count - len(unique_checks)
+    if skipped_manual:
+        print(f"Skipped {skipped_manual} MANUAL_REQUIRED checks (not fixable via Terraform)")
+    print(f"Remaining after remediation_class filter: {len(unique_checks)}")
+else:
+    print("remediation_class column not found — skipping class-based filter (run score.py first)")
+
 # 생성 결과/통계
 generated = []
 bedrock_failures = 0
