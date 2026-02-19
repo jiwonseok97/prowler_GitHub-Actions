@@ -1,28 +1,40 @@
-#Update the Network ACL to remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
+# Modify the existing Network ACL to restrict SSH access from the internet
 resource "aws_network_acl" "remediation_network_acl" {
   vpc_id     = var.vpc_id
   subnet_ids = data.aws_subnets.current.ids
 
-  ingress {
-    from_port  = 0
-    to_port    = 0
-    rule_no    = 100
-    action     = "allow"
-    protocol   = "-1"
-    cidr_block = "0.0.0.0/0"
-  }
-
+  # Allow all outbound traffic
   egress {
     from_port  = 0
     to_port    = 0
     rule_no    = 100
-    action     = "allow"
     protocol   = "-1"
     cidr_block = "0.0.0.0/0"
+    action     = "allow"
+  }
+
+  # Deny inbound SSH access from the internet
+  ingress {
+    from_port  = 22
+    to_port    = 22
+    rule_no    = 100
+    protocol   = "tcp"
+    cidr_block = "0.0.0.0/0"
+    action     = "deny"
+  }
+
+  # Allow all other inbound traffic
+  ingress {
+    from_port  = 0
+    to_port    = 0
+    rule_no    = 200
+    protocol   = "-1"
+    cidr_block = "0.0.0.0/0"
+    action     = "allow"
   }
 
   tags = {
-    Name = "remediation-network-acl"
+    Name = "remediation_network_acl"
   }
 }
 
