@@ -1,23 +1,41 @@
-# Update the Network ACL to remove the allow rule for TCP port 22 (SSH) from 0.0.0.0/0
-resource "aws_network_acl_rule" "remediation_remove_ssh_access" {
-  network_acl_id = "acl-0572e1ab82993bb20"
-  rule_number    = 100
-  egress         = false
-  protocol       = "tcp"
-  rule_action    = "deny"
-  cidr_block     = "0.0.0.0/0"
-  from_port      = 22
-  to_port        = 22
+# Modify the existing Network ACL to restrict SSH access from the internet
+resource "aws_network_acl" "remediation_network_acl" {
+  vpc_id     = var.vpc_id
+  subnet_ids = data.aws_subnets.current.ids
+
+  ingress {
+    rule_no    = 100
+    from_port  = 22
+    to_port    = 22
+    protocol   = "tcp"
+    cidr_block = "0.0.0.0/0"
+    action     = "deny"
+  }
+
+  egress {
+    rule_no    = 100
+    from_port  = 0
+    to_port    = 0
+    protocol   = "-1"
+    cidr_block = "0.0.0.0/0"
+    action     = "allow"
+  }
+
+  tags = {
+    Name = "remediation-network-acl"
+  }
 }
 
-# Add a new Network ACL rule to allow SSH access only from trusted sources
-resource "aws_network_acl_rule" "remediation_allow_ssh_from_trusted" {
-  network_acl_id = "acl-0572e1ab82993bb20"
-  rule_number    = 200
-  egress         = false
-  protocol       = "tcp"
-  rule_action    = "allow"
-  cidr_block     = "10.0.0.0/8" # Replace with your trusted CIDR block
-  from_port      = 22
-  to_port        = 22
+
+data "aws_subnets" "current" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
+}
+
+variable "vpc_id" {
+  description = "Target VPC ID"
+  type        = string
+  default     = ""
 }
