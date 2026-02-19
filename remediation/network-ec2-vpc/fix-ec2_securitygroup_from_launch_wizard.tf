@@ -31,8 +31,6 @@ resource "aws_network_interface_sg_attachment" "remediation_sg_attachment" {
   network_interface_id = var.network_interface_id
 }
 
-# Data sources to look up existing resources
-
 variable "network_interface_id" {
   description = "Target network interface ID"
   type        = string
