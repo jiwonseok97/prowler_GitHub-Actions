@@ -32,7 +32,8 @@ import_resource() {
 
   # 코드에 해당 resource가 없으면 skip
   local rtype=$(echo "$addr" | cut -d'.' -f1)
-  local rname=$(echo "$addr" | cut -d'.' -f2)
+  local rname_full=$(echo "$addr" | cut -d'.' -f2-)
+  local rname=$(echo "$rname_full" | sed 's/\[.*$//')
   if ! grep -rEq "resource\s+\"$rtype\"\s+\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null; then
     echo "  SKIP import $addr (resource not declared in .tf files)"
     return 0
@@ -94,9 +95,16 @@ for t in d.get('cloudtrail',{}).get('trails',[]):
 for trail_info in $trail_arns; do
   trail_arn=$(echo "$trail_info" | cut -d'|' -f1)
   trail_name=$(echo "$trail_info" | cut -d'|' -f2)
-  trail_bucket=$(echo "$trail_info" | cut -d'|' -f3)
   [ -z "$trail_arn" ] && continue
-  # Find any aws_cloudtrail resource in the .tf files
+  [ -z "$trail_name" ] && continue
+
+  # Preferred path: for_each resource address by trail name.
+  if grep -rEq 'resource\s+"aws_cloudtrail"\s+"remediation_existing"' "$WORK_DIR"/*.tf 2>/dev/null; then
+    import_resource "aws_cloudtrail.remediation_existing[\"$trail_name\"]" "$trail_arn"
+    continue
+  fi
+
+  # Legacy path: single-resource cloudtrail snippet.
   for rname in $(grep -rEoh 'resource\s+"aws_cloudtrail"\s+"([^"]+)"' "$WORK_DIR"/*.tf 2>/dev/null | \
                  sed 's/resource\s*"aws_cloudtrail"\s*"//;s/"//g' || true); do
     import_resource "aws_cloudtrail.$rname" "$trail_arn"
@@ -161,7 +169,7 @@ if [ "$sh_enabled" = "True" ] || [ "$sh_enabled" = "true" ]; then
 fi
 
 # ── S3 Buckets and sub-resources ─────────────────────
-# Determine the target bucket from discovery (same logic as generate_tfvars.py)
+# Determine CloudTrail buckets and fallback target bucket from discovery.
 target_bucket=$(python3 -c "
 import json
 d = json.load(open('$DISCOVERY'))
@@ -171,15 +179,20 @@ trails = d.get('cloudtrail',{}).get('trails',[])
 buckets = d.get('s3',{}).get('buckets',[])
 # Primary: CloudTrail log bucket from trail config
 ct_bucket = ''
+ct_buckets = []
 for t in trails:
     b = t.get('S3BucketName','')
     if b:
-        ct_bucket = b
-        break
+        if b not in ct_buckets:
+            ct_buckets.append(b)
+        if not ct_bucket:
+            ct_bucket = b
 if not ct_bucket:
     for b in buckets:
         if 'cloudtrail' in b:
             ct_bucket = b
+            if b not in ct_buckets:
+                ct_buckets.append(b)
             break
 # Fallback: first non-state bucket
 first_bucket = ''
@@ -187,12 +200,13 @@ for b in buckets:
     if b != state_bucket:
         first_bucket = b
         break
-# Print cloudtrail bucket and first bucket (pipe-separated)
-print(f'{ct_bucket}|{first_bucket}')
+# Print cloudtrail primary bucket, first non-state bucket, and all ct buckets.
+print(f'{ct_bucket}|{first_bucket}|{",".join(ct_buckets)}')
 " 2>/dev/null || echo "|")
 
 ct_target=$(echo "$target_bucket" | cut -d'|' -f1)
 s3_target=$(echo "$target_bucket" | cut -d'|' -f2)
+ct_targets_csv=$(echo "$target_bucket" | cut -d'|' -f3)
 
 # S3 resource types that use bucket name as import ID
 S3_SUB_TYPES=(
@@ -208,12 +222,24 @@ S3_SUB_TYPES=(
 # Use the CloudTrail bucket as primary target (most remediation files target it)
 # Fall back to first non-state bucket
 import_bucket="${ct_target:-$s3_target}"
+IFS=',' read -r -a ct_targets <<< "${ct_targets_csv:-}"
 
-if [ -n "$import_bucket" ]; then
+if [ -n "$import_bucket" ] || [ "${#ct_targets[@]}" -gt 0 ]; then
   for s3type in "${S3_SUB_TYPES[@]}"; do
     for rname in $(grep -rEoh "resource\s+\"$s3type\"\s+\"([^\"]+)\"" "$WORK_DIR"/*.tf 2>/dev/null | \
                    sed "s/resource\s*\"$s3type\"\s*\"//;s/\"//g" || true); do
-      import_resource "$s3type.$rname" "$import_bucket"
+      if grep -A20 -E "resource\s+\"$s3type\"\s+\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null | grep -q "for_each"; then
+        if [ "${#ct_targets[@]}" -gt 0 ]; then
+          for bucket in "${ct_targets[@]}"; do
+            [ -z "$bucket" ] && continue
+            import_resource "$s3type.$rname[\"$bucket\"]" "$bucket"
+          done
+        elif [ -n "$import_bucket" ]; then
+          import_resource "$s3type.$rname[\"$import_bucket\"]" "$import_bucket"
+        fi
+      elif [ -n "$import_bucket" ]; then
+        import_resource "$s3type.$rname" "$import_bucket"
+      fi
     done
   done
 fi

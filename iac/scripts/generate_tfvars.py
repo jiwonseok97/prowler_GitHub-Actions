@@ -210,10 +210,16 @@ def generate(
                 ct_bucket = bucket
                 break
 
-    # Find the access-logging target bucket (usually ends with -logs).
+    # Find the access-logging target bucket.
     log_bucket = ""
     for bucket in buckets:
-        if bucket.endswith("-logs"):
+        b = str(bucket).lower()
+        if (
+            b.endswith("-logs")
+            or "-logs-" in b
+            or b.startswith("aws-cloudtrail-logs-")
+            or "access-log" in b
+        ):
             log_bucket = bucket
             break
 
@@ -242,6 +248,17 @@ def generate(
                 break
 
     if category == "cloudtrail":
+        # Include all discovered trails to avoid fixing only one trail in multi-trail accounts.
+        trail_map: dict[str, str] = {}
+        for trail in trails:
+            name = str(trail.get("Name", "")).strip()
+            bucket = str(trail.get("S3BucketName", "")).strip()
+            if name and bucket:
+                trail_map[name] = bucket
+        if "cloudtrail_trails" in refs and trail_map:
+            vals["cloudtrail_trails"] = trail_map
+
+        # Legacy single-trail variables are still populated for backward compatibility.
         if "s3_bucket_name" in refs and ct_bucket:
             vals["s3_bucket_name"] = ct_bucket
         if "s3_bucket_arn" in refs and ct_bucket:
@@ -341,6 +358,16 @@ def write_tfvars(vals: dict, work_dir: str) -> None:
         if isinstance(value, list):
             items = ", ".join(f'"{str(x)}"' for x in value)
             lines.append(f"{key} = [{items}]")
+        elif isinstance(value, dict):
+            if not value:
+                lines.append(f"{key} = {{}}")
+            else:
+                lines.append(f"{key} = {{")
+                for k in sorted(value.keys()):
+                    kk = str(k).replace("\\", "\\\\").replace('"', '\\"')
+                    vv = str(value[k]).replace("\\", "\\\\").replace('"', '\\"')
+                    lines.append(f'  "{kk}" = "{vv}"')
+                lines.append("}")
         else:
             escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
             lines.append(f'{key} = "{escaped}"')

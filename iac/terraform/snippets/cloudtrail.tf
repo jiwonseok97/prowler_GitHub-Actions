@@ -2,14 +2,22 @@
 # Enables: log file validation, multi-region, CloudWatch Logs integration
 # Also hardens the trail's S3 bucket (versioning, encryption, public access)
 
+variable "cloudtrail_trails" {
+  description = "Map of CloudTrail trail name => S3 log bucket name"
+  type        = map(string)
+  default     = {}
+}
+
+# Backward compatibility for old generated tfvars.
 variable "cloudtrail_name" {
-  description = "Existing CloudTrail trail name to harden"
+  description = "Legacy: single CloudTrail trail name"
   type        = string
   default     = ""
 }
 
+# Backward compatibility for old generated tfvars.
 variable "s3_bucket_name" {
-  description = "Existing CloudTrail log bucket name"
+  description = "Legacy: single CloudTrail log bucket name"
   type        = string
   default     = ""
 }
@@ -33,11 +41,14 @@ variable "log_bucket_name" {
 }
 
 locals {
-  trail_enabled    = var.cloudtrail_name != ""
-  bucket_enabled   = var.s3_bucket_name != ""
+  legacy_trails    = var.cloudtrail_name != "" ? { (var.cloudtrail_name) = var.s3_bucket_name } : {}
+  trail_map        = length(var.cloudtrail_trails) > 0 ? var.cloudtrail_trails : local.legacy_trails
+  trail_enabled    = length(local.trail_map) > 0
+  bucket_names     = toset([for b in values(local.trail_map) : b if b != ""])
+  bucket_enabled   = length(local.bucket_names) > 0
   use_existing_lg  = var.cloudwatch_log_group_name != ""
   kms_enabled      = var.kms_key_id != ""
-  logging_enabled  = var.log_bucket_name != "" && var.log_bucket_name != var.s3_bucket_name
+  logging_enabled  = var.log_bucket_name != ""
   # Fixed name shared with cloudwatch_cis_filters.tf
   ct_log_group_name = local.use_existing_lg ? var.cloudwatch_log_group_name : "/cloudtrail/remediation"
 }
@@ -84,10 +95,10 @@ resource "aws_iam_role_policy" "remediation_ct_cw" {
 # ── Harden existing CloudTrail trail ───────────────────────────────────────
 # auto_import.sh imports this using the existing trail ARN
 resource "aws_cloudtrail" "remediation_existing" {
-  count = local.trail_enabled ? 1 : 0
+  for_each = local.trail_map
 
-  name           = var.cloudtrail_name
-  s3_bucket_name = var.s3_bucket_name
+  name           = each.key
+  s3_bucket_name = each.value
 
   enable_log_file_validation    = true
   is_multi_region_trail         = true
@@ -107,22 +118,22 @@ resource "aws_cloudtrail" "remediation_existing" {
 
 # ── S3 bucket hardening ────────────────────────────────────────────────────
 resource "aws_s3_bucket_versioning" "remediation_cloudtrail_logs_versioning" {
-  count  = local.bucket_enabled ? 1 : 0
-  bucket = var.s3_bucket_name
+  for_each = local.bucket_names
+  bucket   = each.value
   versioning_configuration { status = "Enabled" }
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_cloudtrail_logs_encryption" {
-  count  = local.bucket_enabled ? 1 : 0
-  bucket = var.s3_bucket_name
+  for_each = local.bucket_names
+  bucket   = each.value
   rule {
     apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
   }
 }
 
 resource "aws_s3_bucket_public_access_block" "remediation_cloudtrail_logs_public_access_block" {
-  count                   = local.bucket_enabled ? 1 : 0
-  bucket                  = var.s3_bucket_name
+  for_each                = local.bucket_names
+  bucket                  = each.value
   block_public_acls       = true
   ignore_public_acls      = true
   block_public_policy     = true
@@ -130,8 +141,8 @@ resource "aws_s3_bucket_public_access_block" "remediation_cloudtrail_logs_public
 }
 
 resource "aws_s3_bucket_logging" "remediation_cloudtrail_logs_access_logging" {
-  count         = local.bucket_enabled && local.logging_enabled ? 1 : 0
-  bucket        = var.s3_bucket_name
+  for_each      = local.logging_enabled ? { for b in local.bucket_names : b => b if b != var.log_bucket_name } : {}
+  bucket        = each.value
   target_bucket = var.log_bucket_name
   target_prefix = "cloudtrail-access/"
 }
