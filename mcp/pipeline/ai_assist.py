@@ -27,9 +27,9 @@ import os
 import pandas as pd
 
 try:
-import boto3
+    import boto3
 except Exception:
-boto3 = None  # boto3 미설치 환경에서도 fallback 동작
+    boto3 = None  # boto3 미설치 환경에서도 fallback 동작
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", required=True)
