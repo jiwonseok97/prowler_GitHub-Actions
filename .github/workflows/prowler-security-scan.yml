@@ -347,11 +347,20 @@ jobs:
 
           # manifest.json에서 카테고리 목록 추출
           CATEGORIES=$(python3 -c "
-          import json, sys
+          import json, os
           with open('$TMPGEN/manifest.json') as f:
               items = json.load(f)
-          cats = sorted(set(item['category'] for item in items))
-          for c in cats:
+          cats = set()
+          for item in items:
+              if str(item.get('validation_status', 'ok')).strip().lower() == 'excluded':
+                  continue
+              p = str(item.get('file') or item.get('output_path') or '').strip()
+              if not p:
+                  continue
+              if not os.path.exists(os.path.join('$TMPGEN', p)):
+                  continue
+              cats.add(str(item.get('category', '')).strip())
+          for c in sorted(x for x in cats if x):
               print(c)
           ")
 

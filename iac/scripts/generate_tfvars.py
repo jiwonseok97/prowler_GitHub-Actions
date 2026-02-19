@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""generate_tfvars.py — Populate variable values from AWS discovery data.
+"""generate_tfvars.py - Populate variable values from AWS discovery data.
 
 Reads preflight_discovery.sh output and writes a discovery.auto.tfvars file
 into the Terraform work directory. This replaces default="" with real values
-so that count guards (e.g. count = var.s3_bucket_name != "" ? 1 : 0) evaluate
-to count=1 instead of count=0.
+so that count guards evaluate to resource creation paths.
 
-Usage: python3 generate_tfvars.py <discovery_json> <work_dir> <category>
+Usage: python3 generate_tfvars.py <discovery_json> <work_dir> <category> [manifest_json]
 """
 import json
 import os
@@ -53,10 +52,99 @@ def find_declared_vars(work_dir: str) -> set[str]:
     return declared
 
 
-def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
+def _trail_name_from_arn(arn: str) -> str:
+    if not arn:
+        return ""
+    m = re.search(r":trail/([^:/]+)$", arn)
+    return m.group(1) if m else ""
+
+
+def _bucket_name_from_arn(arn: str) -> str:
+    if not arn:
+        return ""
+    m = re.search(r"^arn:aws:s3:::([^/]+)", arn)
+    return m.group(1) if m else ""
+
+
+def _log_group_name_from_arn(arn: str) -> str:
+    if not arn:
+        return ""
+    m = re.search(r":log-group:([^:*]+)", arn)
+    return m.group(1) if m else ""
+
+
+def load_manifest_targets(path: str, category: str) -> dict[str, list[str]]:
+    targets = {"trail_names": [], "bucket_names": [], "log_group_names": []}
+    if not path:
+        return targets
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            items = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+        print(f"WARN: Cannot load manifest targets: {e}")
+        return targets
+
+    for item in items:
+        if str(item.get("category", "")).strip() != category:
+            continue
+        if str(item.get("validation_status", "ok")).strip().lower() == "excluded":
+            continue
+
+        check_id = str(item.get("check_id", "")).strip()
+        resource_name = str(item.get("resource_name", "")).strip()
+        resource_arn = str(item.get("resource_arn", "")).strip()
+        resource_uid = str(item.get("resource_uid", "")).strip()
+
+        if category == "cloudtrail" and check_id.startswith("cloudtrail_"):
+            trail_name = resource_name or _trail_name_from_arn(resource_arn) or _trail_name_from_arn(resource_uid)
+            if trail_name:
+                targets["trail_names"].append(trail_name)
+
+        if category == "s3" and check_id.startswith("s3_"):
+            bucket = resource_name or _bucket_name_from_arn(resource_arn) or _bucket_name_from_arn(resource_uid)
+            if bucket:
+                targets["bucket_names"].append(bucket)
+
+        if category == "cloudwatch" and check_id.startswith("cloudwatch_"):
+            log_group = resource_name or _log_group_name_from_arn(resource_arn) or _log_group_name_from_arn(resource_uid)
+            if log_group:
+                targets["log_group_names"].append(log_group)
+
+    for key, vals in targets.items():
+        seen = set()
+        deduped = []
+        for v in vals:
+            if v and v not in seen:
+                seen.add(v)
+                deduped.append(v)
+        targets[key] = deduped
+
+    return targets
+
+
+def _cloudtrail_noncompliance_score(trail: dict) -> int:
+    score = 0
+    if not trail.get("LogFileValidationEnabled"):
+        score += 1
+    if not trail.get("IsMultiRegionTrail"):
+        score += 1
+    if not str(trail.get("KmsKeyId", "")).strip():
+        score += 1
+    if not str(trail.get("CloudWatchLogsLogGroupArn", "")).strip():
+        score += 1
+    return score
+
+
+def generate(
+    discovery: dict,
+    work_dir: str,
+    category: str,
+    manifest_targets: dict[str, list[str]] | None = None,
+) -> dict[str, str]:
     """Return {variable_name: hcl_value} for the given category."""
     vals: dict[str, str] = {}
     refs = find_referenced_vars(work_dir)
+    manifest_targets = manifest_targets or {"trail_names": [], "bucket_names": [], "log_group_names": []}
 
     buckets = discovery.get("s3", {}).get("buckets", [])
     trails = discovery.get("cloudtrail", {}).get("trails", [])
@@ -64,68 +152,89 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
     account_id = discovery.get("account_id", "")
     state_bucket = f"prowler-terraform-state-{account_id}"
 
-    # Find the primary CloudTrail log bucket
+    selected_trail = None
+    preferred_trails = set(manifest_targets.get("trail_names", []))
+    if preferred_trails:
+        candidates = []
+        for trail in trails:
+            name = str(trail.get("Name", "")).strip()
+            if name and name in preferred_trails:
+                candidates.append(trail)
+        if candidates:
+            selected_trail = sorted(
+                candidates,
+                key=lambda t: (
+                    -_cloudtrail_noncompliance_score(t),
+                    str(t.get("Name", "")),
+                ),
+            )[0]
+
+    # Find the primary CloudTrail log bucket.
     ct_bucket = ""
-    for t in trails:
-        b = t.get("S3BucketName", "")
-        if b:
-            ct_bucket = b
+    candidate_trails = [selected_trail] if selected_trail else trails
+    for trail in candidate_trails:
+        if not trail:
+            continue
+        bucket = trail.get("S3BucketName", "")
+        if bucket:
+            ct_bucket = bucket
             break
     if not ct_bucket:
-        for b in buckets:
-            if "cloudtrail" in b and not b.endswith("-logs"):
-                ct_bucket = b
+        for bucket in buckets:
+            if "cloudtrail" in bucket and not bucket.endswith("-logs"):
+                ct_bucket = bucket
                 break
 
-    # Find the access-logging target bucket (usually ends with -logs)
+    # Find the access-logging target bucket (usually ends with -logs).
     log_bucket = ""
-    for b in buckets:
-        if b.endswith("-logs"):
-            log_bucket = b
+    for bucket in buckets:
+        if bucket.endswith("-logs"):
+            log_bucket = bucket
             break
 
     # Prefer customer-managed KMS key; fallback to AWS-managed S3 key alias.
     kms_key_id = ""
-    for a in aliases:
-        kid = a.get("TargetKeyId")
-        alias_name = a.get("AliasName", "")
+    for alias in aliases:
+        kid = alias.get("TargetKeyId")
+        alias_name = alias.get("AliasName", "")
         if kid and alias_name and not alias_name.startswith("alias/aws/"):
             kms_key_id = kid
             break
     if not kms_key_id:
-        for a in aliases:
-            kid = a.get("TargetKeyId")
-            if kid and a.get("AliasName", "") == "alias/aws/s3":
+        for alias in aliases:
+            kid = alias.get("TargetKeyId")
+            if kid and alias.get("AliasName", "") == "alias/aws/s3":
                 kms_key_id = kid
                 break
 
     if category == "cloudtrail":
-        # CloudTrail .tf files use var.s3_bucket_name for the trail's S3 bucket
         if "s3_bucket_name" in refs and ct_bucket:
             vals["s3_bucket_name"] = ct_bucket
         if "s3_bucket_arn" in refs and ct_bucket:
             vals["s3_bucket_arn"] = f"arn:aws:s3:::{ct_bucket}"
-        # Trail name
-        if "cloudtrail_name" in refs and trails:
-            vals["cloudtrail_name"] = trails[0].get("Name", "")
-        # Log bucket for access logging
+        if "cloudtrail_name" in refs:
+            if selected_trail:
+                vals["cloudtrail_name"] = selected_trail.get("Name", "")
+            elif trails:
+                vals["cloudtrail_name"] = trails[0].get("Name", "")
         if "log_bucket_name" in refs and log_bucket:
             vals["log_bucket_name"] = log_bucket
         if "kms_key_id" in refs and kms_key_id:
             vals["kms_key_id"] = kms_key_id
 
     elif category == "s3":
-        # New s3.tf uses var.s3_bucket_names (list) for for_each across all buckets
-        if "s3_bucket_names" in refs:
-            all_buckets = [b for b in buckets if b != state_bucket]
-            if all_buckets:
-                vals["s3_bucket_names"] = all_buckets  # list type → written as HCL list
-        # Legacy fallback: single bucket
-        if "s3_bucket_name" in refs and "s3_bucket_names" not in refs:
-            for b in buckets:
-                if b != state_bucket:
-                    vals["s3_bucket_name"] = b
-                    break
+        preferred_buckets = [b for b in manifest_targets.get("bucket_names", []) if b]
+        all_buckets = [b for b in buckets if b != state_bucket]
+        if preferred_buckets and len(preferred_buckets) > 1:
+            preferred_set = set(preferred_buckets)
+            selected_buckets = [b for b in all_buckets if b in preferred_set]
+        else:
+            selected_buckets = all_buckets
+
+        if "s3_bucket_names" in refs and selected_buckets:
+            vals["s3_bucket_names"] = selected_buckets
+        if "s3_bucket_name" in refs and "s3_bucket_names" not in refs and selected_buckets:
+            vals["s3_bucket_name"] = selected_buckets[0]
         if "s3_bucket_arn" in refs and "s3_bucket_name" in vals:
             vals["s3_bucket_arn"] = f"arn:aws:s3:::{vals['s3_bucket_name']}"
         if "s3_logging_bucket_name" in refs and log_bucket:
@@ -136,40 +245,43 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
             vals["kms_key_id"] = kms_key_id
 
     elif category == "kms":
-        # KMS files may reference key IDs
-        aliases = discovery.get("kms", {}).get("aliases", [])
         if "kms_key_id" in refs:
-            for a in aliases:
-                kid = a.get("TargetKeyId")
-                if kid and not a.get("AliasName", "").startswith("alias/aws/"):
+            for alias in aliases:
+                kid = alias.get("TargetKeyId")
+                if kid and not alias.get("AliasName", "").startswith("alias/aws/"):
                     vals["kms_key_id"] = kid
                     break
 
     elif category == "cloudwatch":
-        # CloudWatch CIS filters need the CloudTrail log group name
         log_groups = discovery.get("cloudwatch", {}).get("log_groups", [])
         ct_log_group = ""
-        # Find the CloudTrail-linked log group
-        for t in trails:
-            lg = t.get("CloudWatchLogsLogGroupArn", "")
-            if lg:
-                # ARN format: arn:aws:logs:region:account:log-group:NAME:*
-                parts = lg.split(":")
+
+        preferred_log_groups = [n for n in manifest_targets.get("log_group_names", []) if n]
+        if preferred_log_groups:
+            ct_log_group = preferred_log_groups[0]
+
+        candidate_trails = [selected_trail] if selected_trail else trails
+        for trail in candidate_trails:
+            if not trail:
+                continue
+            lg_arn = trail.get("CloudWatchLogsLogGroupArn", "")
+            if lg_arn:
+                parts = lg_arn.split(":")
                 if len(parts) >= 7:
                     ct_log_group = parts[6]
                     break
+
         if not ct_log_group:
-            # Fallback: look for log groups with "cloudtrail" in name
             for lg in log_groups:
                 name = lg if isinstance(lg, str) else lg.get("logGroupName", "")
                 if "cloudtrail" in name.lower():
                     ct_log_group = name
                     break
+
         if "cloudwatch_log_group_name" in refs and ct_log_group:
             vals["cloudwatch_log_group_name"] = ct_log_group
 
     elif category == "network-ec2-vpc":
-        # VPC-related variables
         vpcs = discovery.get("vpc", {}).get("vpcs", [])
         subnets = discovery.get("vpc", {}).get("subnets", [])
         if "vpc_id" in refs and vpcs:
@@ -178,7 +290,6 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
             vals["firewall_subnet_id"] = subnets[0] if isinstance(subnets[0], str) else subnets[0].get("SubnetId", "")
 
     elif category == "org-account":
-        # Organizations-related variables
         org = discovery.get("organizations")
         if org and isinstance(org, dict) and org.get("Id"):
             if "organizations_enable" in refs:
@@ -192,15 +303,13 @@ def write_tfvars(vals: dict, work_dir: str) -> None:
         return
     path = os.path.join(work_dir, "discovery.auto.tfvars")
     lines = []
-    for k, v in sorted(vals.items()):
-        if isinstance(v, list):
-            # HCL list: key = ["a", "b", "c"]
-            items = ", ".join(f'"{str(x)}"' for x in v)
-            lines.append(f'{k} = [{items}]')
+    for key, value in sorted(vals.items()):
+        if isinstance(value, list):
+            items = ", ".join(f'"{str(x)}"' for x in value)
+            lines.append(f"{key} = [{items}]")
         else:
-            # HCL string
-            escaped = str(v).replace("\\", "\\\\").replace('"', '\\"')
-            lines.append(f'{k} = "{escaped}"')
+            escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'{key} = "{escaped}"')
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     print(f"  Generated {path}: {list(vals.keys())}")
@@ -246,18 +355,20 @@ def prune_auto_tfvars(work_dir: str) -> None:
 
 def main():
     if len(sys.argv) < 4:
-        print("Usage: generate_tfvars.py <discovery_json> <work_dir> <category>")
+        print("Usage: generate_tfvars.py <discovery_json> <work_dir> <category> [manifest_json]")
         sys.exit(1)
 
     discovery_path = sys.argv[1]
     work_dir = sys.argv[2]
     category = sys.argv[3]
+    manifest_path = sys.argv[4] if len(sys.argv) >= 5 else ""
 
     discovery = load_discovery(discovery_path)
     if not discovery:
         return
 
-    vals = generate(discovery, work_dir, category)
+    manifest_targets = load_manifest_targets(manifest_path, category) if manifest_path else None
+    vals = generate(discovery, work_dir, category, manifest_targets=manifest_targets)
     write_tfvars(vals, work_dir)
     prune_auto_tfvars(work_dir)
 

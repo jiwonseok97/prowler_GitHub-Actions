@@ -3993,6 +3993,10 @@ def _resource_identity(row_obj):
 
 def _dedupe_key(row_obj):
     cid = _safe_str(row_obj.get("check_id", "")).strip()
+    # CloudTrail remediations target existing trails. Keep per-resource rows so
+    # manifests retain all failing trail names (used later by apply targeting).
+    if cid.startswith("cloudtrail_"):
+        return f"{cid}::{_resource_identity(row_obj)}"
     if cid in CONSOLIDATE_CHECKS:
         return f"{cid}::singleton"
     return f"{cid}::{_resource_identity(row_obj)}"
@@ -4042,6 +4046,12 @@ def _manifest_entry(row, category, source, output_path, validation_status="ok", 
     return {
         'check_id': row.get('check_id'),
         'check_title': row.get('check_title'),
+        'resource_uid': row.get('resource_uid'),
+        'resource_arn': row.get('resource_arn'),
+        'resource_id': row.get('resource_id'),
+        'resource_name': row.get('resource_name'),
+        'region': row.get('region'),
+        'account_id': row.get('account_id'),
         'output_path': output_path,
         'file': output_path,
         'priority': row.get('priority'),
