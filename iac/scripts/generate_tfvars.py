@@ -211,17 +211,29 @@ def generate(
                 break
 
     # Find the access-logging target bucket.
+    # It must be different from CloudTrail source buckets.
+    trail_buckets = {
+        str(t.get("S3BucketName", "")).strip()
+        for t in trails
+        if str(t.get("S3BucketName", "")).strip()
+    }
     log_bucket = ""
     for bucket in buckets:
-        b = str(bucket).lower()
-        if (
-            b.endswith("-logs")
-            or "-logs-" in b
-            or b.startswith("aws-cloudtrail-logs-")
-            or "access-log" in b
-        ):
-            log_bucket = bucket
+        bname = str(bucket).strip()
+        if not bname or bname in trail_buckets:
+            continue
+        low = bname.lower()
+        if low.endswith("-logs") or "-logs-" in low or "access-log" in low:
+            log_bucket = bname
             break
+    if not log_bucket:
+        for bucket in buckets:
+            bname = str(bucket).strip()
+            if not bname or bname in trail_buckets:
+                continue
+            if bname != state_bucket:
+                log_bucket = bname
+                break
 
     # Prefer trail-attached KMS key first, then customer-managed alias, then AWS-managed S3 alias.
     kms_key_id = ""
