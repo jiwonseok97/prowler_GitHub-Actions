@@ -3,15 +3,16 @@
 # Shared infrastructure: log group + SNS topic (defined once).
 
 variable "cloudwatch_log_group_name" {
-  description = "CloudWatch Logs group receiving CloudTrail events (leave empty to auto-create)"
+  description = "CloudWatch Logs group receiving CloudTrail events (leave empty to use /cloudtrail/remediation)"
   type        = string
   default     = ""
 }
 
-# If no existing log group is provided, create one for CIS monitoring
+# Create the log group only if no existing one is provided.
+# Name matches cloudtrail.tf so both workspaces target the same group.
 resource "aws_cloudwatch_log_group" "cis_cloudtrail" {
   count             = var.cloudwatch_log_group_name != "" ? 0 : 1
-  name              = "cis-cloudtrail-logs"
+  name              = "/cloudtrail/remediation"
   retention_in_days = 365
 }
 

@@ -97,8 +97,13 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
             vals["log_bucket_name"] = log_bucket
 
     elif category == "s3":
-        # S3 .tf files use var.s3_bucket_name — provide the first non-state bucket
-        if "s3_bucket_name" in refs:
+        # New s3.tf uses var.s3_bucket_names (list) for for_each across all buckets
+        if "s3_bucket_names" in refs:
+            all_buckets = [b for b in buckets if b != state_bucket]
+            if all_buckets:
+                vals["s3_bucket_names"] = all_buckets  # list type → written as HCL list
+        # Legacy fallback: single bucket
+        if "s3_bucket_name" in refs and "s3_bucket_names" not in refs:
             for b in buckets:
                 if b != state_bucket:
                     vals["s3_bucket_name"] = b
@@ -160,15 +165,20 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
     return vals
 
 
-def write_tfvars(vals: dict[str, str], work_dir: str) -> None:
+def write_tfvars(vals: dict, work_dir: str) -> None:
     if not vals:
         return
     path = os.path.join(work_dir, "discovery.auto.tfvars")
     lines = []
     for k, v in sorted(vals.items()):
-        # HCL string quoting
-        escaped = v.replace("\\", "\\\\").replace('"', '\\"')
-        lines.append(f'{k} = "{escaped}"')
+        if isinstance(v, list):
+            # HCL list: key = ["a", "b", "c"]
+            items = ", ".join(f'"{str(x)}"' for x in v)
+            lines.append(f'{k} = [{items}]')
+        else:
+            # HCL string
+            escaped = str(v).replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'{k} = "{escaped}"')
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     print(f"  Generated {path}: {list(vals.keys())}")

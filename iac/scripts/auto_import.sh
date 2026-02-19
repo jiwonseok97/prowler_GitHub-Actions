@@ -228,16 +228,45 @@ for rname in $(grep -rEoh 'resource\s+"aws_sns_topic"\s+"([^"]+)"' "$WORK_DIR"/*
   import_resource "aws_sns_topic.$rname" "$topic_arn"
 done
 
+# ── CloudWatch Log Groups ──────────────────────────
+# Import if a log group with the same name already exists in AWS
+for rname in $(grep -rEoh 'resource\s+"aws_cloudwatch_log_group"\s+"([^"]+)"' "$WORK_DIR"/*.tf 2>/dev/null | \
+               sed 's/resource\s*"aws_cloudwatch_log_group"\s*"//;s/"//g' || true); do
+  lg_name=$(grep -A10 "resource\s*\"aws_cloudwatch_log_group\"\s*\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null | \
+    grep -oP 'name\s*=\s*"\K[^"]+' | head -1 || true)
+  [ -z "$lg_name" ] && continue
+  exists=$(python3 -c "
+import json
+d = json.load(open('$DISCOVERY'))
+groups = d.get('cloudwatch', {}).get('log_groups', [])
+print('true' if '$lg_name' in groups else 'false')
+" 2>/dev/null || echo "false")
+  if [ "$exists" = "true" ]; then
+    # count-based resource → address includes [0]
+    import_resource "aws_cloudwatch_log_group.${rname}[0]" "$lg_name" 2>/dev/null || \
+    import_resource "aws_cloudwatch_log_group.${rname}" "$lg_name" 2>/dev/null || true
+  fi
+done
+
+# ── IAM Roles (remediation-* prefix only) ──────────
+for rname in $(grep -rEoh 'resource\s+"aws_iam_role"\s+"([^"]+)"' "$WORK_DIR"/*.tf 2>/dev/null | \
+               sed 's/resource\s*"aws_iam_role"\s*"//;s/"//g' || true); do
+  role_name=$(grep -A10 "resource\s*\"aws_iam_role\"\s*\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null | \
+    grep -oP 'name\s*=\s*"\K[^"]+' | head -1 || true)
+  [[ "$role_name" == remediation-* ]] || continue
+  # Try import; if role doesn't exist in AWS, import fails safely (resource will be created)
+  import_resource "aws_iam_role.${rname}[0]" "$role_name" 2>/dev/null || \
+  import_resource "aws_iam_role.${rname}" "$role_name" 2>/dev/null || true
+done
+
 # ── CloudWatch Log Metric Filters ──────────────────
 # Import existing metric filters that match resources declared in .tf files
 for rname in $(grep -rEoh 'resource\s+"aws_cloudwatch_log_metric_filter"\s+"([^"]+)"' "$WORK_DIR"/*.tf 2>/dev/null | \
                sed 's/resource\s*"aws_cloudwatch_log_metric_filter"\s*"//;s/"//g' || true); do
-  # Metric filter import ID format: log_group_name:filter_name
-  # Extract the filter name from the .tf file (name = "xxx" attribute)
   filter_name=$(grep -A5 "resource\s*\"aws_cloudwatch_log_metric_filter\"\s*\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null | \
     grep -oP 'name\s*=\s*"\K[^"]+' | head -1 || true)
   if [ -n "$filter_name" ]; then
-    # Find the log group name from the .tf file or discovery
+    # Try discovery log group first, then fallback to /cloudtrail/remediation
     lg_name=$(python3 -c "
 import json
 d = json.load(open('$DISCOVERY'))
@@ -250,11 +279,48 @@ for t in trails:
             print(parts[6])
             break
 " 2>/dev/null || true)
-    if [ -n "$lg_name" ]; then
-      import_resource "aws_cloudwatch_log_metric_filter.$rname" "${lg_name}:${filter_name}"
-    fi
+    [ -z "$lg_name" ] && lg_name="/cloudtrail/remediation"
+    import_resource "aws_cloudwatch_log_metric_filter.$rname" "${lg_name}:${filter_name}"
   fi
 done
+
+# ── S3 for_each resources ───────────────────────────
+# Handle resources using for_each = toset(var.s3_bucket_names)
+if grep -rEq 'for_each\s*=.*s3_bucket_names|for_each\s*=\s*local\.buckets' "$WORK_DIR"/*.tf 2>/dev/null; then
+  all_s3_buckets=$(python3 -c "
+import json
+d = json.load(open('$DISCOVERY'))
+account = d.get('account_id', '')
+state_bucket = f'prowler-terraform-state-{account}'
+for b in d.get('s3', {}).get('buckets', []):
+    if b != state_bucket:
+        print(b)
+" 2>/dev/null || true)
+
+  for_each_s3_types=(
+    "aws_s3_bucket_server_side_encryption_configuration"
+    "aws_s3_bucket_versioning"
+    "aws_s3_bucket_public_access_block"
+    "aws_s3_bucket_policy"
+    "aws_s3_bucket_ownership_controls"
+  )
+
+  for bucket in $all_s3_buckets; do
+    for s3type in "${for_each_s3_types[@]}"; do
+      rname="remediation_s3"
+      if grep -rEq "resource\s+\"$s3type\"\s+\"$rname\"" "$WORK_DIR"/*.tf 2>/dev/null; then
+        addr="${s3type}.${rname}[\"${bucket}\"]"
+        if ! terraform -chdir="$WORK_DIR" state show "${addr}" >/dev/null 2>&1; then
+          echo "  IMPORT ${addr} ← ${bucket}"
+          terraform -chdir="$WORK_DIR" import -input=false "${addr}" "${bucket}" 2>&1 || \
+            echo "  WARN: import may have failed for ${addr}"
+        else
+          echo "  SKIP import ${addr} (already in state)"
+        fi
+      fi
+    done
+  done
+fi
 
 echo "Auto-import done: imported=$imported skipped=$skipped failed=$failed blocked=$blocked"
 
