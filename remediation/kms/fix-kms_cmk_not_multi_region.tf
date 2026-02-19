@@ -1,18 +1,14 @@
-# Create a new multi-Region KMS key
+# Create a new KMS key in the same Region as the existing key
 resource "aws_kms_key" "remediation_multi_region_key" {
   description              = "Remediation multi-Region KMS key"
   key_usage                = "ENCRYPT_DECRYPT"
   customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  enable_key_rotation      = true
   multi_region             = true
 }
 
-# Replicate the existing single-Region KMS key to the new multi-Region key
-resource "aws_kms_replica_key" "remediation_replica_key" {
-  primary_key_arn = var.primary_key_arn
-}
-
-variable "primary_key_arn" {
-  description = "primary_key_arn"
-  type        = string
-  default     = ""
+# Create an alias for the new multi-Region KMS key
+resource "aws_kms_alias" "remediation_multi_region_key_alias" {
+  name          = "alias/alias-remediation-multi-region-key"
+  target_key_id = aws_kms_key.remediation_multi_region_key.id
 }
