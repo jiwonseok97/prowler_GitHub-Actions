@@ -49,78 +49,82 @@ BEDROCK_REGION = os.getenv("BEDROCK_REGION", DEFAULT_BEDROCK_REGION)
 # 서울 리전 강제 (오사카 호출 방지)
 
 if BEDROCK_REGION != DEFAULT_BEDROCK_REGION:
-print(f"[Bedrock] Override region {BEDROCK_REGION} -> {DEFAULT_BEDROCK_REGION}")
-BEDROCK_REGION = DEFAULT_BEDROCK_REGION
+    print(f"[Bedrock] Override region {BEDROCK_REGION} -> {DEFAULT_BEDROCK_REGION}")
+    BEDROCK_REGION = DEFAULT_BEDROCK_REGION
 
 # short name → ARN 변환
 
 if not MODEL_ID.startswith("arn:aws:bedrock:"):
-MODEL_ID = f"arn:aws:bedrock:{BEDROCK_REGION}::foundation-model/{MODEL_ID}"
+    MODEL_ID = f"arn:aws:bedrock:{BEDROCK_REGION}::foundation-model/{MODEL_ID}"
 
 MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "256"))
 TEMPERATURE = float(os.getenv("BEDROCK_TEMPERATURE", "0.2"))
 USE_BEDROCK = os.getenv("USE_BEDROCK", "true").lower() == "true"
 
+
 def fallback_summary(row):
-title = str(row.get("check_title", "")).strip()
-return f"Finding summary: {title}" if title else "Finding summary: N/A"
+    title = str(row.get("check_title", "")).strip()
+    return f"Finding summary: {title}" if title else "Finding summary: N/A"
+
 
 def fallback_rationale(row):
-prio = str(row.get("priority", "P3"))
-sev = str(row.get("severity", "medium"))
-br = str(row.get("blast_radius", "3"))
-return f"Priority {prio} based on severity={sev} and blast_radius={br}."
+    prio = str(row.get("priority", "P3"))
+    sev = str(row.get("severity", "medium"))
+    br = str(row.get("blast_radius", "3"))
+    return f"Priority {prio} based on severity={sev} and blast_radius={br}."
+
 
 def call_bedrock(prompt):
-if not USE_BEDROCK or boto3 is None:
-return None
-try:
-    client = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
+    if not USE_BEDROCK or boto3 is None:
+        return None
+    try:
+        client = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 
-    body = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": MAX_TOKENS,
-        "temperature": TEMPERATURE,
-        "messages": [{"role": "user", "content": prompt}],
-    }
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": MAX_TOKENS,
+            "temperature": TEMPERATURE,
+            "messages": [{"role": "user", "content": prompt}],
+        }
 
-    resp = client.invoke_model(
-        modelId=MODEL_ID,
-        contentType="application/json",
-        accept="application/json",
-        body=json.dumps(body),
-    )
+        resp = client.invoke_model(
+            modelId=MODEL_ID,
+            contentType="application/json",
+            accept="application/json",
+            body=json.dumps(body),
+        )
 
-    payload = json.loads(resp["body"].read())
-    parts = payload.get("content", [])
-    if not parts:
+        payload = json.loads(resp["body"].read())
+        parts = payload.get("content", [])
+        if not parts:
+            return None
+
+        return parts[0].get("text", "").strip()
+
+    except Exception as e:
+        print(f"Bedrock error: {e}")
         return None
 
-    return parts[0].get("text", "").strip()
-
-except Exception as e:
-    print(f"Bedrock error: {e}")
-    return None
 
 def make_prompt(row, kind):
-title = str(row.get("check_title", ""))
-severity = str(row.get("severity", ""))
-prio = str(row.get("priority", ""))
-risk = str(row.get("risk_score", ""))
-desc = str(row.get("recommendation_text", ""))
+    title = str(row.get("check_title", ""))
+    severity = str(row.get("severity", ""))
+    prio = str(row.get("priority", ""))
+    risk = str(row.get("risk_score", ""))
+    desc = str(row.get("recommendation_text", ""))
 
-if kind == "summary":
+    if kind == "summary":
+        return (
+            "Summarize this finding in 1-2 sentences for a security report. "
+            "Be concise and factual.\n"
+            f"Title: {title}\nSeverity: {severity}\nRisk score: {risk}\nDetails: {desc}"
+        )
+
     return (
-        "Summarize this finding in 1-2 sentences for a security report. "
-        "Be concise and factual.\n"
-        f"Title: {title}\nSeverity: {severity}\nRisk score: {risk}\nDetails: {desc}"
+        "Explain why this priority was assigned in 1 sentence. "
+        "Reference severity and blast radius.\n"
+        f"Title: {title}\nSeverity: {severity}\nPriority: {prio}\nRisk score: {risk}"
     )
-
-return (
-    "Explain why this priority was assigned in 1 sentence. "
-    "Reference severity and blast radius.\n"
-    f"Title: {title}\nSeverity: {severity}\nPriority: {prio}\nRisk score: {risk}"
-)
 
 
 # --- 각 finding에 대해 AI 결과 생성 ---
@@ -129,10 +133,10 @@ summaries = []
 rationales = []
 
 for _, row in df.iterrows():
-s = call_bedrock(make_prompt(row, "summary")) or fallback_summary(row)
-r = call_bedrock(make_prompt(row, "rationale")) or fallback_rationale(row)
-summaries.append(s)
-rationales.append(r)
+    s = call_bedrock(make_prompt(row, "summary")) or fallback_summary(row)
+    r = call_bedrock(make_prompt(row, "rationale")) or fallback_rationale(row)
+    summaries.append(s)
+    rationales.append(r)
 
 df["ai_summary"] = summaries
 df["ai_priority_rationale"] = rationales
