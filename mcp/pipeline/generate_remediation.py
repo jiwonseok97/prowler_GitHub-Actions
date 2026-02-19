@@ -81,6 +81,9 @@ ALLOW_IAM_CREATE = os.getenv("ALLOW_IAM_CREATE", "false").lower() == "true"
 ALLOW_SKIP = os.getenv("ALLOW_SKIP", "false").lower() == "true"
 # 생성 코드가 실제 FAIL 감소에 기여 가능한지 정적 게이트 적용
 STRICT_EFFECTIVENESS_GUARD = os.getenv("STRICT_EFFECTIVENESS_GUARD", "true").lower() == "true"
+ALLOW_SNIPPET_INCLUDE_ON_VALIDATE_FAIL = os.getenv(
+    "ALLOW_SNIPPET_INCLUDE_ON_VALIDATE_FAIL", "true"
+).lower() == "true"
 # 자동 리메디에이션 허용 체크 ID 목록
 # - 기본값: 실제 개선 효과가 안정적으로 검증된 체크만 보수적으로 자동 적용
 # - "*"  : 허용 목록 제한 해제(모든 체크 대상)
@@ -131,7 +134,7 @@ STABLE_ONLY_MODE = REMEDIATION_MODE != "all-checks"
 # -----------------------------------------------------------------------------
 iac_map = {}
 if yaml and os.path.exists(args.iac_mapping):
-    with open(args.iac_mapping) as f:
+    with open(args.iac_mapping, encoding="utf-8") as f:
         iac_map = yaml.safe_load(f) or {}
     print(f"Loaded {len(iac_map)} IaC snippet mappings")
 
@@ -3920,11 +3923,31 @@ high_priority = high_priority[
 ]
 print(f"Found {len(high_priority)} high-priority findings (P0/P1/P2) out of {len(df)} total")
 
-# check_id 기준 중복 제거 (같은 체크가 여러 리소스에 반복될 수 있음)
-unique_checks = high_priority.drop_duplicates(subset=['check_id'], keep='first')
+# check_id 기준 단일화는 다중 리소스(S3 bucket 등)를 누락시킬 수 있어
+# 기본은 (check_id + resource identity)로 중복 제거하고,
+# singleton 체크만 check_id 기준으로 통합한다.
+def _resource_identity(row_obj):
+    for key in ["resource_uid", "resource_arn", "resource_name", "resource_id"]:
+        val = _safe_str(row_obj.get(key, "")).strip()
+        if val:
+            return val
+    return _safe_str(row_obj.get("account_id", "")).strip() or "global"
+
+
+def _dedupe_key(row_obj):
+    cid = _safe_str(row_obj.get("check_id", "")).strip()
+    if cid in CONSOLIDATE_CHECKS:
+        return f"{cid}::singleton"
+    return f"{cid}::{_resource_identity(row_obj)}"
+
+
+high_priority = high_priority.copy()
+high_priority["__dedupe_key"] = high_priority.apply(_dedupe_key, axis=1)
+unique_checks = high_priority.drop_duplicates(subset=["__dedupe_key"], keep="first")
+unique_checks = unique_checks.drop(columns=["__dedupe_key"], errors="ignore")
 skipped_checks = [c for c in unique_checks['check_id'] if c in SKIP_CHECKS]
 unique_checks = unique_checks[~unique_checks['check_id'].isin(SKIP_CHECKS)]
-print(f"Unique check_ids: {len(unique_checks)} (skipped {len(skipped_checks)} non-terraform checks: {skipped_checks})")
+print(f"Unique remediation targets: {len(unique_checks)} (skipped {len(skipped_checks)} non-terraform checks: {skipped_checks})")
 
 # 자동 적용 허용 목록 필터
 if AUTO_REMEDIATE_ALLOWLIST is None:
@@ -3971,6 +3994,19 @@ def _manifest_entry(row, category, source, output_path, validation_status="ok", 
         'error_message': error_message,
         'sanitizers_applied': list(sanitizers_applied or []),
     }
+
+
+def _resource_suffix_for_filename(row_obj):
+    raw = _resource_identity(row_obj)
+    suffix = _sanitize_label(raw)
+    if not suffix:
+        return "resource"
+    return suffix[:48]
+
+
+check_id_counts = (
+    unique_checks["check_id"].astype(str).str.strip().value_counts().to_dict()
+)
 
 
 for _, row in unique_checks.iterrows():
@@ -4025,6 +4061,8 @@ for _, row in unique_checks.iterrows():
         consolidated_file = CONSOLIDATE_CHECKS.get(raw_check_id)
         if consolidated_file:
             filename = consolidated_file
+        elif check_id_counts.get(raw_check_id, 0) > 1:
+            filename = f"fix-{check_id}-{_resource_suffix_for_filename(row)}.tf"
         rel_file = f"{category}/{filename}"
 
         # Exclusion must be enforced before writing candidate file.
@@ -4049,6 +4087,8 @@ for _, row in unique_checks.iterrows():
 
         # 생성 코드 검증 + 자동 수정(가드레일) 적용
         ok, tf_code, err = validate_with_autofix(tf_code, row=row)
+        validation_status = "ok"
+        validation_error = ""
 
         # Bedrock 코드가 실패하면 IaC 스니펫으로 재시도
         if not ok and source == "bedrock":
@@ -4085,19 +4125,32 @@ for _, row in unique_checks.iterrows():
                     break
 
         if not ok:
-            generated.append(
-                _manifest_entry(
-                    row=row,
-                    category=category,
-                    source=source,
-                    output_path=rel_file,
-                    validation_status="excluded",
-                    error_message=_normalize_terraform_error(err),
-                    sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
+            normalized_err = _normalize_terraform_error(err)
+            if (
+                ALLOW_SNIPPET_INCLUDE_ON_VALIDATE_FAIL
+                and source == "iac_snippet"
+                and category == "cloudtrail"
+            ):
+                validation_status = "warn_validate_failed"
+                validation_error = normalized_err
+                print(
+                    f"WARN {check_id}: validate failed but keeping cloudtrail snippet "
+                    f"for PR generation ({normalized_err})"
                 )
-            )
-            print(f"SKIP {check_id}: plan/validate failed")
-            continue
+            else:
+                generated.append(
+                    _manifest_entry(
+                        row=row,
+                        category=category,
+                        source=source,
+                        output_path=rel_file,
+                        validation_status="excluded",
+                        error_message=normalized_err,
+                        sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
+                    )
+                )
+                print(f"SKIP {check_id}: plan/validate failed")
+                continue
 
         # resource/data 블록이 하나도 없으면 skip (주석만 남은 경우)
         if not re.search(r'^\s*(resource|data)\s+"', tf_code, re.MULTILINE):
@@ -4126,8 +4179,8 @@ for _, row in unique_checks.iterrows():
                         category=category,
                         source=source,
                         output_path=tracking_key,
-                        validation_status="ok",
-                        error_message="",
+                        validation_status=validation_status,
+                        error_message=validation_error,
                         sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
                     )
                 )
@@ -4147,8 +4200,8 @@ for _, row in unique_checks.iterrows():
                 category=category,
                 source=source,
                 output_path=rel_file,
-                validation_status="ok",
-                error_message="",
+                validation_status=validation_status,
+                error_message=validation_error,
                 sanitizers_applied=sanitize_flags.get("sanitizers_applied", []),
             )
         )
