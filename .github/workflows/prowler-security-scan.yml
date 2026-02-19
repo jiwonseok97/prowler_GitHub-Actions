@@ -334,6 +334,28 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${{ secrets.PROWLER_PAT }}@github.com/${{ github.repository }}.git"
 
+          push_with_retry() {
+            local branch="$1"
+            local attempts=3
+            local n=1
+            while [ "$n" -le "$attempts" ]; do
+              if [ "$n" -eq 1 ]; then
+                if git push --force-with-lease origin "$branch"; then
+                  return 0
+                fi
+              else
+                git fetch origin "$branch" --quiet || true
+                if git push --force origin "$branch"; then
+                  return 0
+                fi
+              fi
+              echo "WARN: push failed for $branch (attempt $n/$attempts)"
+              n=$((n+1))
+              sleep 2
+            done
+            return 1
+          }
+
           MANIFEST="remediation/manifest.json"
           if [ ! -f "$MANIFEST" ]; then
             echo "No manifest.json found; skipping PR creation."
@@ -460,7 +482,7 @@ jobs:
 
             FILE_COUNT=$(echo "$CAT_FILES" | wc -l | tr -d ' ')
             git commit -m "fix($CATEGORY): auto-generated Terraform remediation [$FILE_COUNT files]"
-            git push --force-with-lease origin "$BRANCH"
+            push_with_retry "$BRANCH"
 
             PR_BODY=$(python3 -c "
           import json, os
@@ -480,6 +502,15 @@ jobs:
           print('\n'.join(lines))
           ")
             EXISTING_PR=$(gh pr list --state open --base main --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null || true)
+
+            # Keep only one latest PR per category: close stale open PRs on old branches.
+            STALE_PRS=$(gh pr list --state open --base main --json number,headRefName,title --jq ".[] | select(.title | startswith(\"Security Remediation: $CATEGORY\")) | select(.headRefName != \"$BRANCH\") | .number" 2>/dev/null || true)
+            for pr in $STALE_PRS; do
+              [ -n "$pr" ] || continue
+              gh pr close "$pr" --comment "Superseded by $BRANCH (latest category PR)." || true
+              echo "Closed stale PR #$pr for category $CATEGORY"
+            done
+
             if [ -n "${EXISTING_PR:-}" ] && [ "${EXISTING_PR}" != "null" ]; then
               gh pr edit "$EXISTING_PR" \
                 --title "Security Remediation: $CATEGORY ($FILE_COUNT files)" \
