@@ -1,12 +1,20 @@
-#Update the Network ACL to remove the ingress rule allowing TCP port 3389 from 0.0.0.0/0
-resource "aws_network_acl" "remediation_network_acl" {
-  vpc_id     = var.vpc_id
+resource "aws_network_acl" "remediation_acl" {
+  vpc_id = var.vpc_id
   subnet_ids = data.aws_subnets.current.ids
 
   ingress {
     from_port  = 0
     to_port    = 0
     rule_no    = 100
+    action     = "allow"
+    protocol   = "-1"
+    cidr_block = "0.0.0.0/0"
+  }
+
+  ingress {
+    from_port  = 0
+    to_port    = 0
+    rule_no    = 101
     action     = "allow"
     protocol   = "-1"
     cidr_block = "0.0.0.0/0"
@@ -26,12 +34,7 @@ resource "aws_network_acl" "remediation_network_acl" {
   }
 }
 
-
 data "aws_subnets" "current" {
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
-  }
 }
 
 variable "vpc_id" {
