@@ -144,8 +144,18 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
     elif category == "network-ec2-vpc":
         # VPC-related variables
         vpcs = discovery.get("vpc", {}).get("vpcs", [])
+        subnets = discovery.get("vpc", {}).get("subnets", [])
         if "vpc_id" in refs and vpcs:
             vals["vpc_id"] = vpcs[0] if isinstance(vpcs[0], str) else vpcs[0].get("VpcId", "")
+        if "firewall_subnet_id" in refs and subnets:
+            vals["firewall_subnet_id"] = subnets[0] if isinstance(subnets[0], str) else subnets[0].get("SubnetId", "")
+
+    elif category == "org-account":
+        # Organizations-related variables
+        org = discovery.get("organizations")
+        if org and isinstance(org, dict) and org.get("Id"):
+            if "organizations_enable" in refs:
+                vals["organizations_enable"] = "true"
 
     return vals
 

@@ -84,6 +84,10 @@ cw_log_groups=$(aws logs describe-log-groups --region "$REGION" \
 vpc_ids=$(aws ec2 describe-vpcs --region "$REGION" \
   --query 'Vpcs[].VpcId' --output json 2>/dev/null || echo '[]')
 
+# ── Subnets ────────────────────────────────────────
+subnet_ids=$(aws ec2 describe-subnets --region "$REGION" \
+  --query 'Subnets[].SubnetId' --output json 2>/dev/null || echo '[]')
+
 # ── S3 Buckets (existing, for import) ──────────────
 s3_buckets=$(aws s3api list-buckets --query 'Buckets[].Name' --output json 2>/dev/null || echo '[]')
 
@@ -119,7 +123,8 @@ cat > "$OUTFILE" <<ENDJSON
     "log_groups": $cw_log_groups
   },
   "vpc": {
-    "vpcs": $vpc_ids
+    "vpcs": $vpc_ids,
+    "subnets": $subnet_ids
   },
   "s3": {
     "buckets": $s3_buckets

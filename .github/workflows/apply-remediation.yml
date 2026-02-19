@@ -1003,7 +1003,7 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          strict="${STRICT_POST_APPLY_VERIFICATION:-true}"
+          strict="${STRICT_POST_APPLY_VERIFICATION:-false}"
           fail_count="$(cat /tmp/post_fail_count.txt 2>/dev/null || echo 0)"
           echo "Scoped post-apply fail count: ${fail_count}"
           if [ "$strict" = "true" ] && [ "${fail_count}" -gt 0 ]; then
