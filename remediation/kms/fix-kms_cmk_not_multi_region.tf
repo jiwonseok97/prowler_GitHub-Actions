@@ -1,12 +1,24 @@
-# Create a new multi-Region KMS key
-resource "aws_kms_key" "remediation_multi_region_key" {
-  description              = "Remediation multi-Region KMS key"
+#
+# Modify the existing KMS key to be multi-Region
+#
+resource "aws_kms_key" "remediation_kms_key" {
+  description              = "Remediated KMS key"
   key_usage                = "ENCRYPT_DECRYPT"
   customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  deletion_window_in_days  = 30
+  is_enabled               = true
+  enable_key_rotation      = true
   multi_region             = true
+
+  tags = {
+    Name = "Remediated KMS Key"
+  }
 }
 
-# Rotate the existing single-Region KMS key to a multi-Region key
-resource "aws_kms_key" "remediation_existing_key" {
-  multi_region = true
+#
+# Update the KMS key alias to point to the new multi-Region key
+#
+resource "aws_kms_alias" "remediation_kms_key_alias" {
+  name          = "alias/alias-remediated-kms-key"
+  target_key_id = aws_kms_key.remediation_kms_key.id
 }
