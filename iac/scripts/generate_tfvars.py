@@ -73,6 +73,30 @@ def _log_group_name_from_arn(arn: str) -> str:
     return m.group(1) if m else ""
 
 
+def _partition_from_region(region: str) -> str:
+    if str(region).startswith("cn-"):
+        return "aws-cn"
+    if str(region).startswith("us-gov-"):
+        return "aws-us-gov"
+    return "aws"
+
+
+def _normalize_kms_for_cloudtrail(kms_key_id: str, region: str, account_id: str) -> str:
+    kid = str(kms_key_id or "").strip()
+    if not kid:
+        return ""
+    if kid.startswith("arn:"):
+        return kid
+    if not region or not account_id:
+        return kid
+    partition = _partition_from_region(region)
+    if kid.startswith("alias/"):
+        return f"arn:{partition}:kms:{region}:{account_id}:{kid}"
+    if kid.startswith("mrk-") or re.fullmatch(r"[0-9a-fA-F-]{36}", kid):
+        return f"arn:{partition}:kms:{region}:{account_id}:key/{kid}"
+    return kid
+
+
 def load_manifest_targets(path: str, category: str) -> dict[str, list[str]]:
     targets = {"trail_names": [], "bucket_names": [], "log_group_names": []}
     if not path:
@@ -150,6 +174,7 @@ def generate(
     trails = discovery.get("cloudtrail", {}).get("trails", [])
     aliases = discovery.get("kms", {}).get("aliases", [])
     account_id = discovery.get("account_id", "")
+    region = discovery.get("region", "")
     state_bucket = f"prowler-terraform-state-{account_id}"
 
     selected_trail = None
@@ -192,9 +217,18 @@ def generate(
             log_bucket = bucket
             break
 
-    # Prefer customer-managed KMS key; fallback to AWS-managed S3 key alias.
+    # Prefer trail-attached KMS key first, then customer-managed alias, then AWS-managed S3 alias.
     kms_key_id = ""
+    for trail in candidate_trails:
+        if not trail:
+            continue
+        kid = str(trail.get("KmsKeyId", "")).strip()
+        if kid:
+            kms_key_id = kid
+            break
     for alias in aliases:
+        if kms_key_id:
+            break
         kid = alias.get("TargetKeyId")
         alias_name = alias.get("AliasName", "")
         if kid and alias_name and not alias_name.startswith("alias/aws/"):
@@ -220,7 +254,7 @@ def generate(
         if "log_bucket_name" in refs and log_bucket:
             vals["log_bucket_name"] = log_bucket
         if "kms_key_id" in refs and kms_key_id:
-            vals["kms_key_id"] = kms_key_id
+            vals["kms_key_id"] = _normalize_kms_for_cloudtrail(kms_key_id, region, account_id)
 
     elif category == "s3":
         preferred_buckets = [b for b in manifest_targets.get("bucket_names", []) if b]
