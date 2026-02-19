@@ -20,10 +20,24 @@ variable "cloudwatch_log_group_name" {
   default     = ""
 }
 
+variable "kms_key_id" {
+  description = "KMS key ID/ARN for CloudTrail log encryption (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "log_bucket_name" {
+  description = "Target S3 bucket for CloudTrail log bucket access logging (optional)"
+  type        = string
+  default     = ""
+}
+
 locals {
-  trail_enabled   = var.cloudtrail_name != ""
-  bucket_enabled  = var.s3_bucket_name != ""
-  use_existing_lg = var.cloudwatch_log_group_name != ""
+  trail_enabled    = var.cloudtrail_name != ""
+  bucket_enabled   = var.s3_bucket_name != ""
+  use_existing_lg  = var.cloudwatch_log_group_name != ""
+  kms_enabled      = var.kms_key_id != ""
+  logging_enabled  = var.log_bucket_name != "" && var.log_bucket_name != var.s3_bucket_name
   # Fixed name shared with cloudwatch_cis_filters.tf
   ct_log_group_name = local.use_existing_lg ? var.cloudwatch_log_group_name : "/cloudtrail/remediation"
 }
@@ -79,6 +93,7 @@ resource "aws_cloudtrail" "remediation_existing" {
   is_multi_region_trail         = true
   include_global_service_events = true
   enable_logging                = true
+  kms_key_id                    = local.kms_enabled ? var.kms_key_id : null
 
   cloud_watch_logs_group_arn = local.use_existing_lg ? (
     "${var.cloudwatch_log_group_name}:*"
@@ -86,7 +101,7 @@ resource "aws_cloudtrail" "remediation_existing" {
   cloud_watch_logs_role_arn = aws_iam_role.remediation_ct_cw[0].arn
 
   lifecycle {
-    ignore_changes = [tags, kms_key_id, event_selector, advanced_event_selector]
+    ignore_changes = [tags, event_selector, advanced_event_selector]
   }
 }
 
@@ -112,4 +127,11 @@ resource "aws_s3_bucket_public_access_block" "remediation_cloudtrail_logs_public
   ignore_public_acls      = true
   block_public_policy     = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_logging" "remediation_cloudtrail_logs_access_logging" {
+  count         = local.bucket_enabled && local.logging_enabled ? 1 : 0
+  bucket        = var.s3_bucket_name
+  target_bucket = var.log_bucket_name
+  target_prefix = "cloudtrail-access/"
 }

@@ -7,8 +7,23 @@ variable "s3_bucket_names" {
   default     = []
 }
 
+variable "kms_key_id" {
+  description = "KMS key ID/ARN for S3 SSE-KMS (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "s3_logging_bucket_name" {
+  description = "S3 bucket name used as centralized server access logging target (optional)"
+  type        = string
+  default     = ""
+}
+
 locals {
-  buckets = toset(var.s3_bucket_names)
+  buckets          = toset(var.s3_bucket_names)
+  kms_enabled      = var.kms_key_id != ""
+  logging_enabled  = var.s3_logging_bucket_name != ""
+  buckets_for_logs = local.logging_enabled ? { for b in local.buckets : b => b if b != var.s3_logging_bucket_name } : {}
 }
 
 # ── Default encryption (AES256) ─────────────────────────────────────────────
@@ -18,7 +33,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "remediation_s3" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = local.kms_enabled ? var.kms_key_id : null
     }
     bucket_key_enabled = true
   }
@@ -77,4 +93,11 @@ resource "aws_s3_bucket_ownership_controls" "remediation_s3" {
   rule {
     object_ownership = "BucketOwnerEnforced"
   }
+}
+
+resource "aws_s3_bucket_logging" "remediation_s3" {
+  for_each      = local.buckets_for_logs
+  bucket        = each.key
+  target_bucket = var.s3_logging_bucket_name
+  target_prefix = "s3-access/${each.key}/"
 }

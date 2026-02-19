@@ -60,6 +60,7 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
 
     buckets = discovery.get("s3", {}).get("buckets", [])
     trails = discovery.get("cloudtrail", {}).get("trails", [])
+    aliases = discovery.get("kms", {}).get("aliases", [])
     account_id = discovery.get("account_id", "")
     state_bucket = f"prowler-terraform-state-{account_id}"
 
@@ -83,6 +84,21 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
             log_bucket = b
             break
 
+    # Prefer customer-managed KMS key; fallback to AWS-managed S3 key alias.
+    kms_key_id = ""
+    for a in aliases:
+        kid = a.get("TargetKeyId")
+        alias_name = a.get("AliasName", "")
+        if kid and alias_name and not alias_name.startswith("alias/aws/"):
+            kms_key_id = kid
+            break
+    if not kms_key_id:
+        for a in aliases:
+            kid = a.get("TargetKeyId")
+            if kid and a.get("AliasName", "") == "alias/aws/s3":
+                kms_key_id = kid
+                break
+
     if category == "cloudtrail":
         # CloudTrail .tf files use var.s3_bucket_name for the trail's S3 bucket
         if "s3_bucket_name" in refs and ct_bucket:
@@ -95,6 +111,8 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
         # Log bucket for access logging
         if "log_bucket_name" in refs and log_bucket:
             vals["log_bucket_name"] = log_bucket
+        if "kms_key_id" in refs and kms_key_id:
+            vals["kms_key_id"] = kms_key_id
 
     elif category == "s3":
         # New s3.tf uses var.s3_bucket_names (list) for for_each across all buckets
@@ -110,8 +128,12 @@ def generate(discovery: dict, work_dir: str, category: str) -> dict[str, str]:
                     break
         if "s3_bucket_arn" in refs and "s3_bucket_name" in vals:
             vals["s3_bucket_arn"] = f"arn:aws:s3:::{vals['s3_bucket_name']}"
+        if "s3_logging_bucket_name" in refs and log_bucket:
+            vals["s3_logging_bucket_name"] = log_bucket
         if "log_bucket_name" in refs and log_bucket:
             vals["log_bucket_name"] = log_bucket
+        if "kms_key_id" in refs and kms_key_id:
+            vals["kms_key_id"] = kms_key_id
 
     elif category == "kms":
         # KMS files may reference key IDs

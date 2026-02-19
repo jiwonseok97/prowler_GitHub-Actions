@@ -110,6 +110,13 @@ NON_AUTOFIXABLE_CHECKS = {
     "vpc_different_regions",
     "vpc_subnet_different_az",
     "vpc_subnet_separate_private_public",
+    "iam_user_accesskey_rotation_90d",
+    "iam_root_mfa_enabled",
+    "iam_root_hardware_mfa_enabled",
+    "s3_bucket_no_mfa_delete",
+    "cloudtrail_bucket_requires_mfa_delete",
+    "cloudwatch_log_group_no_secrets_in_logs",
+    "cloudwatch_log_group_kms_encryption_enabled",
 }
 
 
@@ -167,6 +174,7 @@ SKIP_CHECKS = {
 
 # 동일 singleton AWS 리소스를 생성하는 체크들 → 하나의 파일로 통합
 CONSOLIDATE_CHECKS = {
+    # IAM 패스워드 정책 (계정 단위 singleton)
     "iam_password_policy_expires_passwords_within_90_days_or_less": "fix-iam_password_policy.tf",
     "iam_password_policy_minimum_length_14": "fix-iam_password_policy.tf",
     "iam_password_policy_lowercase": "fix-iam_password_policy.tf",
@@ -174,6 +182,35 @@ CONSOLIDATE_CHECKS = {
     "iam_password_policy_reuse_24": "fix-iam_password_policy.tf",
     "iam_password_policy_symbol": "fix-iam_password_policy.tf",
     "iam_password_policy_uppercase": "fix-iam_password_policy.tf",
+    # CloudTrail (동일 trail/bucket 대상 → 하나의 파일로 통합)
+    "cloudtrail_bucket_requires_mfa_delete": "fix-cloudtrail.tf",
+    "cloudtrail_kms_encryption_enabled": "fix-cloudtrail.tf",
+    "cloudtrail_log_file_validation_enabled": "fix-cloudtrail.tf",
+    "cloudtrail_logs_s3_bucket_access_logging_enabled": "fix-cloudtrail.tf",
+    # S3 버킷 하드닝 (for_each로 모든 버킷 한번에 적용 → 하나의 파일로 통합)
+    "s3_bucket_acl_prohibited": "fix-s3.tf",
+    "s3_bucket_default_encryption": "fix-s3.tf",
+    "s3_bucket_kms_encryption": "fix-s3.tf",
+    "s3_bucket_no_mfa_delete": "fix-s3.tf",
+    "s3_bucket_object_versioning": "fix-s3.tf",
+    "s3_bucket_secure_transport_policy": "fix-s3.tf",
+    "s3_bucket_server_access_logging_enabled": "fix-s3.tf",
+    # CloudWatch CIS 메트릭 필터 (14개 필터+알람이 하나의 스니펫에 → 하나의 파일로 통합)
+    "cloudwatch_log_metric_filter_unauthorized_api_calls": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_sign_in_without_mfa": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_root_usage": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_policy_changes": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_and_alarm_for_cloudtrail_configuration_changes_enabled": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_authentication_failures": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_disable_or_scheduled_deletion_of_kms_cmk": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_for_s3_bucket_policy_changes": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_and_alarm_for_aws_config_configuration_changes_enabled": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_security_group_changes": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_changes_to_network_acls_alarm_configured": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_changes_to_network_gateways_alarm_configured": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_changes_to_network_route_tables_alarm_configured": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_changes_to_vpcs_alarm_configured": "fix-cloudwatch_cis_filters.tf",
+    "cloudwatch_log_metric_filter_aws_organizations_changes": "fix-cloudwatch_cis_filters.tf",
 }
 
 # AWS 계정당 1개만 존재하는 싱글톤 리소스 → 고정 이름 사용
@@ -1397,6 +1434,10 @@ def _convert_iam_resources_to_data(lines):
         m = re.match(r'^(\s*)resource\s+"([^"]+)"\s+"([^"]+)"\s*\{', line)
         if m and m.group(2) in IAM_TYPES:
             indent, rtype, name = m.group(1), m.group(2), m.group(3)
+            # remediation_* 리소스는 bootstrap IAM에서 생성 허용 → data 전환 제외
+            if name.startswith("remediation"):
+                out.append(line)
+                continue
             out.append(f'{indent}data "{rtype}" "{name}" {{')
             continue
         out.append(line)
@@ -1434,6 +1475,8 @@ def _strip_iam_resource_only_attrs(lines):
     in_block = False
     brace = 0
     current_type = None
+    in_remove_attr = False   # 멀티라인 속성 제거 중
+    remove_target_brace = 0  # 제거 목표 brace 깊이 (속성 시작 이전 깊이)
     for line in lines:
         if not in_block:
             m = re.match(r'^\s*data\s+"([^"]+)"\s+"[^"]+"\s*\{', line)
@@ -1441,14 +1484,27 @@ def _strip_iam_resource_only_attrs(lines):
                 in_block = True
                 current_type = m.group(1)
                 brace = _brace_delta(line)
+                in_remove_attr = False
                 out.append(line)
                 continue
             out.append(line)
             continue
         next_brace = brace + _brace_delta(line)
+        # 멀티라인 속성 제거 중이면 brace 깊이가 목표 이하로 돌아올 때까지 skip
+        if in_remove_attr:
+            brace = next_brace
+            if brace <= remove_target_brace:
+                in_remove_attr = False
+            if brace <= 0:
+                in_block = False
+                current_type = None
+            continue
         remove_set = REMOVE_ATTRS.get(current_type, set())
         if any(re.match(rf'^\s*{re.escape(attr)}\s*=', line) for attr in remove_set):
+            remove_target_brace = brace  # 현재 깊이를 목표로 저장
             brace = next_brace
+            if next_brace > remove_target_brace:
+                in_remove_attr = True  # 멀티라인 속성 → 후속 라인도 skip
             if next_brace <= 0:
                 in_block = False
                 current_type = None
@@ -3915,13 +3971,14 @@ Output the Terraform code:"""
 os.makedirs(args.output_dir, exist_ok=True)
 
 # P0/P1/P2 우선순위만 자동 리메디에이션 대상 (P3는 수동)
-high_priority = df[df['priority'].isin(['P0', 'P1', 'P2'])]
+target_priorities = ["P0", "P1", "P2"] if STABLE_ONLY_MODE else ["P0", "P1", "P2", "P3"]
+high_priority = df[df['priority'].isin(target_priorities)]
 # check_id가 비어있는 행은 제외
 high_priority = high_priority[
     high_priority['check_id'].notna()
     & ~high_priority['check_id'].astype(str).str.strip().str.lower().isin(["", "nan", "none"])
 ]
-print(f"Found {len(high_priority)} high-priority findings (P0/P1/P2) out of {len(df)} total")
+print(f"Found {len(high_priority)} findings for remediation (priorities={target_priorities}) out of {len(df)} total")
 
 # check_id 기준 단일화는 다중 리소스(S3 bucket 등)를 누락시킬 수 있어
 # 기본은 (check_id + resource identity)로 중복 제거하고,

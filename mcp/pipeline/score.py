@@ -20,6 +20,8 @@ MANUAL_ONLY_CHECK_IDS = {
     "iam_root_hardware_mfa_enabled",
     "s3_bucket_no_mfa_delete",
     "cloudtrail_bucket_requires_mfa_delete",
+    "cloudwatch_log_group_no_secrets_in_logs",
+    "cloudwatch_log_group_kms_encryption_enabled",
 }
 
 # Risky: technically possible but can break access/traffic without review.
