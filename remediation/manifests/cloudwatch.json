@@ -24,18 +24,6 @@
     "sanitizers_applied": []
   },
   {
-    "check_id": "cloudwatch_changes_to_network_route_tables_alarm_configured",
-    "check_title": "Account monitors VPC route table changes with a CloudWatch Logs metric filter and alarm",
-    "output_path": "cloudwatch/fix-cloudwatch_changes_to_network_route_tables_alarm_configured.tf",
-    "file": "cloudwatch/fix-cloudwatch_changes_to_network_route_tables_alarm_configured.tf",
-    "priority": "P2",
-    "category": "cloudwatch",
-    "source": "iac_snippet",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
     "check_id": "cloudwatch_changes_to_vpcs_alarm_configured",
     "check_title": "AWS account has a CloudWatch Logs metric filter and alarm for VPC changes",
     "output_path": "cloudwatch/fix-cloudwatch_changes_to_vpcs_alarm_configured.tf",
@@ -48,34 +36,10 @@
     "sanitizers_applied": []
   },
   {
-    "check_id": "cloudwatch_cross_account_sharing_disabled",
-    "check_title": "CloudWatch does not allow cross-account sharing",
-    "output_path": "cloudwatch/fix-cloudwatch_cross_account_sharing_disabled.tf",
-    "file": "cloudwatch/fix-cloudwatch_cross_account_sharing_disabled.tf",
-    "priority": "P2",
-    "category": "cloudwatch",
-    "source": "iac_snippet",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
     "check_id": "cloudwatch_log_group_kms_encryption_enabled",
     "check_title": "CloudWatch log group is encrypted with an AWS KMS key",
     "output_path": "cloudwatch/fix-cloudwatch_log_group_kms_encryption_enabled.tf",
     "file": "cloudwatch/fix-cloudwatch_log_group_kms_encryption_enabled.tf",
-    "priority": "P2",
-    "category": "cloudwatch",
-    "source": "iac_snippet",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
-    "check_id": "cloudwatch_log_group_no_secrets_in_logs",
-    "check_title": "CloudWatch log group contains no secrets in its log events",
-    "output_path": "cloudwatch/fix-cloudwatch_log_group_no_secrets_in_logs.tf",
-    "file": "cloudwatch/fix-cloudwatch_log_group_no_secrets_in_logs.tf",
     "priority": "P2",
     "category": "cloudwatch",
     "source": "iac_snippet",
@@ -124,18 +88,6 @@
     "check_title": "Account has a CloudWatch Logs metric filter and alarm for AWS Management Console authentication failures",
     "output_path": "cloudwatch/fix-cloudwatch_log_metric_filter_authentication_failures.tf",
     "file": "cloudwatch/fix-cloudwatch_log_metric_filter_authentication_failures.tf",
-    "priority": "P2",
-    "category": "cloudwatch",
-    "source": "iac_snippet",
-    "validation_status": "ok",
-    "error_message": "",
-    "sanitizers_applied": []
-  },
-  {
-    "check_id": "cloudwatch_log_metric_filter_aws_organizations_changes",
-    "check_title": "CloudWatch Logs metric filter and alarm exist for AWS Organizations changes",
-    "output_path": "cloudwatch/fix-cloudwatch_log_metric_filter_aws_organizations_changes.tf",
-    "file": "cloudwatch/fix-cloudwatch_log_metric_filter_aws_organizations_changes.tf",
     "priority": "P2",
     "category": "cloudwatch",
     "source": "iac_snippet",
