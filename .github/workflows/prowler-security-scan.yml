@@ -135,7 +135,7 @@ jobs:
 
       # scan job에서 업로드한 원본 결과 다운로드
       - name: "Download artifacts: Prowler raw output"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: prowler-output
           path: output
@@ -230,7 +230,7 @@ jobs:
       # MCP 가공 결과 다운로드
       - name: "Download artifacts: MCP processed output"
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.remediation_only != 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: mcp-output
           path: mcp/output
@@ -239,7 +239,7 @@ jobs:
       - name: "Download artifacts: MCP processed output (remediation-only current run)"
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.remediation_only == 'true'
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: mcp-output
           path: mcp/output
